@@ -1,0 +1,19 @@
+{
+    "name": "@deployforge/security",
+    "version": "0.1.0",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc -w"
+    },
+    "dependencies": {
+        "argon2": "^0.31.2",
+        "jsonwebtoken": "^9.0.2",
+        "@deployforge/shared": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/jsonwebtoken": "^9.0.5",
+        "typescript": "^5.0.0"
+    }
+}

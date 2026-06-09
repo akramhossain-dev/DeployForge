@@ -1,0 +1,17 @@
+{
+  "name": "deployforge",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:push": "pnpm --filter database prisma db push",
+    "db:generate": "pnpm --filter database prisma generate",
+    "db:studio": "pnpm --filter database prisma studio"
+  },
+  "devDependencies": {
+    "turbo": "latest"
+  },
+  "packageManager": "pnpm@8.15.4"
+}

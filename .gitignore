@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+yarn.lock
+package-lock.json
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Logs
+logs/
+*.log
+
+# Runtime
+.DS_Store
+*.pid
+
+# Prisma
+*dev.db*
+/prisma/*.db
+
+# Redis dump
+dump.rdb
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+
+# Turbo
+.turbo/

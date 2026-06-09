@@ -72,4 +72,4 @@ Explore the deep technical architecture and specifications:
 
 ## ⚖️ License
 
-MIT License - Copyright (c) 2024 DeployForge Team
+MIT License - Copyright DeployForge Team

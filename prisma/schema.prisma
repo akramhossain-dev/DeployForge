@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String?
+  avatarUrl     String?
+  githubId      String?   @unique
+  sessions      Session[]
+  vps           VPS[]
+  projects      Project[]
+  githubAccount GitHubAccount?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model GitHubAccount {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  accessToken  String   // Encrypted
+  refreshToken String?  // Encrypted
+  username     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model VPS {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+  name          String
+  ipAddress     String
+  sshPort       Int          @default(22)
+  username      String       @default("root")
+  sshKey        String?      // Encrypted
+  status        String       @default("OFFLINE")
+  deployments   Deployment[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Project {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+  name          String
+  repositoryUrl String
+  branch        String       @default("main")
+  framework     String?
+  deployments   Deployment[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Deployment {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id])
+  vpsId         String
+  vps           VPS      @relation(fields: [vpsId], references: [id])
+  commitHash    String?
+  commitMessage String?
+  status        String   @default("QUEUED")
+  port          Int?
+  envVariables  String?  // Encrypted JSON
+  logs          Log[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Log {
+  id           String     @id @default(cuid())
+  deploymentId String
+  deployment   Deployment @relation(fields: [deploymentId], references: [id])
+  content      String
+  type         String     @default("INFO") // INFO, ERROR, DEBUG
+  createdAt    DateTime   @default(now())
+}
