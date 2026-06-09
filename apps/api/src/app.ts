@@ -36,6 +36,9 @@ export async function buildApp() {
     await app.register(import('./routes/github'), { prefix: '/github' });
     await app.register(import('./routes/webhooks'), { prefix: '/webhooks' });
     await app.register(import('./routes/vps'), { prefix: '/vps' });
+    await app.register(import('./routes/deploy'), { prefix: '/deploy' });
+    await app.register(import('./routes/sandbox'), { prefix: '/sandbox' });
+    await app.register(import('./routes/domain'), { prefix: '/domain' });
 
     // Global Error Handler
     app.setErrorHandler((error, request, reply) => {

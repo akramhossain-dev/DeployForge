@@ -81,8 +81,11 @@ model WebhookEvent {
   repoId       String
   event        String   // e.g., "push"
   payload      String   // JSON string
-  processed    Boolean  @default(false)
+  status       String   @default("PENDING") // PENDING, PROCESSED, FAILED
+  error        String?
   createdAt    DateTime @default(now())
+
+  @@index([repoId])
 }
 
 model VPS {
@@ -134,19 +137,75 @@ model Project {
 }
 
 model Deployment {
-  id            String   @id @default(cuid())
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
   projectId     String
   project       Project  @relation(fields: [projectId], references: [id])
   vpsId         String
   vps           VPS      @relation(fields: [vpsId], references: [id])
+  name          String?  // Deployment name/label
+  status        String   @default("PENDING") // PENDING, BUILDING, RUNNING, FAILED, STOPPED
+  framework     String?
+  port          Int?
+  buildCommand  String?
+  startCommand  String?
+  env           String?  // Encrypted JSON
+  containerId   String?
   commitHash    String?
   commitMessage String?
-  status        String   @default("QUEUED")
-  port          Int?
-  envVariables  String?  // Encrypted JSON
   logs          Log[]
+  sandbox       DeploymentSandbox?
+  domains       Domain[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([vpsId])
+}
+
+model DeploymentJob {
+  id           String     @id @default(uuid())
+  deploymentId String
+  deployment   Deployment @relation(fields: [deploymentId], references: [id])
+  status       String     @default("QUEUED") // QUEUED, RUNNING, SUCCESS, FAILED
+  retryCount   Int        @default(0)
+  lastError    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([deploymentId])
+}
+
+model Domain {
+  id               String     @id @default(uuid())
+  deploymentId     String
+  deployment       Deployment @relation(fields: [deploymentId], references: [id])
+  vpsId            String
+  vps              VPS        @relation(fields: [vpsId], references: [id])
+  domainName       String     @unique
+  status           String     @default("PENDING") // pending | active | failed
+  sslStatus        String     @default("NONE")    // NONE | ISSUED | EXPIRED | FAILED
+  nginxConfigPath  String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([deploymentId])
+  @@index([vpsId])
+}
+
+model DeploymentSandbox {
+  id            String     @id @default(uuid())
+  deploymentId  String     @unique
+  deployment    Deployment @relation(fields: [deploymentId], references: [id])
+  score         Int
+  status        String     // approved | warning | rejected
+  issues        String[]   // Array of strings
+  estimatedCPU  Float
+  estimatedRAM  Float
+  estimatedDisk Float
+  createdAt     DateTime   @default(now())
 }
 
 model Log {
