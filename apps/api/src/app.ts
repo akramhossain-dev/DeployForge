@@ -23,10 +23,19 @@ export async function buildApp() {
         timeWindow: '1 minute',
     });
 
+    // Custom Plugins
+    await app.register(import('./plugins/auth'));
+
     // Health Route
     app.get('/health', async () => {
         return { status: 'OK', timestamp: new Date().toISOString() };
     });
+
+    // Routes
+    await app.register(import('./routes/auth'), { prefix: '/auth' });
+    await app.register(import('./routes/github'), { prefix: '/github' });
+    await app.register(import('./routes/webhooks'), { prefix: '/webhooks' });
+    await app.register(import('./routes/vps'), { prefix: '/vps' });
 
     // Global Error Handler
     app.setErrorHandler((error, request, reply) => {

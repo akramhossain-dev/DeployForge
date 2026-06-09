@@ -8,12 +8,14 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String    @id @default(uuid())
   email         String    @unique
   passwordHash  String?
   name          String?
   avatarUrl     String?
   githubId      String?   @unique
+  isVerified    Boolean   @default(false)
+  provider      String    @default("email") // "email" | "github"
   sessions      Session[]
   vps           VPS[]
   projects      Project[]
@@ -23,38 +25,99 @@ model User {
 }
 
 model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  refreshToken String   @unique // Hashed
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+model VerificationToken {
   id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  token     String   @unique
+  email     String
+  token     String   // Hashed OTP
   expiresAt DateTime
+  attempts  Int      @default(0)
   createdAt DateTime @default(now())
+
+  @@unique([email])
 }
 
 model GitHubAccount {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id])
-  accessToken  String   // Encrypted
-  refreshToken String?  // Encrypted
+  id           String       @id @default(uuid())
+  userId       String       @unique
+  user         User         @relation(fields: [userId], references: [id])
+  githubId     String       @unique
+  accessToken  String       // Encrypted
   username     String
+  email        String?
+  avatarUrl    String?
+  repositories Repository[]
+  connectedAt  DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Repository {
+  id              String       @id @default(uuid())
+  githubAccountId String
+  githubAccount   GitHubAccount @relation(fields: [githubAccountId], references: [id])
+  repoId          String       @unique // GitHub's internal ID
+  name            String
+  fullName        String
+  description     String?
+  private         Boolean      @default(false)
+  defaultBranch   String       @default("main")
+  cloneUrl        String?      // Optional encrypted
+  webhookId       String?
+  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime     @default(now())
+}
+
+model WebhookEvent {
+  id           String   @id @default(uuid())
+  repoId       String
+  event        String   // e.g., "push"
+  payload      String   // JSON string
+  processed    Boolean  @default(false)
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 }
 
 model VPS {
-  id            String       @id @default(cuid())
-  userId        String
-  user          User         @relation(fields: [userId], references: [id])
-  name          String
-  ipAddress     String
-  sshPort       Int          @default(22)
-  username      String       @default("root")
-  sshKey        String?      // Encrypted
-  status        String       @default("OFFLINE")
-  deployments   Deployment[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                   String       @id @default(uuid())
+  userId               String
+  user                 User         @relation(fields: [userId], references: [id])
+  name                 String
+  ipAddress            String
+  port                 Int          @default(22)
+  username             String       @default("root")
+  authType             String       @default("ssh_key") // "ssh_key" | "password"
+  encryptedPrivateKey  String?      // Encrypted AES-256-GCM
+  encryptedPassword    String?      // Encrypted AES-256-GCM
+  status               String       @default("INACTIVE") // "ACTIVE" | "INACTIVE" | "ERROR"
+  deployments          Deployment[]
+  healthRecords        VPSHealth[]
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model VPSHealth {
+  id              String   @id @default(cuid())
+  vpsId           String
+  vps             VPS      @relation(fields: [vpsId], references: [id])
+  cpuUsage        Float
+  memoryUsage     Float
+  diskUsage       Float
+  uptime          Int
+  dockerInstalled Boolean
+  nginxInstalled  Boolean
+  checkedAt       DateTime @default(now())
+
+  @@index([vpsId])
 }
 
 model Project {

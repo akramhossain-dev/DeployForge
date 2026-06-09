@@ -11,8 +11,16 @@ const envSchema = z.object({
     REDIS_URL: z.string(),
     JWT_SECRET: z.string(),
     ENCRYPTION_KEY: z.string().length(64), // Hex string for 32 bytes
-    GITHUB_CLIENT_ID: z.string().optional(),
-    GITHUB_CLIENT_SECRET: z.string().optional(),
+    GITHUB_CLIENT_ID: z.string(),
+    GITHUB_CLIENT_SECRET: z.string(),
+    GITHUB_WEBHOOK_SECRET: z.string(),
+    GITHUB_REDIRECT_URI: z.string(),
+    APP_URL: z.string().default('http://localhost:3000'),
+    SMTP_HOST: z.string(),
+    SMTP_PORT: z.coerce.number().default(587),
+    SMTP_SECURE: z.enum(['true', 'false']).transform((v) => v === 'true').default('false'),
+    SMTP_USER: z.string(),
+    SMTP_PASS: z.string(),
 });
 
 const parsed = envSchema.safeParse(process.env);
