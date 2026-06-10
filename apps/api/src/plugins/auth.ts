@@ -27,7 +27,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
 
             const user = await prisma.user.findUnique({
                 where: { id: payload.userId },
-                select: { id: true, email: true, name: true, isVerified: true },
+                select: { id: true, email: true, name: true, isVerified: true, githubId: true, avatarUrl: true, provider: true },
             });
 
             if (!user) return reply.status(401).send({ success: false, message: 'Unauthorized' });

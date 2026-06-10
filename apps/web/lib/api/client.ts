@@ -42,12 +42,17 @@ async function parseResponse(response: Response) {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const token = getToken();
     const headers = new Headers(init.headers);
+    const method = init.method || 'GET';
 
     if (!headers.has('Content-Type') && init.body) {
         headers.set('Content-Type', 'application/json');
     }
     if (token) {
         headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    if (typeof window !== 'undefined') {
+        console.debug('[api:request]', { method, path, authenticated: Boolean(token) });
     }
 
     const response = await fetch(`${API_URL}${path}`, {
@@ -65,11 +70,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
             context: payload?.context,
         };
 
+        if (typeof window !== 'undefined') {
+            console.error('[api:error]', { method, path, status: response.status, message: apiError.message, context: apiError.context });
+        }
+
         if (response.status === 401 && typeof window !== 'undefined') {
             useAuthStore.getState().logout();
         }
 
         throw new ApiError(apiError.message, response.status, apiError.context);
+    }
+
+    if (typeof window !== 'undefined') {
+        console.debug('[api:response]', { method, path, status: response.status });
     }
 
     if (payload && typeof payload === 'object' && 'data' in payload) {

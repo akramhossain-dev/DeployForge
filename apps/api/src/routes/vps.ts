@@ -25,6 +25,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
     fastify.get('/list', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const vpsList = await prisma.vPS.findMany({
             where: { userId: request.user.id },
+            include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } },
             orderBy: { createdAt: 'desc' },
         });
         return { success: true, data: vpsList };

@@ -43,10 +43,24 @@ export function useSyncRepositories() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: () => api.post<{ message: string }>('/github/repos/sync'),
+        mutationFn: () => api.post<{ count: number }>('/github/repos/sync'),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
             queryClient.invalidateQueries({ queryKey: queryKeys.githubProfile });
+        },
+    });
+}
+
+export function useDisconnectGitHub() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: () => api.delete<{ message: string }>('/github/disconnect'),
+        onSuccess: () => {
+            queryClient.setQueryData(queryKeys.githubProfile, null);
+            queryClient.setQueryData(queryKeys.repositories, []);
+            queryClient.invalidateQueries({ queryKey: queryKeys.githubProfile });
+            queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
         },
     });
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Github, Lock, RefreshCw, Unlock } from 'lucide-react';
+import { useState } from 'react';
 import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, formatDate } from '@/components/ui';
 import { useGitHubProfile, useRepositories, useSyncRepositories } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
@@ -9,10 +10,20 @@ export default function RepositoriesPage() {
     const profile = useGitHubProfile();
     const repos = useRepositories(!!profile.data);
     const sync = useSyncRepositories();
+    const [connectError, setConnectError] = useState<string | null>(null);
+    const [isConnecting, setIsConnecting] = useState(false);
 
     async function connectGitHub() {
-        const response = await api.get<{ url: string }>('/github/connect');
-        window.location.href = response.url;
+        setConnectError(null);
+        setIsConnecting(true);
+        try {
+            const response = await api.get<{ url: string }>('/github/connect');
+            window.location.href = response.url;
+        } catch (err: any) {
+            setConnectError(err.message || 'Unable to start GitHub OAuth.');
+        } finally {
+            setIsConnecting(false);
+        }
     }
 
     return (
@@ -26,19 +37,19 @@ export default function RepositoriesPage() {
                             <RefreshCw size={16} /> Sync
                         </Button>
                     ) : (
-                        <Button onClick={connectGitHub}>
+                        <Button onClick={connectGitHub} loading={isConnecting}>
                             <Github size={16} /> Connect GitHub
                         </Button>
                     )
                 }
             />
 
-            {profile.isError ? (
-                <EmptyState
-                    title="GitHub is not connected"
-                    description="Connect your GitHub account before syncing repositories."
-                    action={<Button onClick={connectGitHub}><Github size={16} /> Connect GitHub</Button>}
-                />
+            {connectError ? (
+                <ErrorState title="GitHub connect failed" message={connectError} />
+            ) : profile.isError ? (
+                <ErrorState message={(profile.error as Error)?.message} onRetry={() => profile.refetch()} />
+            ) : sync.isError ? (
+                <ErrorState title="Repository sync failed" message={(sync.error as Error)?.message} onRetry={() => sync.mutate()} />
             ) : repos.isError ? (
                 <ErrorState message={(repos.error as Error)?.message} onRetry={() => repos.refetch()} />
             ) : profile.isLoading || repos.isLoading ? (
@@ -65,7 +76,11 @@ export default function RepositoriesPage() {
                     ))}
                 </div>
             ) : (
-                <EmptyState title="No repositories synced" description="Run sync to pull your latest repositories from GitHub." action={<Button onClick={() => sync.mutate()} loading={sync.isPending}>Sync repositories</Button>} />
+                <EmptyState
+                    title={profile.data ? 'No repositories synced' : 'GitHub is not connected'}
+                    description={profile.data ? 'Run sync to pull your latest repositories from GitHub.' : 'Connect your GitHub account before syncing repositories.'}
+                    action={profile.data ? <Button onClick={() => sync.mutate()} loading={sync.isPending}>Sync repositories</Button> : <Button onClick={connectGitHub} loading={isConnecting}><Github size={16} /> Connect GitHub</Button>}
+                />
             )}
         </div>
     );

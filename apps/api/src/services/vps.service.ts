@@ -23,28 +23,13 @@ export class VPSService {
 
         const ssh = new SSHService();
         try {
-            if (process.env.TEST_MOCK_MODE === 'true') {
-                return await prisma.vPS.create({
-                    data: {
-                        userId,
-                        name,
-                        ipAddress,
-                        port: port || 22,
-                        username,
-                        authType,
-                        encryptedPassword: password ? this.encrypt(password) : null,
-                        encryptedPrivateKey: privateKey ? this.encrypt(privateKey) : null,
-                        status: 'ACTIVE',
-                    },
-                });
-            }
-
             await ssh.connect(sshConfig);
 
             // Basic validation commands
             const { stdout: osType } = await ssh.execute('uname -a');
             const { stdout: dockerVer } = await ssh.execute('docker --version');
             const { stdout: nginxVer } = await ssh.execute('nginx -v 2>&1');
+            console.info('[vps] validated remote server', { userId, ipAddress, osType: osType.trim(), dockerVer: dockerVer.trim(), nginxVer: nginxVer.trim() });
 
             const vps = await prisma.vPS.create({
                 data: {

@@ -33,6 +33,7 @@ export async function buildApp() {
     // Routes
     await app.register(import('./routes/auth'), { prefix: '/auth' });
     await app.register(import('./routes/github'), { prefix: '/github' });
+    await app.register(import('./routes/github'), { prefix: '/auth/github' });
     await app.register(import('./routes/webhooks'), { prefix: '/webhooks' });
     await app.register(import('./routes/vps'), { prefix: '/vps' });
     await app.register(import('./routes/deploy'), { prefix: '/deploy' });

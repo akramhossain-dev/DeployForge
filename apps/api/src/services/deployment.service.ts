@@ -42,30 +42,12 @@ export class DeploymentService {
     }
 
     static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string) {
-        const project = await prisma.project.findUnique({ where: { id: projectId } });
-        const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
+        const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
+        const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
         if (!project || !vps) throw new Error('Project or VPS not found');
 
         const githubAccount = await prisma.gitHubAccount.findUnique({ where: { userId } });
         if (!githubAccount) throw new Error('GitHub account not connected');
-
-        // MOCK MODE: Bypass real VPS connection for testing Phase 13
-        if (process.env.TEST_MOCK_MODE === 'true') {
-            const deployment = await prisma.deployment.create({
-                data: {
-                    userId,
-                    projectId,
-                    vpsId,
-                    status: 'RUNNING',
-                    port: 3000,
-                    name: `MOCK-${project.name}`,
-                },
-            });
-            await prisma.log.create({
-                data: { deploymentId: deployment.id, content: 'MOCK DEPLOYMENT SUCCESSFUL', type: 'INFO' },
-            });
-            return deployment;
-        }
 
         const [iv, tag, content] = githubAccount.accessToken.split(':');
         const accessToken = encryptionService.decrypt({ iv, tag, content });
@@ -82,6 +64,9 @@ export class DeploymentService {
                 name: `${project.name}-${Date.now()}`,
             },
         });
+
+        await LoggingService.log(deployment.id, `Deployment queued for ${project.repositoryUrl} on branch ${branch}`, 'system');
+        console.info('[deploy] deployment queued', { userId, deploymentId: deployment.id, projectId, vpsId, branch, port });
 
         // Push to Queue for processing
         await deploymentQueue.add('deploy', {
@@ -100,6 +85,15 @@ export class DeploymentService {
     public static async executeDeployment(deploymentId: string, project: any, vps: any, branch: string, accessToken: string) {
         const ssh = new SSHService();
         try {
+            const deployment = await prisma.deployment.findUnique({ where: { id: deploymentId } });
+            if (!deployment?.port) throw new Error('Deployment port is not assigned');
+
+            await prisma.deployment.update({
+                where: { id: deploymentId },
+                data: { status: 'BUILDING' },
+            });
+            await LoggingService.log(deploymentId, 'Connecting to VPS for deployment', 'system');
+
             const auth = vps.authType === 'ssh_key'
                 ? { privateKey: this.decrypt(vps.encryptedPrivateKey!) }
                 : { password: this.decrypt(vps.encryptedPassword!) };
@@ -115,13 +109,16 @@ export class DeploymentService {
             await ssh.execute(`mkdir -p ${workDir}`);
 
             // GitHub Clone with Token
-            const repoUrl = project.repositoryUrl.replace('https://', `https://${accessToken}@`);
+            const encodedToken = encodeURIComponent(accessToken);
+            const repoUrl = project.repositoryUrl.replace('https://', `https://${encodedToken}@`);
+            await LoggingService.log(deploymentId, `Fetching repository branch ${branch}`, 'build');
             await ssh.execute(`cd ${workDir} && git clone -b ${branch} ${repoUrl} . || git pull origin ${branch}`);
 
             // Detection
             const { stdout: fileList } = await ssh.execute(`ls -F ${workDir}`);
             const files = fileList.split('\n').map(f => f.replace('*', '').replace('/', ''));
             const detected = await this.detectFramework(files);
+            await LoggingService.log(deploymentId, `Detected ${detected.framework} project`, 'build');
 
             await prisma.deployment.update({
                 where: { id: deploymentId },
@@ -149,7 +146,7 @@ export class DeploymentService {
 
             await ssh.execute(`cd ${workDir} && docker build -t ${containerName} .`);
             await ssh.execute(`docker stop ${containerName} || true && docker rm ${containerName} || true`);
-            const { stdout: containerId } = await ssh.execute(`docker run -d --name ${containerName} -p ${project.port || 3000}:3000 ${containerName}`);
+            const { stdout: containerId } = await ssh.execute(`docker run -d --name ${containerName} -p ${deployment.port}:3000 ${containerName}`);
 
             await prisma.deployment.update({
                 where: { id: deploymentId },
@@ -167,14 +164,69 @@ export class DeploymentService {
             });
 
             await LoggingService.log(deploymentId, 'Deployment successful', 'system');
+            console.info('[deploy] deployment completed', { deploymentId, containerId: containerId.trim() });
 
         } catch (err: any) {
-            console.error(err);
+            console.error('[deploy] deployment failed', { deploymentId, message: err.message });
             await prisma.deployment.update({
                 where: { id: deploymentId },
                 data: { status: 'FAILED' },
             });
             await LoggingService.log(deploymentId, `Deployment failed: ${err.message}`, 'error');
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    static async stopDeployment(userId: string, deploymentId: string) {
+        const deployment = await prisma.deployment.findFirst({
+            where: { id: deploymentId, userId },
+            include: { vps: true },
+        });
+        if (!deployment) throw new Error('Deployment not found');
+        if (!deployment.containerId) throw new Error('Deployment has no running container');
+
+        const ssh = new SSHService();
+        try {
+            const auth = deployment.vps.authType === 'ssh_key'
+                ? { privateKey: this.decrypt(deployment.vps.encryptedPrivateKey!) }
+                : { password: this.decrypt(deployment.vps.encryptedPassword!) };
+            await ssh.connect({
+                host: deployment.vps.ipAddress,
+                port: deployment.vps.port,
+                username: deployment.vps.username,
+                ...auth,
+            });
+            await ssh.execute(`docker stop ${deployment.containerId}`);
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'STOPPED' } });
+            await LoggingService.log(deploymentId, 'Deployment stopped', 'system');
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    static async startDeployment(userId: string, deploymentId: string) {
+        const deployment = await prisma.deployment.findFirst({
+            where: { id: deploymentId, userId },
+            include: { vps: true },
+        });
+        if (!deployment) throw new Error('Deployment not found');
+        if (!deployment.containerId) throw new Error('Deployment has no existing container');
+
+        const ssh = new SSHService();
+        try {
+            const auth = deployment.vps.authType === 'ssh_key'
+                ? { privateKey: this.decrypt(deployment.vps.encryptedPrivateKey!) }
+                : { password: this.decrypt(deployment.vps.encryptedPassword!) };
+            await ssh.connect({
+                host: deployment.vps.ipAddress,
+                port: deployment.vps.port,
+                username: deployment.vps.username,
+                ...auth,
+            });
+            await ssh.execute(`docker start ${deployment.containerId}`);
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'RUNNING' } });
+            await LoggingService.log(deploymentId, 'Deployment started', 'system');
         } finally {
             ssh.disconnect();
         }

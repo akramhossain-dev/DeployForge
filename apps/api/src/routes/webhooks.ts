@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { GitHubService } from '../services/github.service';
 import prisma from '@deployforge/database';
-import { deploymentQueue } from '../utils/queue';
+import { DeploymentService } from '../services/deployment.service';
 
 export default async function webhookRoutes(fastify: FastifyInstance) {
     fastify.post('/github', async (request, reply) => {
@@ -38,14 +38,27 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
             });
 
             if (project) {
-                // Add to deployment queue (placeholder for Phase 4)
-                await deploymentQueue.add('deploy', {
-                    projectId: project.id,
-                    commitHash: payload.after,
-                    commitMessage: payload.head_commit?.message,
+                const previousDeployment = await prisma.deployment.findFirst({
+                    where: { projectId: project.id, userId: project.userId },
+                    orderBy: { createdAt: 'desc' },
+                    select: { vpsId: true },
                 });
 
-                fastify.log.info(`Deployment queued for project ${project.id} from push to branch ${branch}`);
+                if (!previousDeployment) {
+                    fastify.log.warn({ projectId: project.id, repoId, branch }, 'Webhook received for project without a deployment target');
+                    return { received: true };
+                }
+
+                const deployment = await DeploymentService.deployFromGithub(project.userId, project.id, previousDeployment.vpsId, branch);
+                await prisma.deployment.update({
+                    where: { id: deployment.id },
+                    data: {
+                        commitHash: payload.after,
+                        commitMessage: payload.head_commit?.message,
+                    },
+                });
+
+                fastify.log.info({ deploymentId: deployment.id, projectId: project.id, branch }, 'Deployment queued from GitHub webhook');
             }
         }
 

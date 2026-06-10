@@ -21,7 +21,15 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     fastify.get('/list', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const deployments = await prisma.deployment.findMany({
             where: { userId: request.user.id },
-            include: { project: true, vps: true },
+            include: {
+                project: true,
+                vps: {
+                    include: {
+                        healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } },
+                    },
+                },
+                deploymentLogs: { take: 1, orderBy: { createdAt: 'desc' } },
+            },
             orderBy: { createdAt: 'desc' },
         });
         return { success: true, data: deployments };
@@ -30,30 +38,23 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     // 3. Get Logs
     fastify.get('/:id/logs', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
-        const logs = await prisma.log.findMany({
+        const logs = await prisma.deploymentLog.findMany({
             where: { deploymentId: id, deployment: { userId: request.user.id } },
             orderBy: { createdAt: 'asc' },
         });
         return { success: true, data: logs };
     });
 
-    // 4. Start/Stop/Restart placeholders
+    // 4. Start/Stop
     fastify.post('/:id/stop', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
-        // Logic to call SSH and stop docker container
-        await prisma.deployment.updateMany({
-            where: { id, userId: request.user.id },
-            data: { status: 'STOPPED' },
-        });
+        await DeploymentService.stopDeployment(request.user.id, id);
         return { success: true, message: 'Deployment stopped' };
     });
 
     fastify.post('/:id/start', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
-        await prisma.deployment.updateMany({
-            where: { id, userId: request.user.id },
-            data: { status: 'RUNNING' },
-        });
+        await DeploymentService.startDeployment(request.user.id, id);
         return { success: true, message: 'Deployment started' };
     });
 }
