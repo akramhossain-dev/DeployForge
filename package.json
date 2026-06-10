@@ -6,12 +6,14 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "db:push": "pnpm --filter database prisma db push",
-    "db:generate": "pnpm --filter database prisma generate",
-    "db:studio": "pnpm --filter database prisma studio"
+    "db:push": "pnpm exec prisma db push --schema prisma/schema.prisma",
+    "db:generate": "pnpm exec prisma generate --schema prisma/schema.prisma",
+    "db:studio": "pnpm exec prisma studio --schema prisma/schema.prisma"
   },
   "devDependencies": {
-    "turbo": "latest"
+    "turbo": "latest",
+    "prisma": "^5.22.0",
+    "@prisma/client": "^5.22.0"
   },
   "packageManager": "pnpm@8.15.4"
 }

@@ -19,7 +19,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
         try {
             const authHeader = request.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                return reply.status(401).send({ message: 'Unauthorized' });
+                return reply.status(401).send({ success: false, message: 'Unauthorized' });
             }
 
             const token = authHeader.split(' ')[1];
@@ -30,11 +30,11 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 select: { id: true, email: true, name: true, isVerified: true },
             });
 
-            if (!user) return reply.status(401).send({ message: 'Unauthorized' });
+            if (!user) return reply.status(401).send({ success: false, message: 'Unauthorized' });
 
             request.user = user;
         } catch (err) {
-            return reply.status(401).send({ message: 'Unauthorized' });
+            return reply.status(401).send({ success: false, message: 'Unauthorized' });
         }
     });
 

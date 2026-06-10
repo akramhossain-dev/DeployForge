@@ -5,7 +5,7 @@ import { config } from '../config/env';
 import dns from 'dns';
 import { promisify } from 'util';
 
-const resolveA = promisify(dns.resolveA);
+const resolveA = promisify(dns.resolve4);
 const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
 
 export class DomainService {

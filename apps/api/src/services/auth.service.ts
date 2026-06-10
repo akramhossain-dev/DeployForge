@@ -32,8 +32,8 @@ export class AuthService {
             },
         });
 
-        await this.sendOTP(email);
-        return user;
+        const otpResult = await this.sendOTP(email);
+        return { user, ...otpResult };
     }
 
     static async sendOTP(email: string) {
@@ -55,7 +55,17 @@ export class AuthService {
             },
         });
 
-        await mailService.sendOTP(email, otp);
+        try {
+            await mailService.sendOTP(email, otp);
+            return {};
+        } catch (error) {
+            if (config.NODE_ENV !== 'development' && config.NODE_ENV !== 'test') {
+                throw error;
+            }
+
+            console.warn(`[auth] SMTP unavailable. Development OTP for ${email}: ${otp}`);
+            return { devOtp: otp };
+        }
     }
 
     static async verifyOTP(email: string, otp: string) {

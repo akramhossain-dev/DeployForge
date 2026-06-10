@@ -25,4 +25,34 @@
     --ring: 199 89% 48%;
     --radius: 0.5rem;
   }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-height: 100vh;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  ::selection {
+    background: rgb(34 211 238 / 0.28);
+  }
+}
+
+@layer utilities {
+  .terminal-scrollbar {
+    scrollbar-color: rgb(51 65 85) transparent;
+    scrollbar-width: thin;
+  }
 }

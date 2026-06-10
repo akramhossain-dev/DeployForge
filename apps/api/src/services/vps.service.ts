@@ -23,6 +23,22 @@ export class VPSService {
 
         const ssh = new SSHService();
         try {
+            if (process.env.TEST_MOCK_MODE === 'true') {
+                return await prisma.vPS.create({
+                    data: {
+                        userId,
+                        name,
+                        ipAddress,
+                        port: port || 22,
+                        username,
+                        authType,
+                        encryptedPassword: password ? this.encrypt(password) : null,
+                        encryptedPrivateKey: privateKey ? this.encrypt(privateKey) : null,
+                        status: 'ACTIVE',
+                    },
+                });
+            }
+
             await ssh.connect(sshConfig);
 
             // Basic validation commands
@@ -30,7 +46,7 @@ export class VPSService {
             const { stdout: dockerVer } = await ssh.execute('docker --version');
             const { stdout: nginxVer } = await ssh.execute('nginx -v 2>&1');
 
-            const vps = await prisma.vps.create({
+            const vps = await prisma.vPS.create({
                 data: {
                     userId,
                     name,
@@ -56,7 +72,7 @@ export class VPSService {
     }
 
     static async performHealthCheck(vpsId: string) {
-        const vps = await prisma.vps.findUnique({ where: { id: vpsId } });
+        const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
         if (!vps) throw new Error('VPS not found');
 
         const ssh = new SSHService();
@@ -80,7 +96,7 @@ export class VPSService {
             const { code: dockerCode } = await ssh.execute('docker --version');
             const { code: nginxCode } = await ssh.execute('nginx -v');
 
-            return await prisma.vpsHealth.create({
+            return await prisma.vPSHealth.create({
                 data: {
                     vpsId,
                     cpuUsage: parseFloat(cpu.trim()) || 0,
@@ -92,7 +108,7 @@ export class VPSService {
                 },
             });
         } catch (err) {
-            await prisma.vps.update({
+            await prisma.vPS.update({
                 where: { id: vpsId },
                 data: { status: 'ERROR' },
             });

@@ -21,8 +21,13 @@ const loginSchema = z.object({
 export default async function authRoutes(fastify: FastifyInstance) {
     fastify.post('/register', async (request, reply) => {
         const { email, password, name } = registerSchema.parse(request.body);
-        const user = await AuthService.register(email, password, name);
-        return { message: 'OTP sent to email', email: user.email };
+        const result = await AuthService.register(email, password, name);
+        return {
+            success: true,
+            message: result.devOtp ? 'SMTP unavailable. Development OTP generated.' : 'OTP sent to email',
+            email: result.user.email,
+            ...(result.devOtp && { devOtp: result.devOtp }),
+        };
     });
 
     fastify.post('/verify-otp', async (request, reply) => {

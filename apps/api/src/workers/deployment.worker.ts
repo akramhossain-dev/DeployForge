@@ -18,7 +18,7 @@ export const deploymentWorker = new Worker(
 
         try {
             const project = await prisma.project.findUnique({ where: { id: projectId } });
-            const vps = await prisma.vps.findUnique({ where: { id: vpsId } });
+            const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
 
             if (!project || !vps) throw new Error('Project or VPS not found');
 

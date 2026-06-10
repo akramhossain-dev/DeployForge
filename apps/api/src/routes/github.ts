@@ -2,18 +2,26 @@ import { FastifyInstance } from 'fastify';
 import { GitHubService } from '../services/github.service';
 import crypto from 'crypto';
 import prisma from '@deployforge/database';
+import { TokenService } from '@deployforge/security';
+import { config } from '../config/env';
+
+const tokenService = new TokenService(config.JWT_SECRET);
 
 export default async function githubRoutes(fastify: FastifyInstance) {
     // 1. Connect GitHub
     fastify.get('/connect', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const state = crypto.randomBytes(16).toString('hex');
-        // In a real app, store state in session/cache to verify in callback
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const state = tokenService.generateAccessToken({
+            userId: request.user.id,
+            purpose: 'github_oauth',
+            nonce,
+        });
         const url = GitHubService.getAuthUrl(state);
         return { url };
     });
 
     // 2. Callback
-    fastify.get('/callback', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.get('/callback', async (request, reply) => {
         const { code, state } = request.query as { code: string; state: string };
 
         if (!code) {
@@ -21,11 +29,16 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         }
 
         try {
+            const payload = tokenService.verifyToken(state) as any;
+            if (payload.purpose !== 'github_oauth' || !payload.userId) {
+                return reply.status(400).send({ success: false, message: 'Invalid GitHub state' });
+            }
+
             const accessToken = await GitHubService.exchangeCodeForToken(code);
-            await GitHubService.syncUser(request.user.id, accessToken);
+            await GitHubService.syncUser(payload.userId, accessToken);
 
             // Redirect back to frontend
-            return reply.redirect(`${process.env.APP_URL || 'http://localhost:3000'}/dashboard/settings`);
+            return reply.redirect(`${process.env.APP_URL || 'http://localhost:3000'}/settings`);
         } catch (err: any) {
             fastify.log.error(err);
             return reply.status(500).send({ success: false, message: err.message });

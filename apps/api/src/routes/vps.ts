@@ -23,7 +23,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
 
     // 2. List VPS
     fastify.get('/list', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const vpsList = await prisma.vps.findMany({
+        const vpsList = await prisma.vPS.findMany({
             where: { userId: request.user.id },
             orderBy: { createdAt: 'desc' },
         });
@@ -33,7 +33,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
     // 3. Get Single VPS
     fastify.get('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
-        const vps = await prisma.vps.findFirst({
+        const vps = await prisma.vPS.findFirst({
             where: { id, userId: request.user.id },
             include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } },
         });
@@ -45,14 +45,14 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
     // 4. Delete VPS
     fastify.delete('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
-        await prisma.vps.deleteMany({ where: { id, userId: request.user.id } });
+        await prisma.vPS.deleteMany({ where: { id, userId: request.user.id } });
         return { success: true, message: 'VPS deleted' };
     });
 
     // 5. Get Health History
     fastify.get('/:id/health', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
-        const health = await prisma.vpsHealth.findMany({
+        const health = await prisma.vPSHealth.findMany({
             where: { vpsId: id, vps: { userId: request.user.id } },
             take: 20,
             orderBy: { checkedAt: 'desc' },

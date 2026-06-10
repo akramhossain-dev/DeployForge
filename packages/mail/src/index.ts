@@ -33,7 +33,7 @@ export class MailService {
     `;
 
         await this.transporter.sendMail({
-            from: `"DeployForge" <${this.transporter.options.auth?.user}>`,
+            from: `"DeployForge" <${(this.transporter.options as any).auth?.user}>`,
             to: email,
             subject: 'Your DeployForge Verification Code',
             html,

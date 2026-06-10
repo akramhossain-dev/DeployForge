@@ -20,6 +20,8 @@ model User {
   vps           VPS[]
   projects      Project[]
   githubAccount GitHubAccount?
+  terminalSessions TerminalSession[]
+  deployments   Deployment[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -76,6 +78,33 @@ model Repository {
   createdAt       DateTime     @default(now())
 }
 
+model TerminalSession {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  vpsId        String
+  vps          VPS        @relation(fields: [vpsId], references: [id])
+  sessionId    String     @unique
+  status       String     @default("ACTIVE") // ACTIVE, CLOSED, FAILED
+  logs         TerminalCommandLog[]
+  startedAt    DateTime   @default(now())
+  endedAt      DateTime?
+
+  @@index([userId])
+  @@index([vpsId])
+}
+
+model TerminalCommandLog {
+  id           String          @id @default(uuid())
+  sessionId    String
+  session      TerminalSession @relation(fields: [sessionId], references: [id])
+  command      String?
+  output       String?
+  timestamp    DateTime        @default(now())
+
+  @@index([sessionId])
+}
+
 model WebhookEvent {
   id           String   @id @default(uuid())
   repoId       String
@@ -102,6 +131,9 @@ model VPS {
   status               String       @default("INACTIVE") // "ACTIVE" | "INACTIVE" | "ERROR"
   deployments          Deployment[]
   healthRecords        VPSHealth[]
+  terminalSessions     TerminalSession[]
+  domains              Domain[]
+  systemMetrics        SystemMetrics[]
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
@@ -134,6 +166,8 @@ model Project {
   deployments   Deployment[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+
+  @@index([userId])
 }
 
 model Deployment {
@@ -155,8 +189,11 @@ model Deployment {
   commitHash    String?
   commitMessage String?
   logs          Log[]
+  deploymentLogs DeploymentLog[]
+  history       DeploymentHistory[]
   sandbox       DeploymentSandbox?
   domains       Domain[]
+  jobs          DeploymentJob[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -206,6 +243,45 @@ model DeploymentSandbox {
   estimatedRAM  Float
   estimatedDisk Float
   createdAt     DateTime   @default(now())
+}
+
+model DeploymentHistory {
+  id            String     @id @default(uuid())
+  deploymentId  String
+  deployment    Deployment @relation(fields: [deploymentId], references: [id])
+  version       String     // Commit hash or timestamp
+  containerId   String
+  imageTag      String?
+  status        String
+  env           String?    // Encrypted JSON snapshot
+  createdAt     DateTime   @default(now())
+
+  @@index([deploymentId])
+}
+
+model SystemMetrics {
+  id               String   @id @default(uuid())
+  vpsId            String
+  vps              VPS      @relation(fields: [vpsId], references: [id])
+  cpuUsage         Float
+  memoryUsage      Float
+  diskUsage        Float
+  activeContainers Int
+  timestamp        DateTime @default(now())
+
+  @@index([vpsId])
+}
+
+model DeploymentLog {
+  id           String     @id @default(uuid())
+  deploymentId String
+  deployment   Deployment @relation(fields: [deploymentId], references: [id])
+  type         String     // build | runtime | error | system
+  level        String     @default("info") // info | warn | error
+  message      String
+  createdAt    DateTime   @default(now())
+
+  @@index([deploymentId])
 }
 
 model Log {

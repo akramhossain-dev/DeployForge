@@ -14,22 +14,21 @@ const app = Fastify({
 
 export async function buildApp() {
     // Security Plugins
-    await app.register(helmet);
+    await app.register(helmet, { contentSecurityPolicy: false });
     await app.register(cors, {
         origin: config.NODE_ENV === 'development' ? true : /localhost/,
     });
     await app.register(rateLimit, {
         max: 100,
         timeWindow: '1 minute',
+        errorResponseBuilder: () => ({
+            success: false,
+            message: 'Rate limit exceeded. Please try again later.'
+        })
     });
 
     // Custom Plugins
     await app.register(import('./plugins/auth'));
-
-    // Health Route
-    app.get('/health', async () => {
-        return { status: 'OK', timestamp: new Date().toISOString() };
-    });
 
     // Routes
     await app.register(import('./routes/auth'), { prefix: '/auth' });
@@ -39,16 +38,26 @@ export async function buildApp() {
     await app.register(import('./routes/deploy'), { prefix: '/deploy' });
     await app.register(import('./routes/sandbox'), { prefix: '/sandbox' });
     await app.register(import('./routes/domain'), { prefix: '/domain' });
+    await app.register(import('./routes/monitoring'), { prefix: '/monitor' });
+
+    // WebSockets
+    await app.register(import('@fastify/websocket'));
+    await app.register(import('./routes/terminal'), { prefix: '/terminal' });
 
     // Global Error Handler
     app.setErrorHandler((error, request, reply) => {
+        const statusCode = error.statusCode || 500;
         app.log.error(error);
-        reply.status(error.statusCode || 500).send({
-            error: error.name,
-            message: error.message,
-            statusCode: error.statusCode || 500,
+
+        reply.status(statusCode).send({
+            success: false,
+            message: statusCode >= 500 ? 'Internal Server Error' : error.message,
+            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
         });
     });
+
+    // Health Check
+    app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
     return app;
 }

@@ -4,6 +4,7 @@ import { SSHService } from '@deployforge/vps';
 import { config } from '../config/env';
 import { GitHubService } from './github.service';
 import { deploymentQueue } from '../utils/queue';
+import { LoggingService } from './logging.service';
 
 const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
 
@@ -42,11 +43,29 @@ export class DeploymentService {
 
     static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string) {
         const project = await prisma.project.findUnique({ where: { id: projectId } });
-        const vps = await prisma.vps.findUnique({ where: { id: vpsId } });
+        const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
         if (!project || !vps) throw new Error('Project or VPS not found');
 
         const githubAccount = await prisma.gitHubAccount.findUnique({ where: { userId } });
         if (!githubAccount) throw new Error('GitHub account not connected');
+
+        // MOCK MODE: Bypass real VPS connection for testing Phase 13
+        if (process.env.TEST_MOCK_MODE === 'true') {
+            const deployment = await prisma.deployment.create({
+                data: {
+                    userId,
+                    projectId,
+                    vpsId,
+                    status: 'RUNNING',
+                    port: 3000,
+                    name: `MOCK-${project.name}`,
+                },
+            });
+            await prisma.log.create({
+                data: { deploymentId: deployment.id, content: 'MOCK DEPLOYMENT SUCCESSFUL', type: 'INFO' },
+            });
+            return deployment;
+        }
 
         const [iv, tag, content] = githubAccount.accessToken.split(':');
         const accessToken = encryptionService.decrypt({ iv, tag, content });
@@ -137,9 +156,17 @@ export class DeploymentService {
                 data: { status: 'RUNNING', containerId: containerId.trim() },
             });
 
-            await prisma.log.create({
-                data: { deploymentId, content: 'Deployment successful', type: 'INFO' },
+            // Save to history
+            await prisma.deploymentHistory.create({
+                data: {
+                    deploymentId,
+                    version: branch, // Or commit hash if available
+                    containerId: containerId.trim(),
+                    status: 'SUCCESS',
+                },
             });
+
+            await LoggingService.log(deploymentId, 'Deployment successful', 'system');
 
         } catch (err: any) {
             console.error(err);
@@ -147,9 +174,7 @@ export class DeploymentService {
                 where: { id: deploymentId },
                 data: { status: 'FAILED' },
             });
-            await prisma.log.create({
-                data: { deploymentId, content: `Deployment failed: ${err.message}`, type: 'ERROR' },
-            });
+            await LoggingService.log(deploymentId, `Deployment failed: ${err.message}`, 'error');
         } finally {
             ssh.disconnect();
         }

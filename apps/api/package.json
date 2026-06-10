@@ -3,29 +3,29 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "fastify-tsconfig-paths tsx watch src/server.ts",
+        "dev": "tsx watch src/server.ts",
         "build": "tsc",
         "start": "node dist/server.js"
     },
     "dependencies": {
-        "fastify": "^4.26.1",
+        "@deployforge/database": "workspace:*",
+        "@deployforge/security": "workspace:*",
+        "@deployforge/shared": "workspace:*",
         "@fastify/cors": "^9.0.1",
         "@fastify/helmet": "^11.1.1",
         "@fastify/rate-limit": "^9.1.0",
+        "@fastify/websocket": "^8.2.0",
+        "bullmq": "^5.4.2",
         "dotenv": "^16.4.5",
-        "zod": "^3.22.4",
+        "fastify": "^4.26.1",
+        "ioredis": "^5.3.2",
         "pino": "^8.19.0",
         "pino-pretty": "^10.3.1",
-        "bullmq": "^5.4.2",
-        "ioredis": "^5.3.2",
-        "@deployforge/shared": "workspace:*",
-        "@deployforge/security": "workspace:*",
-        "@deployforge/database": "workspace:*"
+        "zod": "^3.22.4"
     },
     "devDependencies": {
         "@types/node": "^20.11.24",
         "tsx": "^4.7.1",
-        "typescript": "^5.3.3",
-        "fastify-tsconfig-paths": "^1.0.1"
+        "typescript": "^5.3.3"
     }
 }
