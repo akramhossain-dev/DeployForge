@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ErrorState, PageHeader } from '@/components/ui';
+import { ErrorState, PageHeader, inputClassName } from '@/components/ui';
 import { AdminTable, Button, Panel, SmallMeta, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAccounts, useAdminAction, useAdminMe, useAdminSettings } from '@/hooks/useDeployForgeData';
 
@@ -40,13 +40,13 @@ export default function AdminSettingsPage() {
                     <Panel>
                         <h3 className="mb-4 font-bold text-white">Create Admin Account</h3>
                         <div className="space-y-3">
-                            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@example.com" className="h-10 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" />
-                            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Temporary password" className="h-10 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" />
-                            <select value={role} onChange={(event) => setRole(event.target.value)} className="h-10 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 text-sm text-slate-100">
+                            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@example.com" className={inputClassName} />
+                            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Temporary password" className={inputClassName} />
+                            <select value={role} onChange={(event) => setRole(event.target.value)} className={inputClassName}>
                                 <option value="ADMIN">ADMIN</option>
                                 <option value="MODERATOR">MODERATOR</option>
                             </select>
-                            <input type="password" value={adminSecret} onChange={(event) => setAdminSecret(event.target.value)} placeholder="ADMIN_SECRET" className="h-10 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:border-cyan-400" />
+                            <input type="password" value={adminSecret} onChange={(event) => setAdminSecret(event.target.value)} placeholder="ADMIN_SECRET" className={inputClassName} />
                             <Button onClick={createAdmin} loading={action.isPending}>Create Admin</Button>
                         </div>
                     </Panel>
@@ -57,7 +57,7 @@ export default function AdminSettingsPage() {
                             empty="No admin accounts found."
                             rows={accounts.isLoading ? undefined : accounts.data?.map((admin) => [
                                 <span key="email" className="font-bold text-white">{admin.email}</span>,
-                                <select key="role" value={admin.role} onChange={(event) => action.mutate({ method: 'patch', path: `/admin/users/${admin.id}/role`, body: { role: event.target.value } })} className="h-9 rounded-lg border border-slate-800 bg-slate-950 px-2 text-xs text-slate-100">
+                                <select key="role" value={admin.role} onChange={(event) => action.mutate({ method: 'patch', path: `/admin/users/${admin.id}/role`, body: { role: event.target.value } })} className={`${inputClassName} h-9 py-1 text-xs`}>
                                     <option>SUPER_ADMIN</option>
                                     <option>ADMIN</option>
                                     <option>MODERATOR</option>

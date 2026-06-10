@@ -2,7 +2,7 @@
 
 import { Activity, Github, GitBranch, Rocket, Server, Users } from 'lucide-react';
 import { ErrorState, PageHeader } from '@/components/ui';
-import { AdminStat, AdminTable, Panel, ResourceBars, formatDate } from '@/components/admin/AdminWidgets';
+import { AdminStat, AdminTable, Panel, ResourceBars, SectionHeading, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminOverview } from '@/hooks/useDeployForgeData';
 
 export default function AdminOverviewPage() {
@@ -25,11 +25,11 @@ export default function AdminOverviewPage() {
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
                 <Panel>
-                    <h3 className="mb-4 font-bold text-white">Resource Summary</h3>
+                    <SectionHeading icon={<Activity size={18} />} title="Resource Summary" description="Aggregate pressure from recent platform metrics." />
                     <ResourceBars cpu={data?.resources.cpuUsage} ram={data?.resources.memoryUsage} disk={data?.resources.diskUsage} />
                 </Panel>
                 <Panel className="xl:col-span-2">
-                    <h3 className="mb-4 font-bold text-white">Recent Activities</h3>
+                    <SectionHeading icon={<Users size={18} />} title="Recent Activities" description="Latest administrative actions recorded by the backend." />
                     <AdminTable
                         columns={['Admin', 'Action', 'Target', 'Time']}
                         empty="No admin activity yet."

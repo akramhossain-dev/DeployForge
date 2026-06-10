@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ErrorState, PageHeader } from '@/components/ui';
+import { ErrorState, PageHeader, inputClassName } from '@/components/ui';
 import { AdminTable, Button, Panel, StatusBadge, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAction, useAdminDeployments } from '@/hooks/useDeployForgeData';
 
@@ -17,7 +17,7 @@ export default function AdminDeploymentsPage() {
             {deployments.isError ? <ErrorState message={(deployments.error as Error)?.message} onRetry={() => deployments.refetch()} /> : null}
             {action.isError ? <ErrorState title="Admin action failed" message={(action.error as Error)?.message} /> : null}
             <Panel>
-                <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-800 bg-slate-950 px-3 text-sm text-slate-100">
+                <select value={status} onChange={(event) => setStatus(event.target.value)} className={`${inputClassName} max-w-xs`}>
                     <option value="">All statuses</option>
                     {['PENDING', 'BUILDING', 'RUNNING', 'FAILED', 'STOPPED'].map((item) => <option key={item}>{item}</option>)}
                 </select>

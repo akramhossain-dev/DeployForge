@@ -2,7 +2,7 @@
 
 import { Activity, Clock, Container, Gauge } from 'lucide-react';
 import { ErrorState, PageHeader } from '@/components/ui';
-import { AdminStat, Panel, ResourceBars, SmallMeta } from '@/components/admin/AdminWidgets';
+import { AdminStat, Panel, ResourceBars, SectionHeading, SmallMeta } from '@/components/admin/AdminWidgets';
 import { useAdminMonitoring } from '@/hooks/useDeployForgeData';
 
 function formatUptime(seconds?: number) {
@@ -28,11 +28,11 @@ export default function AdminMonitoringPage() {
             </div>
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <Panel>
-                    <h3 className="mb-4 font-bold text-white">Resource Pressure</h3>
+                    <SectionHeading icon={<Activity size={18} />} title="Resource Pressure" description="Flat resource bars without chart grid noise." />
                     <ResourceBars cpu={data?.cpuUsage} ram={data?.memoryUsage} disk={data?.diskUsage} />
                 </Panel>
                 <Panel>
-                    <h3 className="mb-4 font-bold text-white">Queue Status</h3>
+                    <SectionHeading icon={<Gauge size={18} />} title="Queue Status" description="Current background deployment queue state." />
                     <div className="grid grid-cols-3 gap-4">
                         <SmallMeta label="Queued" value={data?.queueStatus.queued ?? 0} />
                         <SmallMeta label="Running" value={data?.queueStatus.running ?? 0} />
