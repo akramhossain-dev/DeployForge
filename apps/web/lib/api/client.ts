@@ -38,6 +38,23 @@ function getToken(path: string) {
     return useAuthStore.getState().token || localStorage.getItem('df_token');
 }
 
+function handleUnauthorized(path: string) {
+    if (typeof window === 'undefined') return;
+
+    if (path.startsWith('/admin')) {
+        useAdminAuthStore.getState().logoutAdmin();
+        if (!window.location.pathname.startsWith('/admin/login')) {
+            window.location.assign('/admin/login');
+        }
+        return;
+    }
+
+    useAuthStore.getState().logout();
+    if (window.location.pathname !== '/') {
+        window.location.assign('/');
+    }
+}
+
 async function parseResponse(response: Response) {
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
@@ -82,10 +99,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
             console.error('[api:error]', { method, path, status: response.status, message: apiError.message, context: apiError.context });
         }
 
-        if (response.status === 401 && typeof window !== 'undefined') {
-            if (path.startsWith('/admin')) useAdminAuthStore.getState().logoutAdmin();
-            else useAuthStore.getState().logout();
-        }
+        if (response.status === 401) handleUnauthorized(path);
 
         throw new ApiError(apiError.message, response.status, apiError.context, apiError.errorCode);
     }

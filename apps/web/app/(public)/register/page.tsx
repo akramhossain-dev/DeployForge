@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api/client';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
+import { PasswordInput } from '@/components/ui';
 
 export default function RegisterPage() {
     const [step, setStep] = useState<'register' | 'verify'>('register');
@@ -87,7 +88,7 @@ export default function RegisterPage() {
                                 </div>
                                 <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300" placeholder="Name" />
                                 <input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300" placeholder="Email" />
-                                <input required minLength={8} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300" placeholder="Password" />
+                                <PasswordInput required minLength={8} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300" placeholder="Password" />
                                 {error ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p> : null}
                                 <button disabled={loading || auth.isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-white font-black text-slate-950 transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60">
                                     {loading ? <Loader2 className="animate-spin" size={18} /> : <>Create account <ArrowRight size={18} /></>}

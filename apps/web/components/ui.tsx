@@ -1,8 +1,8 @@
 'use client';
 
 import clsx from 'clsx';
-import { AlertCircle, Loader2, RefreshCw, X } from 'lucide-react';
-import { ReactNode } from 'react';
+import { AlertCircle, Eye, EyeOff, Loader2, RefreshCw, X } from 'lucide-react';
+import { ReactNode, useState } from 'react';
 
 export function PageHeader({
     title,
@@ -129,6 +129,34 @@ export function formatDate(value?: string) {
 }
 
 export const inputClassName = 'w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-50';
+
+export function PasswordInput({
+    className,
+    wrapperClassName,
+    ...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> & {
+    wrapperClassName?: string;
+}) {
+    const [showPassword, setShowPassword] = useState(false);
+
+    return (
+        <div className={clsx('relative', wrapperClassName)}>
+            <input
+                {...props}
+                type={showPassword ? 'text' : 'password'}
+                className={clsx(className || inputClassName, 'pr-12')}
+            />
+            <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-white"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+        </div>
+    );
+}
 
 export function SectionHeading({ icon, title, description }: { icon?: ReactNode; title: string; description?: string }) {
     return (

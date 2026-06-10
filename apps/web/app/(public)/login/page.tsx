@@ -7,6 +7,7 @@ import { ArrowRight, Loader2, LockKeyhole } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
+import { PasswordInput } from '@/components/ui';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -73,12 +74,12 @@ export default function LoginPage() {
                             </label>
                             <label className="block">
                                 <span className="text-sm font-bold text-slate-300">Password</span>
-                                <input
-                                    type="password"
+                                <PasswordInput
                                     autoComplete="current-password"
                                     value={password}
                                     onChange={(event) => setPassword(event.target.value)}
-                                    className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300"
+                                    wrapperClassName="mt-2"
+                                    className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300"
                                     placeholder="Password"
                                     required
                                 />

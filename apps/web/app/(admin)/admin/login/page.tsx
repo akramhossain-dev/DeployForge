@@ -3,9 +3,9 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Eye, EyeOff, LockKeyhole, Rocket, ShieldCheck } from 'lucide-react';
+import { LockKeyhole, Rocket, ShieldCheck } from 'lucide-react';
 import api from '@/lib/api/client';
-import { Button, ErrorState, Panel, inputClassName } from '@/components/ui';
+import { Button, ErrorState, Panel, PasswordInput, inputClassName } from '@/components/ui';
 import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
 
 export default function AdminLoginPage() {
@@ -15,7 +15,6 @@ export default function AdminLoginPage() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
 
     async function submit(event: FormEvent) {
         event.preventDefault();
@@ -86,25 +85,14 @@ export default function AdminLoginPage() {
 
                         <label className="block">
                             <span className="mb-2 block text-xs font-black uppercase text-slate-500">Password</span>
-                            <div className="relative">
-                                <input
-                                    required
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={password}
-                                    onChange={(event) => setPassword(event.target.value)}
-                                    autoComplete="current-password"
-                                    placeholder="Admin password"
-                                    className={`${inputClassName} h-12 px-4 pr-12`}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword((current) => !current)}
-                                    className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-white"
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                >
-                                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                </button>
-                            </div>
+                            <PasswordInput
+                                required
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                autoComplete="current-password"
+                                placeholder="Admin password"
+                                className={`${inputClassName} h-12 px-4`}
+                            />
                         </label>
 
                         <Button type="submit" loading={loading} className="h-12 w-full">

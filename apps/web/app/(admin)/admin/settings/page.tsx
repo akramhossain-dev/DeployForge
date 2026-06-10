@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ErrorState, PageHeader, inputClassName } from '@/components/ui';
+import { ErrorState, PageHeader, PasswordInput, inputClassName } from '@/components/ui';
 import { AdminTable, Button, Panel, SmallMeta, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAccounts, useAdminAction, useAdminMe, useAdminSettings } from '@/hooks/useDeployForgeData';
 
@@ -41,12 +41,12 @@ export default function AdminSettingsPage() {
                         <h3 className="mb-4 font-bold text-white">Create Admin Account</h3>
                         <div className="space-y-3">
                             <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@example.com" className={inputClassName} />
-                            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Temporary password" className={inputClassName} />
+                            <PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Temporary password" className={inputClassName} />
                             <select value={role} onChange={(event) => setRole(event.target.value)} className={inputClassName}>
                                 <option value="ADMIN">ADMIN</option>
                                 <option value="MODERATOR">MODERATOR</option>
                             </select>
-                            <input type="password" value={adminSecret} onChange={(event) => setAdminSecret(event.target.value)} placeholder="ADMIN_SECRET" className={inputClassName} />
+                            <PasswordInput value={adminSecret} onChange={(event) => setAdminSecret(event.target.value)} placeholder="ADMIN_SECRET" className={inputClassName} />
                             <Button onClick={createAdmin} loading={action.isPending}>Create Admin</Button>
                         </div>
                     </Panel>

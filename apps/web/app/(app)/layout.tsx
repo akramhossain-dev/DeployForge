@@ -45,7 +45,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     React.useEffect(() => {
         if (!hasHydrated) return;
-        if (!token) router.replace('/login');
+        if (!token) router.replace('/');
     }, [hasHydrated, router, token]);
 
     React.useEffect(() => {
@@ -71,28 +71,28 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     function signOut() {
         logout();
-        router.replace('/login');
+        router.replace('/');
     }
 
     return (
-        <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-200">
+        <div className="relative h-screen overflow-hidden bg-slate-950 text-slate-200">
             <AuroraField />
-            <div className="relative flex min-h-screen">
-                <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-slate-950/55 p-4 backdrop-blur-2xl lg:block">
+            <div className="relative flex h-screen overflow-hidden">
+                <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-slate-950/70 px-3 py-4 backdrop-blur-2xl lg:block">
                     <SidebarContent pathname={pathname} user={user} onLogout={signOut} />
                 </aside>
 
                 {sidebarOpen ? (
                     <div className="fixed inset-0 z-40 lg:hidden">
                         <button className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />
-                        <aside className="relative h-full w-[min(20rem,calc(100vw-2rem))] border-r border-white/10 bg-slate-950/90 p-4 shadow-2xl shadow-slate-950 backdrop-blur-2xl">
+                        <aside className="relative h-full w-[min(20rem,calc(100vw-2rem))] border-r border-white/10 bg-slate-950/95 px-3 py-4 shadow-2xl shadow-slate-950 backdrop-blur-2xl">
                             <SidebarContent pathname={pathname} user={user} onLogout={signOut} onClose={() => setSidebarOpen(false)} />
                         </aside>
                     </div>
                 ) : null}
 
-                <main className="min-w-0 flex-1">
-                    <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/60 px-4 py-4 backdrop-blur-2xl sm:px-6 lg:px-8">
+                <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <header className="z-30 shrink-0 border-b border-white/10 bg-slate-950/60 px-4 py-4 backdrop-blur-2xl sm:px-6 lg:px-8">
                         <div className="flex items-center justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
                                 <button
@@ -119,8 +119,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </div>
                     </header>
 
-                    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-                        {children}
+                    <div className="min-h-0 flex-1 overflow-y-auto terminal-scrollbar">
+                        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+                            {children}
+                        </div>
                     </div>
                 </main>
             </div>
@@ -142,14 +144,14 @@ function SidebarContent({
 }) {
     return (
         <div className="flex h-full flex-col">
-            <div className="mb-8 flex items-center justify-between gap-3 px-2 pt-1">
-                <Link href="/dashboard" className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100 shadow-lg shadow-cyan-950/20">
+            <div className="mb-7 flex items-center justify-between gap-3 px-2 pt-1">
+                <Link href="/dashboard" className="flex min-w-0 items-center gap-3 rounded-lg px-1 py-1 transition-colors hover:bg-white/[0.04]">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100 shadow-lg shadow-cyan-950/20">
                         <Rocket size={20} />
                     </div>
-                    <div>
-                        <p className="text-base font-black tracking-tight text-white">DeployForge</p>
-                        <p className="text-xs font-bold text-slate-500">Aurora console</p>
+                    <div className="min-w-0">
+                        <p className="truncate text-base font-black tracking-tight text-white">DeployForge</p>
+                        <p className="text-xs font-bold text-slate-500">Console</p>
                     </div>
                 </Link>
                 {onClose ? (
@@ -159,7 +161,7 @@ function SidebarContent({
                 ) : null}
             </div>
 
-            <nav className="space-y-1">
+            <nav className="space-y-1.5 px-1">
                 {navItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = pathname === item.href;
@@ -167,22 +169,28 @@ function SidebarContent({
                         <Link
                             key={item.name}
                             href={item.href}
-                            className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-bold transition-colors ${isActive
-                                ? 'border border-cyan-300/20 bg-cyan-300/10 text-cyan-100 shadow-lg shadow-cyan-950/10'
-                                : 'border border-transparent text-slate-400 hover:border-white/10 hover:bg-white/[0.06] hover:text-white'
+                            className={`group relative flex h-12 items-center gap-3 rounded-lg px-4 text-sm font-black transition-colors ${isActive
+                                ? 'bg-cyan-300/10 text-cyan-100'
+                                : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-100'
                                 }`}
                         >
-                            <Icon size={19} />
-                            {item.name}
+                            {isActive ? <span className="absolute left-0 top-2 h-8 w-1 rounded-r-full bg-cyan-300 shadow-lg shadow-cyan-500/30" /> : null}
+                            <Icon size={19} className={isActive ? 'text-cyan-200' : 'text-slate-500 transition-colors group-hover:text-cyan-200'} />
+                            <span className="truncate">{item.name}</span>
                         </Link>
                     );
                 })}
             </nav>
 
-            <div className="mt-auto rounded-lg border border-white/10 bg-white/[0.06] p-4">
+            <div className="mt-auto rounded-lg border border-white/10 bg-white/[0.06] p-4 shadow-2xl shadow-slate-950/30">
                 <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-sm font-black text-white">
-                        {user?.name?.[0] || user?.email?.[0]?.toUpperCase() || 'D'}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-slate-900 text-sm font-black text-white">
+                        {user?.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                            user?.name?.[0] || user?.email?.[0]?.toUpperCase() || 'D'
+                        )}
                     </div>
                     <div className="min-w-0">
                         <p className="truncate text-sm font-black text-white">{user?.name || 'Developer'}</p>
@@ -191,7 +199,7 @@ function SidebarContent({
                 </div>
                 <button
                     onClick={onLogout}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-rose-400/20 bg-rose-500/10 text-xs font-black text-rose-200 transition-colors hover:bg-rose-500/15"
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-rose-400/25 bg-rose-500/10 text-xs font-black text-rose-100 transition-colors hover:border-rose-300/35 hover:bg-rose-500/15"
                 >
                     <LogOut size={14} /> Log Out
                 </button>

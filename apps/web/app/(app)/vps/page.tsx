@@ -3,7 +3,7 @@
 import { FormEvent, ReactNode, useMemo, useState } from 'react';
 import { CheckCircle2, KeyRound, Plus, RefreshCw, Server, Trash2, XCircle } from 'lucide-react';
 import { ApiError } from '@/lib/api/client';
-import { Button, EmptyState, ErrorState, PageHeader, Panel, SectionHeading, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
+import { Button, EmptyState, ErrorState, PageHeader, Panel, PasswordInput, SectionHeading, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
 import { useAddVps, useDeleteVps, useTestVpsConnection, useVpsList } from '@/hooks/useDeployForgeData';
 import type { VpsConnectionPayload } from '@/lib/api/types';
 
@@ -111,7 +111,7 @@ export default function VpsPage() {
 
                     {form.authType === 'password' ? (
                         <Field label="SSH Password">
-                            <input className={inputClassName} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" />
+                            <PasswordInput className={inputClassName} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" />
                         </Field>
                     ) : (
                         <Field label="SSH Private Key">

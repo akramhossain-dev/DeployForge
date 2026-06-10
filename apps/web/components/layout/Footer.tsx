@@ -17,8 +17,8 @@ export function Footer() {
                     </p>
                 </div>
 
-                <FooterGroup title="Product" links={[['Home', '/'], ['Pricing', '/pricing'], ['Dashboard', '/dashboard']]} />
-                <FooterGroup title="Docs" links={[['Documentation', '/docs'], ['API Reference', '/docs'], ['Security', '/docs']]} />
+                <FooterGroup title="Product" links={[['Home', '/'], ['Features', '/features'], ['Dashboard', '/dashboard']]} />
+                <FooterGroup title="Docs" links={[['Documentation', '/docs'], ['Getting Started', '/docs#getting-started'], ['Security', '/docs#security']]} />
 
                 <div>
                     <h2 className="text-sm font-black uppercase tracking-wide text-white">Company</h2>

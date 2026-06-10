@@ -67,10 +67,11 @@ export default function HomePage() {
     const activeVps = vps.data?.filter((server) => server.status.toLowerCase() === 'active').length;
 
     const primaryHref = auth.isAuthenticated ? '/dashboard' : '/register';
-    const primaryLabel = auth.isAuthenticated ? 'Open Dashboard' : 'Get Started';
-    const secondaryHref = auth.isAuthenticated ? '/dashboard' : '/github/connect';
+    const primaryLabel = auth.isAuthenticated ? 'Go to Dashboard' : 'Get Started';
+    const secondaryHref = auth.isAuthenticated ? '/dashboard' : '/login';
     const secondaryLabel = auth.isAuthenticated ? 'Dashboard' : 'Connect GitHub';
     const ctaHref = auth.isAuthenticated ? '/dashboard' : '/login';
+    const ctaLabel = auth.isAuthenticated ? 'Go to Dashboard' : 'Get Started';
 
     return (
         <main className="overflow-hidden bg-slate-950 text-white">
@@ -190,7 +191,7 @@ export default function HomePage() {
                         href={ctaHref}
                         className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-white px-6 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02] lg:mt-0"
                     >
-                        Start deploying <ArrowRight size={17} />
+                        {ctaLabel} <ArrowRight size={17} />
                     </Link>
                 </div>
             </section>

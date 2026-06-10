@@ -2,15 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowRight, LayoutDashboard, LogIn, Menu, Rocket, X } from 'lucide-react';
+import { LayoutDashboard, LogIn, Menu, Rocket, X } from 'lucide-react';
 import { useState } from 'react';
 import clsx from 'clsx';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 
 const navItems = [
-    { label: 'Pricing', href: '/pricing' },
+    { label: 'Home', href: '/' },
+    { label: 'Features', href: '/features' },
     { label: 'Docs', href: '/docs' },
-    { label: 'About', href: '/about' },
 ];
 
 export function Header() {
@@ -41,17 +41,11 @@ export function Header() {
                             {item.label}
                         </Link>
                     ))}
-                    <Link href="https://github.com/akramhossain-dev/DeployForge" className="transition-colors hover:text-white">
-                        GitHub
-                    </Link>
                 </nav>
 
                 <div className="hidden items-center gap-3 md:flex">
                     {auth.isLoading ? (
-                        <>
-                            <span className="h-10 w-20 animate-pulse rounded-lg bg-slate-800/80" />
-                            <span className="h-10 w-28 animate-pulse rounded-lg bg-slate-800/80" />
-                        </>
+                        <span className="h-10 w-32 animate-pulse rounded-lg bg-slate-800/80" />
                     ) : auth.isAuthenticated ? (
                         <>
                             <Link
@@ -63,8 +57,8 @@ export function Header() {
                             <Link
                                 href="/dashboard"
                                 className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/10 text-sm font-black text-white"
-                                aria-label="Open dashboard"
-                                title={auth.user?.email || 'Dashboard'}
+                                aria-label="Open dashboard profile"
+                                title={auth.user?.name || auth.user?.email || 'Dashboard'}
                             >
                                 {auth.user?.avatarUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
@@ -84,9 +78,9 @@ export function Header() {
                             </Link>
                             <Link
                                 href="/register"
-                                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02]"
+                                className="inline-flex h-10 items-center justify-center rounded-lg bg-white px-4 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02]"
                             >
-                                Get Started <ArrowRight size={16} />
+                                Get Started
                             </Link>
                         </>
                     )}
@@ -116,34 +110,42 @@ export function Header() {
                                 {item.label}
                             </Link>
                         ))}
-                        <Link
-                            href="https://github.com/akramhossain-dev/DeployForge"
-                            className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10"
-                        >
-                            GitHub
-                        </Link>
                         <div className="mt-3 grid grid-cols-2 gap-3">
                             {auth.isLoading ? (
-                                <>
-                                    <span className="h-10 animate-pulse rounded-lg bg-slate-800/80" />
-                                    <span className="h-10 animate-pulse rounded-lg bg-slate-800/80" />
-                                </>
+                                <span className="col-span-2 h-10 animate-pulse rounded-lg bg-slate-800/80" />
                             ) : auth.isAuthenticated ? (
-                                <Link
-                                    href="/dashboard"
-                                    onClick={() => setMobileOpen(false)}
-                                    className="col-span-2 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 text-sm font-black text-slate-950"
-                                >
-                                    <LayoutDashboard size={16} /> Dashboard
-                                </Link>
+                                <>
+                                    <Link
+                                        href="/dashboard"
+                                        onClick={() => setMobileOpen(false)}
+                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 text-sm font-black text-slate-950"
+                                    >
+                                        <LayoutDashboard size={16} /> Dashboard
+                                    </Link>
+                                    <Link
+                                        href="/dashboard"
+                                        onClick={() => setMobileOpen(false)}
+                                        className="flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.07] px-3 text-sm font-bold text-white"
+                                    >
+                                        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-slate-900 text-xs font-black">
+                                            {auth.user?.avatarUrl ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={auth.user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                                            ) : (
+                                                auth.user?.name?.[0] || auth.user?.email?.[0]?.toUpperCase() || 'D'
+                                            )}
+                                        </span>
+                                        Profile
+                                    </Link>
+                                </>
                             ) : (
                                 <>
                                     <Link
                                         href="/login"
                                         onClick={() => setMobileOpen(false)}
-                                        className="inline-flex h-10 items-center justify-center rounded-lg border border-white/10 text-sm font-bold text-white"
+                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 text-sm font-bold text-white"
                                     >
-                                        Login
+                                        <LogIn size={16} /> Login
                                     </Link>
                                     <Link
                                         href="/register"
