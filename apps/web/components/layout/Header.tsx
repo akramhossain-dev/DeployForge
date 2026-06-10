@@ -9,6 +9,7 @@ import { useAuthSession } from '@/hooks/useDeployForgeData';
 
 const navItems = [
     { label: 'Home', href: '/' },
+    { label: 'About', href: '/about' },
     { label: 'Features', href: '/features' },
     { label: 'Docs', href: '/docs' },
 ];

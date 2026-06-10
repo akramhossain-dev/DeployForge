@@ -6,6 +6,9 @@ const registerSchema = z.object({
     email: z.string().email(),
     password: z.string().min(8),
     name: z.string().optional(),
+    termsAccepted: z.literal(true, {
+        errorMap: () => ({ message: 'You must accept Privacy Policy and Terms' }),
+    }),
 });
 
 const verifyOtpSchema = z.object({

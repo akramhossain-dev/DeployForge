@@ -5,7 +5,7 @@
     "types": "./dist/index.d.ts",
     "scripts": {
         "build": "tsc",
-        "generate": "prisma generate"
+        "generate": "prisma generate --schema ../../prisma/schema.prisma"
     },
     "dependencies": {
         "@prisma/client": "^5.10.2"

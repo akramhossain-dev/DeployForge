@@ -13,6 +13,7 @@ package-lock.json
 dist/
 build/
 .next/
+.next-build/
 out/
 
 # Logs
