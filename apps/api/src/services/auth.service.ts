@@ -96,12 +96,13 @@ export class AuthService {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.passwordHash) throw new Error('Invalid credentials');
 
+        if (user.status === 'SUSPENDED') throw new Error('Account suspended');
         if (!user.isVerified) throw new Error('Please verify your email first');
 
         const isValid = await PasswordService.verify(user.passwordHash, password);
         if (!isValid) throw new Error('Invalid credentials');
 
-        const accessToken = tokenService.generateAccessToken({ userId: user.id });
+        const accessToken = tokenService.generateAccessToken({ userId: user.id, tokenType: 'user' });
         const refreshToken = crypto.randomBytes(40).toString('hex');
         const hashedRefreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
@@ -130,7 +131,7 @@ export class AuthService {
             throw new Error('Invalid or expired refresh token');
         }
 
-        const accessToken = tokenService.generateAccessToken({ userId: session.userId });
+        const accessToken = tokenService.generateAccessToken({ userId: session.userId, tokenType: 'user' });
         return { accessToken };
     }
 

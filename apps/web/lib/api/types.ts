@@ -4,6 +4,8 @@ export type User = {
     name?: string | null;
     avatarUrl?: string | null;
     isVerified?: boolean;
+    role?: 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'USER' | string;
+    status?: 'ACTIVE' | 'SUSPENDED' | string;
 };
 
 export type GitHubProfile = {
@@ -80,4 +82,87 @@ export type DeploymentLog = {
     output?: string;
     createdAt?: string;
     timestamp?: string;
+};
+
+export type AdminOverview = {
+    totals: {
+        totalUsers: number;
+        totalDeployments: number;
+        activeDeployments: number;
+        totalVps: number;
+        connectedGitHubAccounts: number;
+        totalRepositories: number;
+    };
+    resources: {
+        cpuUsage: number;
+        memoryUsage: number;
+        diskUsage: number;
+    };
+    queue: {
+        recentJobs: number;
+        failedJobs: number;
+        successRate: number;
+    };
+    recentActivities: AdminActivity[];
+};
+
+export type AdminActivity = {
+    id: string;
+    action: string;
+    targetType: string;
+    targetId?: string | null;
+    createdAt: string;
+    admin?: User | null;
+};
+
+export type AdminUser = User & {
+    provider?: string;
+    createdAt: string;
+    updatedAt: string;
+    githubAccount?: GitHubProfile & { repositories?: Repository[] };
+    deployments?: Deployment[];
+    vps?: Vps[];
+    _count?: {
+        deployments: number;
+        vps: number;
+        projects: number;
+    };
+};
+
+export type AdminDeployment = Deployment & {
+    user?: User | null;
+    deploymentLogs?: DeploymentLog[];
+    history?: Array<{ id: string; version: string; status: string; createdAt: string }>;
+};
+
+export type AdminVps = Vps & {
+    user?: User | null;
+    systemMetrics?: Array<{ activeContainers: number; cpuUsage: number; memoryUsage: number; diskUsage: number; timestamp: string }>;
+    _count?: { deployments: number };
+};
+
+export type AdminGitHubAccount = GitHubProfile & {
+    user?: User | null;
+    repositories: Repository[];
+};
+
+export type AdminMonitoring = {
+    cpuUsage: number;
+    memoryUsage: number;
+    diskUsage: number;
+    activeContainers: number;
+    queueStatus: { queued: number; running: number; failed: number };
+    deploymentSuccessRate: number;
+    jobSuccessRate: number;
+    systemUptime: number;
+    errorRate: number;
+};
+
+export type AdminLog = {
+    id: string;
+    service: string;
+    severity: string;
+    message: string;
+    user?: User | null;
+    createdAt: string;
 };

@@ -10,6 +10,8 @@ const envSchema = z.object({
     DATABASE_URL: z.string(),
     REDIS_URL: z.string(),
     JWT_SECRET: z.string(),
+    ADMIN_SECRET: z.string().min(24),
+    ADMIN_JWT_SECRET: z.string().min(32),
     ENCRYPTION_KEY: z.string().length(64), // Hex string for 32 bytes
     GITHUB_CLIENT_ID: z.string(),
     GITHUB_CLIENT_SECRET: z.string(),

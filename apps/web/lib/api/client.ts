@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/lib/store/useAuthStore';
+import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
 
 export type ApiErrorShape = {
     success: false;
@@ -26,8 +27,11 @@ export type ApiResponse<T> = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-function getToken() {
+function getToken(path: string) {
     if (typeof window === 'undefined') return null;
+    if (path.startsWith('/admin') && path !== '/admin/login') {
+        return useAdminAuthStore.getState().adminToken || localStorage.getItem('df_admin_token');
+    }
     return useAuthStore.getState().token || localStorage.getItem('df_token');
 }
 
@@ -40,7 +44,7 @@ async function parseResponse(response: Response) {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const token = getToken();
+    const token = getToken(path);
     const headers = new Headers(init.headers);
     const method = init.method || 'GET';
 
@@ -75,7 +79,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
         }
 
         if (response.status === 401 && typeof window !== 'undefined') {
-            useAuthStore.getState().logout();
+            if (path.startsWith('/admin')) useAdminAuthStore.getState().logoutAdmin();
+            else useAuthStore.getState().logout();
         }
 
         throw new ApiError(apiError.message, response.status, apiError.context);
@@ -97,6 +102,8 @@ export const api = {
     get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'GET' }),
     post: <T>(path: string, body?: unknown, init?: RequestInit) =>
         request<T>(path, { ...init, method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+    patch: <T>(path: string, body?: unknown, init?: RequestInit) =>
+        request<T>(path, { ...init, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
     delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'DELETE' }),
 };
 

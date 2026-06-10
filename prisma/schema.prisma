@@ -15,6 +15,8 @@ model User {
   avatarUrl     String?
   githubId      String?   @unique
   isVerified    Boolean   @default(false)
+  role          String    @default("USER") // legacy user role; admin auth uses AdminUser
+  status        String    @default("ACTIVE") // ACTIVE | SUSPENDED
   provider      String    @default("email") // "email" | "github"
   sessions      Session[]
   vps           VPS[]
@@ -24,6 +26,57 @@ model User {
   deployments   Deployment[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model AdminUser {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  passwordHash  String
+  role          String          // SUPER_ADMIN | ADMIN | MODERATOR
+  createdById   String?
+  createdBy     AdminUser?      @relation("AdminCreatedUsers", fields: [createdById], references: [id])
+  createdAdmins AdminUser[]     @relation("AdminCreatedUsers")
+  sessions      AdminSession[]
+  activities    AdminActivity[]
+  lastLoginAt   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([role])
+  @@index([createdById])
+}
+
+model AdminSession {
+  id           String    @id @default(uuid())
+  adminId      String
+  admin        AdminUser @relation(fields: [adminId], references: [id])
+  tokenHash    String    @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model AdminActivity {
+  id           String    @id @default(uuid())
+  adminId      String
+  admin        AdminUser @relation(fields: [adminId], references: [id])
+  action       String
+  targetUserId String?
+  targetRole   String?
+  targetType   String?
+  targetId     String?
+  ipAddress    String?
+  timestamp    DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([timestamp])
 }
 
 model Session {
