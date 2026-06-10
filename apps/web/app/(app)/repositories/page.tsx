@@ -68,9 +68,9 @@ export default function RepositoriesPage() {
                                 <span className="shrink-0 text-slate-400">{repo.private ? <Lock size={16} /> : <Unlock size={16} />}</span>
                             </div>
                             <div className="mt-5 flex flex-wrap gap-2 text-xs text-slate-500">
-                                <span className="rounded-full bg-slate-800 px-2.5 py-1">Branch: {repo.defaultBranch}</span>
-                                <span className="rounded-full bg-slate-800 px-2.5 py-1">{repo.webhookId ? 'Webhook ready' : 'Webhook missing'}</span>
-                                <span className="rounded-full bg-slate-800 px-2.5 py-1">Updated {formatDate(repo.updatedAt)}</span>
+                                <span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1">Branch: {repo.defaultBranch}</span>
+                                <span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1">{repo.webhookId ? 'Webhook ready' : 'Webhook missing'}</span>
+                                <span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1">Updated {formatDate(repo.updatedAt)}</span>
                             </div>
                         </Panel>
                     ))}

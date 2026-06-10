@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Panel } from '@/components/ui';
+import { Button, Panel, inputClassName } from '@/components/ui';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import api from '@/lib/api/client';
 
@@ -61,7 +61,7 @@ export function TerminalPanel({ vpsId }: { vpsId?: string }) {
     }
 
     return (
-        <Panel className="bg-[#050505]">
+        <Panel className="bg-slate-950/70">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <p className="font-mono text-sm font-bold uppercase tracking-widest text-emerald-300">DeployForge TUI</p>
@@ -71,7 +71,7 @@ export function TerminalPanel({ vpsId }: { vpsId?: string }) {
                     {status === 'connected' ? 'Reconnect' : 'Connect'}
                 </Button>
             </div>
-            <pre ref={outputRef} className="terminal-scrollbar h-[520px] overflow-auto rounded-lg border border-slate-800 bg-black p-4 font-mono text-xs leading-6 text-emerald-100">
+            <pre ref={outputRef} className="terminal-scrollbar h-[520px] overflow-auto rounded-lg border border-white/10 bg-slate-950/90 p-4 font-mono text-xs leading-6 text-emerald-100">
                 {output}
             </pre>
             <form onSubmit={sendInput} className="mt-4 flex gap-3">
@@ -79,7 +79,7 @@ export function TerminalPanel({ vpsId }: { vpsId?: string }) {
                     value={input}
                     onChange={(event) => setInput(event.target.value)}
                     disabled={status !== 'connected'}
-                    className="h-11 min-w-0 flex-1 rounded-lg border border-slate-800 bg-black px-3 font-mono text-sm text-emerald-100 outline-none focus:border-cyan-400 disabled:opacity-50"
+                    className={`${inputClassName} h-11 min-w-0 flex-1 font-mono text-emerald-100`}
                     placeholder={status === 'connected' ? 'Type a command...' : 'Connect to enable input'}
                 />
                 <Button type="submit" disabled={status !== 'connected'}>Send</Button>

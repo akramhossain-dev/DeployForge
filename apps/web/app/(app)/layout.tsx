@@ -1,32 +1,47 @@
 'use client';
 
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-    LayoutDashboard,
-    Settings,
-    Terminal,
-    Server,
-    Github,
     Activity,
+    Github,
+    LayoutDashboard,
     LogOut,
+    Menu,
     Rocket,
-    ShieldCheck
+    Server,
+    Settings,
+    ShieldCheck,
+    Terminal,
+    X,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useMe } from '@/hooks/useDeployForgeData';
-import { SkeletonBlock } from '@/components/ui';
+import { Button, SkeletonBlock } from '@/components/ui';
 
 interface DashboardLayoutProps {
     children: ReactNode;
 }
+
+const navItems = [
+    { name: 'Overview', icon: LayoutDashboard, href: '/dashboard' },
+    { name: 'Deployments', icon: Rocket, href: '/deployments' },
+    { name: 'Repositories', icon: Github, href: '/repositories' },
+    { name: 'VPS Manager', icon: Server, href: '/vps' },
+    { name: 'Terminal', icon: Terminal, href: '/terminal' },
+    { name: 'Monitoring', icon: Activity, href: '/monitoring' },
+    { name: 'Sandbox', icon: ShieldCheck, href: '/sandbox' },
+    { name: 'Settings', icon: Settings, href: '/settings' },
+];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const pathname = usePathname();
     const router = useRouter();
     const { user, token, hasHydrated, setUser, logout } = useAuthStore();
     const me = useMe(hasHydrated && !!token);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const activeItem = useMemo(() => navItems.find((item) => item.href === pathname) || navItems[0], [pathname]);
 
     React.useEffect(() => {
         if (!hasHydrated) return;
@@ -37,20 +52,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         if (me.data) setUser(me.data);
     }, [me.data, setUser]);
 
-    const navItems = [
-        { name: 'Overview', icon: <LayoutDashboard size={20} />, href: '/dashboard' },
-        { name: 'Deployments', icon: <Rocket size={20} />, href: '/deployments' },
-        { name: 'Repositories', icon: <Github size={20} />, href: '/repositories' },
-        { name: 'VPS Manager', icon: <Server size={20} />, href: '/vps' },
-        { name: 'Terminal', icon: <Terminal size={20} />, href: '/terminal' },
-        { name: 'Monitoring', icon: <Activity size={20} />, href: '/monitoring' },
-        { name: 'Sandbox', icon: <ShieldCheck size={20} />, href: '/sandbox' },
-        { name: 'Settings', icon: <Settings size={20} />, href: '/settings' },
-    ];
+    React.useEffect(() => {
+        setSidebarOpen(false);
+    }, [pathname]);
 
     if (!hasHydrated || (hasHydrated && !token)) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
+            <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-200">
+                <AuroraField />
                 <div className="w-full max-w-sm space-y-3">
                     <SkeletonBlock className="h-10 w-48" />
                     <SkeletonBlock className="h-28 w-full" />
@@ -60,77 +69,144 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         );
     }
 
+    function signOut() {
+        logout();
+        router.replace('/login');
+    }
+
     return (
-        <div className="flex min-h-screen bg-slate-950 text-slate-200">
-            {/* Sidebar */}
-            <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950/95 lg:flex">
-                <div className="p-6 mb-4 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-lg flex items-center justify-center">
-                        <Rocket size={18} className="text-white" />
+        <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-200">
+            <AuroraField />
+            <div className="relative flex min-h-screen">
+                <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-slate-950/55 p-4 backdrop-blur-2xl lg:block">
+                    <SidebarContent pathname={pathname} user={user} onLogout={signOut} />
+                </aside>
+
+                {sidebarOpen ? (
+                    <div className="fixed inset-0 z-40 lg:hidden">
+                        <button className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />
+                        <aside className="relative h-full w-[min(20rem,calc(100vw-2rem))] border-r border-white/10 bg-slate-950/90 p-4 shadow-2xl shadow-slate-950 backdrop-blur-2xl">
+                            <SidebarContent pathname={pathname} user={user} onLogout={signOut} onClose={() => setSidebarOpen(false)} />
+                        </aside>
                     </div>
-                    <span className="font-black text-white tracking-tighter">DeployForge</span>
-                </div>
+                ) : null}
 
-                <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-                    {navItems.map((item) => {
-                        const isActive = pathname === item.href;
-                        return (
-                            <Link
-                                key={item.name}
-                                href={item.href}
-                                className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${isActive
-                                        ? 'bg-cyan-400/10 text-cyan-300 ring-1 ring-cyan-400/20'
-                                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                                    }`}
-                            >
-                                {item.icon}
-                                {item.name}
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                <div className="p-4 mt-auto">
-                    <div className="mb-4 rounded-lg border border-slate-800/50 bg-slate-900 p-4">
-                        <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold">
-                                {user?.name?.[0] || user?.email?.[0]?.toUpperCase()}
+                <main className="min-w-0 flex-1">
+                    <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/60 px-4 py-4 backdrop-blur-2xl sm:px-6 lg:px-8">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setSidebarOpen(true)}
+                                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-white lg:hidden"
+                                    aria-label="Open navigation"
+                                >
+                                    <Menu size={18} />
+                                </button>
+                                <div className="min-w-0">
+                                    <p className="text-xs font-black uppercase tracking-wide text-cyan-300">User Dashboard</p>
+                                    <h2 className="truncate text-lg font-black text-white sm:text-xl">{activeItem.name}</h2>
+                                </div>
                             </div>
-                            <div className="overflow-hidden">
-                                <p className="text-sm font-bold text-white truncate">{user?.name || 'Developer'}</p>
-                                <p className="text-xs text-slate-500 truncate">{user?.email || 'Signed in'}</p>
+                            <div className="flex items-center gap-3">
+                                <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-xs font-bold text-slate-300 sm:flex">
+                                    <span className={`h-2 w-2 rounded-full ${me.isError ? 'bg-rose-400' : 'bg-emerald-400'}`} /> API
+                                </div>
+                                <Button variant="secondary" onClick={() => me.refetch()} loading={me.isFetching}>
+                                    Refresh
+                                </Button>
                             </div>
                         </div>
-                        <button
-                            onClick={() => {
-                                logout();
-                                router.replace('/login');
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    </header>
+
+                    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+                        {children}
+                    </div>
+                </main>
+            </div>
+
+        </div>
+    );
+}
+
+function SidebarContent({
+    pathname,
+    user,
+    onLogout,
+    onClose,
+}: {
+    pathname: string;
+    user: any;
+    onLogout: () => void;
+    onClose?: () => void;
+}) {
+    return (
+        <div className="flex h-full flex-col">
+            <div className="mb-8 flex items-center justify-between gap-3 px-2 pt-1">
+                <Link href="/dashboard" className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100 shadow-lg shadow-cyan-950/20">
+                        <Rocket size={20} />
+                    </div>
+                    <div>
+                        <p className="text-base font-black tracking-tight text-white">DeployForge</p>
+                        <p className="text-xs font-bold text-slate-500">Aurora console</p>
+                    </div>
+                </Link>
+                {onClose ? (
+                    <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-slate-300" aria-label="Close navigation">
+                        <X size={16} />
+                    </button>
+                ) : null}
+            </div>
+
+            <nav className="space-y-1">
+                {navItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = pathname === item.href;
+                    return (
+                        <Link
+                            key={item.name}
+                            href={item.href}
+                            className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-bold transition-colors ${isActive
+                                ? 'border border-cyan-300/20 bg-cyan-300/10 text-cyan-100 shadow-lg shadow-cyan-950/10'
+                                : 'border border-transparent text-slate-400 hover:border-white/10 hover:bg-white/[0.06] hover:text-white'
+                                }`}
                         >
-                            <LogOut size={14} /> Log Out
-                        </button>
+                            <Icon size={19} />
+                            {item.name}
+                        </Link>
+                    );
+                })}
+            </nav>
+
+            <div className="mt-auto rounded-lg border border-white/10 bg-white/[0.06] p-4">
+                <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-sm font-black text-white">
+                        {user?.name?.[0] || user?.email?.[0]?.toUpperCase() || 'D'}
+                    </div>
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-white">{user?.name || 'Developer'}</p>
+                        <p className="truncate text-xs text-slate-500">{user?.email || 'Signed in'}</p>
                     </div>
                 </div>
-            </aside>
+                <button
+                    onClick={onLogout}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-rose-400/20 bg-rose-500/10 text-xs font-black text-rose-200 transition-colors hover:bg-rose-500/15"
+                >
+                    <LogOut size={14} /> Log Out
+                </button>
+            </div>
+        </div>
+    );
+}
 
-            {/* Main Content */}
-            <main className="min-w-0 flex-1">
-                <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 py-4 backdrop-blur-md sm:px-8">
-                    <h2 className="text-xl font-bold text-white">
-                        {navItems.find(i => i.href === pathname)?.name || 'Dashboard'}
-                    </h2>
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-400">
-                            <span className={`h-2 w-2 rounded-full ${me.isError ? 'bg-red-400' : 'bg-emerald-400'}`} /> API
-                        </div>
-                    </div>
-                </header>
-
-                <div className="p-4 sm:p-8">
-                    {children}
-                </div>
-            </main>
+function AuroraField() {
+    return (
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+            <div className="absolute left-1/2 top-[-12rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-cyan-400/14 blur-3xl" />
+            <div className="absolute right-[-10rem] top-36 h-[26rem] w-[26rem] rounded-full bg-emerald-400/10 blur-3xl" />
+            <div className="absolute bottom-[-8rem] left-[-8rem] h-[24rem] w-[24rem] rounded-full bg-rose-400/10 blur-3xl" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,rgba(2,6,23,0.35)_55%,#020617_100%)]" />
         </div>
     );
 }

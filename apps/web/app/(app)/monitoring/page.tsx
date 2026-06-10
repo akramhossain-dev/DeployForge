@@ -39,8 +39,8 @@ export default function MonitoringPage() {
                                             <StatusBadge status={status} />
                                             <span className="text-slate-400">{count}</span>
                                         </div>
-                                        <div className="h-3 overflow-hidden rounded bg-slate-800">
-                                            <div className="h-full bg-cyan-400" style={{ width: `${percent}%` }} />
+                                        <div className="h-3 overflow-hidden rounded-full bg-white/[0.08]">
+                                            <div className="h-full rounded-full bg-cyan-300" style={{ width: `${percent}%` }} />
                                         </div>
                                     </div>
                                 );
@@ -66,8 +66,8 @@ export default function MonitoringPage() {
                                             <span className="font-bold text-slate-200">{server.name}</span>
                                             <span className="text-slate-400">{Math.round(pressure)}%</span>
                                         </div>
-                                        <div className="h-6 overflow-hidden rounded bg-slate-800">
-                                            <div className="flex h-full items-center bg-emerald-400 px-2 text-xs font-bold text-slate-950" style={{ width: `${Math.min(pressure, 100)}%` }} />
+                                        <div className="h-6 overflow-hidden rounded-full bg-white/[0.08]">
+                                            <div className="flex h-full items-center rounded-full bg-emerald-300 px-2 text-xs font-black text-slate-950" style={{ width: `${Math.min(pressure, 100)}%` }} />
                                         </div>
                                     </div>
                                 );

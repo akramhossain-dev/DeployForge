@@ -26,12 +26,12 @@ export default function DeploymentsPage() {
                     {deployments.isLoading ? (
                         <div className="space-y-3">{Array.from({ length: 5 }).map((_, index) => <SkeletonBlock key={index} className="h-20" />)}</div>
                     ) : deployments.data?.length ? (
-                        <div className="divide-y divide-slate-800">
+                        <div className="divide-y divide-white/10">
                             {deployments.data.map((deployment) => (
                                 <button
                                     key={deployment.id}
                                     onClick={() => setSelectedId(deployment.id)}
-                                    className="flex w-full flex-col gap-3 py-4 text-left transition-colors hover:bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between"
+                                    className="flex w-full flex-col gap-3 rounded-lg py-4 text-left transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
                                 >
                                     <div className="min-w-0 px-1">
                                         <p className="truncate font-bold text-white">{deployment.name || deployment.project?.name || 'Untitled deployment'}</p>
@@ -61,11 +61,11 @@ export default function DeploymentsPage() {
                     ) : logs.isLoading ? (
                         <div className="space-y-3"><SkeletonBlock className="h-10" /><SkeletonBlock className="h-10" /><SkeletonBlock className="h-10" /></div>
                     ) : logs.data?.length ? (
-                        <pre className="terminal-scrollbar max-h-[520px] overflow-auto rounded-lg bg-black p-4 font-mono text-xs leading-6 text-emerald-100">
+                        <pre className="terminal-scrollbar max-h-[520px] overflow-auto rounded-lg border border-white/10 bg-slate-950/80 p-4 font-mono text-xs leading-6 text-emerald-100">
                             {logs.data.map((log) => `[${formatDate(log.createdAt || log.timestamp)}] ${log.message || log.output || ''}`).join('\n')}
                         </pre>
                     ) : (
-                        <p className="rounded-lg bg-black p-4 font-mono text-xs text-slate-500">No logs have been recorded for this deployment yet.</p>
+                        <p className="rounded-lg border border-white/10 bg-slate-950/80 p-4 font-mono text-xs text-slate-500">No logs have been recorded for this deployment yet.</p>
                     )}
                 </Panel>
             </div>

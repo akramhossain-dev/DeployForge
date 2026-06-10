@@ -3,7 +3,7 @@
 import { FormEvent, ReactNode, useMemo, useState } from 'react';
 import { CheckCircle2, KeyRound, Plus, RefreshCw, Server, Trash2, XCircle } from 'lucide-react';
 import { ApiError } from '@/lib/api/client';
-import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, formatDate } from '@/components/ui';
+import { Button, EmptyState, ErrorState, PageHeader, Panel, SectionHeading, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
 import { useAddVps, useDeleteVps, useTestVpsConnection, useVpsList } from '@/hooks/useDeployForgeData';
 import type { VpsConnectionPayload } from '@/lib/api/types';
 
@@ -76,27 +76,24 @@ export default function VpsPage() {
 
             <Panel>
                 <form onSubmit={handleAdd} className="space-y-5">
-                    <div className="flex items-center gap-2">
-                        <Server size={18} className="text-cyan-300" />
-                        <h2 className="text-base font-bold text-white">Add VPS</h2>
-                    </div>
+                    <SectionHeading icon={<Server size={18} />} title="Add VPS" description="Credentials are tested before save and encrypted at rest." />
 
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                         <Field label="VPS Name">
-                            <input className={inputClass} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Production API" />
+                            <input className={inputClassName} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Production API" />
                         </Field>
                         <Field label="IP Address / Hostname">
-                            <input className={inputClass} value={form.ipAddress} onChange={(event) => setForm({ ...form, ipAddress: event.target.value })} placeholder="203.0.113.10" />
+                            <input className={inputClassName} value={form.ipAddress} onChange={(event) => setForm({ ...form, ipAddress: event.target.value })} placeholder="203.0.113.10" />
                         </Field>
                         <Field label="Port">
-                            <input className={inputClass} value={form.port} onChange={(event) => setForm({ ...form, port: event.target.value })} inputMode="numeric" placeholder="22" />
+                            <input className={inputClassName} value={form.port} onChange={(event) => setForm({ ...form, port: event.target.value })} inputMode="numeric" placeholder="22" />
                         </Field>
                         <Field label="SSH Username">
-                            <input className={inputClass} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} placeholder="root" />
+                            <input className={inputClassName} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} placeholder="root" />
                         </Field>
                     </div>
 
-                    <div className="flex w-full rounded-lg border border-slate-800 bg-slate-950 p-1 sm:w-fit">
+                    <div className="flex w-full rounded-lg border border-white/10 bg-slate-950/55 p-1 sm:w-fit">
                         {(['password', 'key'] as const).map((authType) => (
                             <button
                                 key={authType}
@@ -105,7 +102,7 @@ export default function VpsPage() {
                                     setForm({ ...form, authType });
                                     setTestState({ status: 'idle', message: '' });
                                 }}
-                                className={`h-9 rounded-md px-4 text-sm font-bold transition-colors ${form.authType === authType ? 'bg-cyan-400 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                className={`h-9 rounded-md px-4 text-sm font-black transition-colors ${form.authType === authType ? 'bg-white text-slate-950' : 'text-slate-400 hover:text-white'}`}
                             >
                                 {authType === 'password' ? 'Password' : 'Private Key'}
                             </button>
@@ -114,16 +111,16 @@ export default function VpsPage() {
 
                     {form.authType === 'password' ? (
                         <Field label="SSH Password">
-                            <input className={inputClass} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" />
+                            <input className={inputClassName} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" />
                         </Field>
                     ) : (
                         <Field label="SSH Private Key">
-                            <textarea className={`${inputClass} min-h-40 py-3 font-mono text-xs`} value={form.privateKey} onChange={(event) => setForm({ ...form, privateKey: event.target.value })} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
+                            <textarea className={`${inputClassName} min-h-40 py-3 font-mono text-xs`} value={form.privateKey} onChange={(event) => setForm({ ...form, privateKey: event.target.value })} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
                         </Field>
                     )}
 
                     {testState.status !== 'idle' ? (
-                        <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${testState.status === 'success' ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-red-400/20 bg-red-400/10 text-red-200'}`}>
+                        <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${testState.status === 'success' ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-rose-400/20 bg-rose-400/10 text-rose-200'}`}>
                             {testState.status === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
                             <span>{testState.message}</span>
                         </div>
@@ -178,8 +175,8 @@ export default function VpsPage() {
                                                     <span>{label}</span>
                                                     <span>{value}%</span>
                                                 </div>
-                                                <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-                                                    <div className="h-full bg-cyan-400" style={{ width: `${Math.min(value, 100)}%` }} />
+                                                <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                                                    <div className="h-full rounded-full bg-cyan-300" style={{ width: `${Math.min(value, 100)}%` }} />
                                                 </div>
                                             </div>
                                         );
@@ -240,5 +237,3 @@ function errorMessage(error: unknown) {
     if (error instanceof Error) return error.message;
     return 'Request failed';
 }
-
-const inputClass = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20';
