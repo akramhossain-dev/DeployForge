@@ -3,9 +3,13 @@ import { persist } from 'zustand/middleware';
 
 interface User {
     id: string;
-    email: string;
+    email?: string | null;
     name?: string;
     avatarUrl?: string;
+    githubId?: string | null;
+    githubUsername?: string | null;
+    githubAvatar?: string | null;
+    provider?: string;
     isVerified?: boolean;
     role?: string;
     status?: string;

@@ -8,6 +8,27 @@ import { config } from '../config/env';
 const tokenService = new TokenService(config.JWT_SECRET);
 
 export default async function githubRoutes(fastify: FastifyInstance) {
+    // 0. Login/Register with GitHub (OAuth start)
+    fastify.get('/', {
+        config: {
+            rateLimit: { max: 20, timeWindow: '10 minutes' },
+        },
+    }, async (_request, reply) => {
+        try {
+            const nonce = crypto.randomBytes(16).toString('hex');
+            const state = tokenService.generateAccessToken({
+                purpose: 'github_auth',
+                nonce,
+            });
+            const url = GitHubService.getAuthUrl(state);
+            fastify.log.info({ redirectUri: config.GITHUB_REDIRECT_URI }, 'GitHub OAuth login URL generated successfully');
+            return reply.redirect(url);
+        } catch (err: any) {
+            fastify.log.error({ err }, 'GitHub OAuth login initiation failed');
+            return reply.redirect(`${config.APP_URL}/login?github=error&error_type=oauth_config&message=${encodeURIComponent(err.message || 'GitHub OAuth is unavailable')}`);
+        }
+    });
+
     // 1. Connect GitHub (OAuth start)
     fastify.get('/connect', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         try {
@@ -28,7 +49,11 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     });
 
     // 2. Callback (Callback received)
-    fastify.get('/callback', async (request, reply) => {
+    fastify.get('/callback', {
+        config: {
+            rateLimit: { max: 30, timeWindow: '10 minutes' },
+        },
+    }, async (request, reply) => {
         const { code, state, error, error_description } = request.query as {
             code?: string;
             state?: string;
@@ -44,8 +69,19 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             let errorType = 'github_api_error';
             if (error === 'redirect_uri_mismatch') {
                 errorType = 'callback_mismatch';
+            } else if (error === 'access_denied') {
+                errorType = 'oauth_denied';
             }
-            return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=${errorType}&message=${encodeURIComponent(error_description || error)}`);
+            let target = 'login';
+            if (state) {
+                try {
+                    const payload = tokenService.verifyToken(state) as any;
+                    if (payload.purpose === 'github_oauth') target = 'settings';
+                } catch {
+                    target = 'login';
+                }
+            }
+            return reply.redirect(`${config.APP_URL}/${target}?github=error&error_type=${errorType}&message=${encodeURIComponent(error_description || error)}`);
         }
 
         // Validate state parameter presence
@@ -55,25 +91,32 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         }
 
         let userId = '';
+        let purpose = '';
         // Validate state parameter signature/expiration (session validation)
         try {
             fastify.log.info({ state }, 'Validating state parameter');
             const payload = tokenService.verifyToken(state) as any;
-            if (payload.purpose !== 'github_oauth' || !payload.userId) {
+            if (!['github_oauth', 'github_auth'].includes(payload.purpose)) {
                 fastify.log.warn({ payload }, 'Invalid state purpose or missing user ID in state payload');
+                return reply.redirect(`${config.APP_URL}/login?github=error&error_type=session_error&message=Invalid+state+purpose`);
+            }
+            if (payload.purpose === 'github_oauth' && !payload.userId) {
+                fastify.log.warn({ payload }, 'Missing user ID in GitHub connect state payload');
                 return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=session_error&message=Invalid+state+purpose+or+user+identity`);
             }
+            purpose = payload.purpose;
             userId = payload.userId;
-            fastify.log.info({ userId }, 'State parameter verified successfully');
+            fastify.log.info({ userId, purpose }, 'State parameter verified successfully');
         } catch (err: any) {
             fastify.log.error({ err, state }, 'State verification failed');
-            return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=session_error&message=${encodeURIComponent(err.message || 'State validation expired or failed')}`);
+            return reply.redirect(`${config.APP_URL}/login?github=error&error_type=session_error&message=${encodeURIComponent(err.message || 'State validation expired or failed')}`);
         }
 
         // Validate code presence
         if (!code) {
             fastify.log.warn({ userId }, 'GitHub OAuth callback code parameter is missing');
-            return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=bad_verification_code&message=Verification+code+is+missing`);
+            const target = purpose === 'github_auth' ? 'login' : 'settings';
+            return reply.redirect(`${config.APP_URL}/${target}?github=error&error_type=bad_verification_code&message=Verification+code+is+missing`);
         }
 
         let accessToken = '';
@@ -93,7 +136,23 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             } else if (errMsg.includes('redirect_uri_mismatch') || errMsg.includes('callback_mismatch')) {
                 errorType = 'callback_mismatch';
             }
-            return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=${errorType}&message=${encodeURIComponent(errMsg)}`);
+            const target = purpose === 'github_auth' ? 'login' : 'settings';
+            return reply.redirect(`${config.APP_URL}/${target}?github=error&error_type=${errorType}&message=${encodeURIComponent(errMsg)}`);
+        }
+
+        if (purpose === 'github_auth') {
+            try {
+                const session = await GitHubService.authenticateOAuthUser(accessToken, request.headers['user-agent'], request.ip);
+                const params = new URLSearchParams({
+                    accessToken: session.accessToken,
+                    refreshToken: session.refreshToken,
+                });
+                fastify.log.info({ userId: session.user.id }, 'GitHub OAuth login completed successfully');
+                return reply.redirect(`${config.APP_URL}/github/callback?${params.toString()}`);
+            } catch (err: any) {
+                fastify.log.error({ err }, 'GitHub OAuth login failed');
+                return reply.redirect(`${config.APP_URL}/login?github=error&error_type=${encodeURIComponent(err.errorCode || 'github_auth_failed')}&message=${encodeURIComponent(err.message || 'GitHub login failed')}`);
+            }
         }
 
         let account;

@@ -1,8 +1,12 @@
 export type User = {
     id: string;
-    email: string;
+    email?: string | null;
     name?: string | null;
     avatarUrl?: string | null;
+    githubId?: string | null;
+    githubUsername?: string | null;
+    githubAvatar?: string | null;
+    provider?: 'email' | 'github' | string;
     isVerified?: boolean;
     role?: 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'USER' | string;
     status?: 'ACTIVE' | 'SUSPENDED' | string;

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, CheckCircle2, Loader2, MailCheck, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Github, Loader2, MailCheck, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -16,6 +16,7 @@ export default function RegisterPage() {
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
+    const [githubLoading, setGithubLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [verified, setVerified] = useState(false);
     const [devOtp, setDevOtp] = useState<string | null>(null);
@@ -45,6 +46,11 @@ export default function RegisterPage() {
         } finally {
             setLoading(false);
         }
+    }
+
+    function signUpWithGitHub() {
+        setGithubLoading(true);
+        window.location.href = `${api.baseUrl}/auth/github`;
     }
 
     async function submitOtp(event: FormEvent) {
@@ -119,6 +125,26 @@ export default function RegisterPage() {
                                 <button disabled={loading || auth.isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-white font-black text-slate-950 transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60">
                                     {loading ? <Loader2 className="animate-spin" size={18} /> : <>Create account <ArrowRight size={18} /></>}
                                 </button>
+                                <div className="flex items-center gap-3">
+                                    <div className="h-px flex-1 bg-white/10" />
+                                    <span className="text-xs font-black uppercase text-slate-500">or</span>
+                                    <div className="h-px flex-1 bg-white/10" />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={signUpWithGitHub}
+                                    disabled={githubLoading || loading || auth.isLoading}
+                                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.07] px-5 text-sm font-black text-white transition-colors hover:bg-white/[0.11] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {githubLoading ? <Loader2 className="animate-spin" size={18} /> : <Github size={18} />}
+                                    Sign up with GitHub
+                                </button>
+                                <p className="text-xs leading-5 text-slate-500">
+                                    By continuing with GitHub, you agree to the{' '}
+                                    <Link href="/privacy-policy" className="font-bold text-cyan-300 hover:text-cyan-200">Privacy Policy</Link>
+                                    {' '}and{' '}
+                                    <Link href="/terms" className="font-bold text-cyan-300 hover:text-cyan-200">Terms of Service</Link>.
+                                </p>
                             </form>
                         ) : (
                             <form onSubmit={submitOtp} className="space-y-5">

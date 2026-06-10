@@ -16,6 +16,29 @@ const mailService = new MailService({
 });
 
 export class AuthService {
+    static async issueSession(user: any, authProvider: 'local' | 'github', userAgent?: string, ipAddress?: string) {
+        const accessToken = tokenService.generateAccessToken({
+            userId: user.id,
+            role: user.role || 'USER',
+            authProvider,
+            tokenType: 'user',
+        });
+        const refreshToken = crypto.randomBytes(40).toString('hex');
+        const hashedRefreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+        await prisma.session.create({
+            data: {
+                userId: user.id,
+                refreshToken: hashedRefreshToken,
+                userAgent,
+                ipAddress,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            },
+        });
+
+        return { user, accessToken, refreshToken };
+    }
+
     static async register(email: string, password: string, name?: string) {
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
@@ -102,21 +125,7 @@ export class AuthService {
         const isValid = await PasswordService.verify(user.passwordHash, password);
         if (!isValid) throw new Error('Invalid credentials');
 
-        const accessToken = tokenService.generateAccessToken({ userId: user.id, tokenType: 'user' });
-        const refreshToken = crypto.randomBytes(40).toString('hex');
-        const hashedRefreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
-
-        await prisma.session.create({
-            data: {
-                userId: user.id,
-                refreshToken: hashedRefreshToken,
-                userAgent,
-                ipAddress,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-            },
-        });
-
-        return { user, accessToken, refreshToken };
+        return this.issueSession(user, 'local', userAgent, ipAddress);
     }
 
     static async refresh(refreshToken: string) {
@@ -131,7 +140,12 @@ export class AuthService {
             throw new Error('Invalid or expired refresh token');
         }
 
-        const accessToken = tokenService.generateAccessToken({ userId: session.userId, tokenType: 'user' });
+        const accessToken = tokenService.generateAccessToken({
+            userId: session.userId,
+            role: session.user.role || 'USER',
+            authProvider: session.user.provider === 'github' ? 'github' : 'local',
+            tokenType: 'user',
+        });
         return { accessToken };
     }
 

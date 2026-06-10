@@ -2,6 +2,7 @@ import prisma from '@deployforge/database';
 import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import crypto from 'crypto';
+import { AuthService } from './auth.service';
 
 const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
 
@@ -19,8 +20,8 @@ export class GitHubService {
             throw new Error('Invalid GitHub OAuth config: GITHUB_CLIENT_ID looks like a Client Secret. Use the OAuth App Client ID from GitHub Developer Settings.');
         }
 
-        if (!redirectUri.endsWith('/github/callback') && !redirectUri.endsWith('/auth/github/callback')) {
-            throw new Error('Invalid GitHub OAuth config: GITHUB_REDIRECT_URI must point to /github/callback or /auth/github/callback.');
+        if (!redirectUri.endsWith('/github/callback')) {
+            throw new Error('Invalid GitHub OAuth config: GITHUB_REDIRECT_URI must point to /github/callback.');
         }
     }
 
@@ -33,6 +34,11 @@ export class GitHubService {
             state,
         });
         return `https://github.com/login/oauth/authorize?${params.toString()}`;
+    }
+
+    static packEncryptedToken(accessToken: string) {
+        const encryptedToken = encryptionService.encrypt(accessToken);
+        return `${encryptedToken.iv}:${encryptedToken.tag}:${encryptedToken.content}`;
     }
 
     static async exchangeCodeForToken(code: string) {
@@ -105,6 +111,110 @@ export class GitHubService {
         }
     }
 
+    static async getPrimaryEmail(accessToken: string) {
+        const response = await fetch('https://api.github.com/user/emails', {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+            },
+        });
+
+        const data = await response.json() as any;
+        if (!response.ok) {
+            throw new Error(data?.message || 'Unable to fetch GitHub email addresses');
+        }
+
+        if (!Array.isArray(data)) return null;
+        const primary = data.find((email) => email.primary && email.verified) || data.find((email) => email.verified);
+        return primary?.email || null;
+    }
+
+    static async authenticateOAuthUser(accessToken: string, userAgent?: string, ipAddress?: string) {
+        const profile = await this.getProfile(accessToken);
+        const email = profile.email || await this.getPrimaryEmail(accessToken);
+
+        if (!email) {
+            throw Object.assign(new Error('GitHub account does not expose a verified email address.'), {
+                errorCode: 'MISSING_GITHUB_EMAIL',
+            });
+        }
+
+        const githubId = profile.id.toString();
+        const tokenString = this.packEncryptedToken(accessToken);
+        const existingAccount = await prisma.gitHubAccount.findUnique({
+            where: { githubId },
+            include: { user: true },
+        });
+
+        let user = existingAccount?.user || await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { githubId },
+                    { email },
+                ],
+            },
+        });
+
+        if (user) {
+            user = await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    email: user.email || email,
+                    githubId,
+                    githubUsername: profile.login,
+                    githubAvatar: profile.avatar_url,
+                    githubAccessToken: tokenString,
+                    avatarUrl: profile.avatar_url || user.avatarUrl,
+                    name: user.name || profile.name || profile.login,
+                    provider: user.passwordHash ? user.provider : 'github',
+                    isVerified: true,
+                },
+            });
+        } else {
+            user = await prisma.user.create({
+                data: {
+                    email,
+                    githubId,
+                    githubUsername: profile.login,
+                    githubAvatar: profile.avatar_url,
+                    githubAccessToken: tokenString,
+                    avatarUrl: profile.avatar_url,
+                    name: profile.name || profile.login,
+                    provider: 'github',
+                    isVerified: true,
+                },
+            });
+        }
+
+        await prisma.gitHubAccount.upsert({
+            where: { userId: user.id },
+            update: {
+                githubId,
+                accessToken: tokenString,
+                username: profile.login,
+                email,
+                avatarUrl: profile.avatar_url,
+            },
+            create: {
+                userId: user.id,
+                githubId,
+                accessToken: tokenString,
+                username: profile.login,
+                email,
+                avatarUrl: profile.avatar_url,
+            },
+        });
+
+        console.info('[github:auth] GitHub OAuth user authenticated', {
+            userId: user.id,
+            githubId,
+            email,
+        });
+
+        return AuthService.issueSession(user, 'github', userAgent, ipAddress);
+    }
+
     static async syncUser(userId: string, accessToken: string) {
         console.info('[github:sync-user] syncing GitHub account', { userId });
         
@@ -121,8 +231,7 @@ export class GitHubService {
             throw new Error(`GitHub API Error: ${fetchErr.message}`);
         }
 
-        const encryptedToken = encryptionService.encrypt(accessToken);
-        const tokenString = `${encryptedToken.iv}:${encryptedToken.tag}:${encryptedToken.content}`;
+        const tokenString = this.packEncryptedToken(accessToken);
 
         let githubAccount;
         try {
@@ -155,6 +264,9 @@ export class GitHubService {
                 where: { id: userId },
                 data: {
                     githubId: profile.id.toString(),
+                    githubUsername: profile.login,
+                    githubAvatar: profile.avatar_url,
+                    githubAccessToken: tokenString,
                     avatarUrl: profile.avatar_url || undefined,
                 },
             });
