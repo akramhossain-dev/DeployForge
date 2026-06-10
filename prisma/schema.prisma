@@ -178,10 +178,11 @@ model VPS {
   ipAddress            String
   port                 Int          @default(22)
   username             String       @default("root")
-  authType             String       @default("ssh_key") // "ssh_key" | "password"
+  authType             String       @default("key") // "key" | "password"
   encryptedPrivateKey  String?      // Encrypted AES-256-GCM
   encryptedPassword    String?      // Encrypted AES-256-GCM
-  status               String       @default("INACTIVE") // "ACTIVE" | "INACTIVE" | "ERROR"
+  status               String       @default("inactive") // "active" | "inactive" | "failed"
+  lastCheckedAt        DateTime?
   deployments          Deployment[]
   healthRecords        VPSHealth[]
   terminalSessions     TerminalSession[]

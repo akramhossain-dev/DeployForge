@@ -94,7 +94,7 @@ export class DeploymentService {
             });
             await LoggingService.log(deploymentId, 'Connecting to VPS for deployment', 'system');
 
-            const auth = vps.authType === 'ssh_key'
+            const auth = vps.authType === 'key' || vps.authType === 'ssh_key'
                 ? { privateKey: this.decrypt(vps.encryptedPrivateKey!) }
                 : { password: this.decrypt(vps.encryptedPassword!) };
 
@@ -188,7 +188,7 @@ export class DeploymentService {
 
         const ssh = new SSHService();
         try {
-            const auth = deployment.vps.authType === 'ssh_key'
+            const auth = deployment.vps.authType === 'key' || deployment.vps.authType === 'ssh_key'
                 ? { privateKey: this.decrypt(deployment.vps.encryptedPrivateKey!) }
                 : { password: this.decrypt(deployment.vps.encryptedPassword!) };
             await ssh.connect({
@@ -215,7 +215,7 @@ export class DeploymentService {
 
         const ssh = new SSHService();
         try {
-            const auth = deployment.vps.authType === 'ssh_key'
+            const auth = deployment.vps.authType === 'key' || deployment.vps.authType === 'ssh_key'
                 ? { privateKey: this.decrypt(deployment.vps.encryptedPrivateKey!) }
                 : { password: this.decrypt(deployment.vps.encryptedPassword!) };
             await ssh.connect({

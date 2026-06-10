@@ -19,7 +19,7 @@ export class SandboxService {
 
         try {
             const vps = deployment.vps;
-            const auth = vps.authType === 'ssh_key'
+            const auth = vps.authType === 'key' || vps.authType === 'ssh_key'
                 ? { privateKey: this.decrypt(vps.encryptedPrivateKey!) }
                 : { password: this.decrypt(vps.encryptedPassword!) };
 

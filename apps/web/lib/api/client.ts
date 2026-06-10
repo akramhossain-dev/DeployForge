@@ -5,17 +5,20 @@ export type ApiErrorShape = {
     success: false;
     message: string;
     context?: string;
+    errorCode?: string;
 };
 
 export class ApiError extends Error {
     status: number;
     context?: string;
+    errorCode?: string;
 
-    constructor(message: string, status: number, context?: string) {
+    constructor(message: string, status: number, context?: string, errorCode?: string) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
         this.context = context;
+        this.errorCode = errorCode;
     }
 }
 
@@ -72,6 +75,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
             success: false,
             message: payload?.message || 'Something went wrong. Please try again.',
             context: payload?.context,
+            errorCode: payload?.errorCode,
         };
 
         if (typeof window !== 'undefined') {
@@ -83,7 +87,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
             else useAuthStore.getState().logout();
         }
 
-        throw new ApiError(apiError.message, response.status, apiError.context);
+        throw new ApiError(apiError.message, response.status, apiError.context, apiError.errorCode);
     }
 
     if (typeof window !== 'undefined') {

@@ -46,11 +46,34 @@ export type Vps = {
     ipAddress: string;
     port: number;
     username: string;
-    authType: string;
-    status: 'ACTIVE' | 'INACTIVE' | 'ERROR' | string;
+    authType: 'password' | 'key' | string;
+    status: 'active' | 'inactive' | 'failed' | 'ACTIVE' | 'INACTIVE' | 'ERROR' | string;
+    lastCheckedAt?: string | null;
     healthRecords?: VpsHealth[];
     createdAt: string;
     updatedAt: string;
+};
+
+export type VpsConnectionPayload = {
+    name?: string;
+    ipAddress: string;
+    port: number;
+    username: string;
+    authType: 'password' | 'key';
+    password?: string;
+    privateKey?: string;
+};
+
+export type VpsConnectionResult = {
+    success: boolean;
+    message: string;
+    errorCode?: string;
+    readiness?: {
+        shell: boolean;
+        os?: string;
+        dockerInstalled?: boolean;
+        nginxInstalled?: boolean;
+    };
 };
 
 export type Project = {
@@ -104,6 +127,12 @@ export type AdminOverview = {
         successRate: number;
     };
     recentActivities: AdminActivity[];
+};
+
+export type PublicStats = {
+    totalUsers: number;
+    totalDeployments: number;
+    activeVps: number;
 };
 
 export type AdminActivity = {

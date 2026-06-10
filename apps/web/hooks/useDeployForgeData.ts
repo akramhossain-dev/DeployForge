@@ -1,7 +1,9 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import api from '@/lib/api/client';
+import { useAuthStore } from '@/lib/store/useAuthStore';
 import type {
     AdminDeployment,
     AdminGitHubAccount,
@@ -13,12 +15,16 @@ import type {
     Deployment,
     DeploymentLog,
     GitHubProfile,
+    PublicStats,
     Repository,
     Vps,
+    VpsConnectionPayload,
+    VpsConnectionResult,
 } from '@/lib/api/types';
 
 export const queryKeys = {
     me: ['auth', 'me'] as const,
+    publicStats: ['public', 'stats'] as const,
     githubProfile: ['github', 'profile'] as const,
     repositories: ['github', 'repositories'] as const,
     deployments: ['deployments'] as const,
@@ -51,6 +57,38 @@ export function useMe(enabled = true) {
         queryFn: () => api.get<{ user: any }>('/auth/me').then((res) => res.user),
         enabled,
         retry: false,
+    });
+}
+
+export function useAuthSession() {
+    const { hasHydrated, token, setUser, logout } = useAuthStore();
+    const me = useMe(hasHydrated && !!token);
+
+    useEffect(() => {
+        if (me.data) setUser(me.data);
+    }, [me.data, setUser]);
+
+    useEffect(() => {
+        if (!me.isError) return;
+        logout();
+    }, [logout, me.isError]);
+
+    return {
+        user: me.data ?? null,
+        isAuthenticated: Boolean(me.data),
+        isLoading: !hasHydrated || (Boolean(token) && me.isLoading),
+        isFetching: me.isFetching,
+        isError: me.isError,
+        refetch: me.refetch,
+    };
+}
+
+export function usePublicStats() {
+    return useQuery({
+        queryKey: queryKeys.publicStats,
+        queryFn: () => api.get<PublicStats>('/public/stats'),
+        retry: false,
+        refetchInterval: 60000,
     });
 }
 
@@ -97,10 +135,11 @@ export function useDisconnectGitHub() {
     });
 }
 
-export function useDeployments() {
+export function useDeployments(enabled = true) {
     return useQuery({
         queryKey: queryKeys.deployments,
         queryFn: () => api.get<Deployment[]>('/deploy/list'),
+        enabled,
         refetchInterval: (query) => {
             const deployments = query.state.data || [];
             return deployments.some((deployment) => ['PENDING', 'BUILDING'].includes(deployment.status)) ? 4000 : 20000;
@@ -117,11 +156,45 @@ export function useDeploymentLogs(deploymentId?: string) {
     });
 }
 
-export function useVpsList() {
+export function useVpsList(enabled = true) {
     return useQuery({
         queryKey: queryKeys.vps,
         queryFn: () => api.get<Vps[]>('/vps/list'),
+        enabled,
         refetchInterval: 30000,
+    });
+}
+
+export function useTestVpsConnection() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (payload: VpsConnectionPayload | { id: string }) => api.post<VpsConnectionResult>('/vps/test-connection', payload),
+        onSuccess: (_data, payload) => {
+            if ('id' in payload) queryClient.invalidateQueries({ queryKey: queryKeys.vps });
+        },
+    });
+}
+
+export function useAddVps() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (payload: VpsConnectionPayload & { name: string }) => api.post<Vps>('/vps/add', payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.vps });
+        },
+    });
+}
+
+export function useDeleteVps() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => api.delete<{ message: string }>(`/vps/${id}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.vps });
+        },
     });
 }
 

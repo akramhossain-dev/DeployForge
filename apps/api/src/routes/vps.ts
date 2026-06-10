@@ -1,70 +1,176 @@
-import { FastifyInstance } from 'fastify';
-import { VPSService } from '../services/vps.service';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import prisma from '@deployforge/database';
+import { VPSConnectionFailure, VPSService } from '../services/vps.service';
 
-const addVPSSchema = z.object({
-    name: z.string().min(1),
-    ipAddress: z.string().ip(),
-    port: z.number().default(22),
-    username: z.string().default('root'),
-    authType: z.enum(['ssh_key', 'password']),
+const hostnamePattern = /^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$/;
+
+const connectionBaseSchema = z.object({
+    ipAddress: z.string().trim().min(1).max(253).refine((value) => z.string().ip().safeParse(value).success || hostnamePattern.test(value), {
+        message: 'Enter a valid IP address or hostname',
+    }),
+    port: z.coerce.number().int().min(1).max(65535).default(22),
+    username: z.string().trim().min(1).max(64).default('root'),
+    authType: z.enum(['password', 'key', 'ssh_key']).transform((value) => (value === 'ssh_key' ? 'key' : value)),
     password: z.string().optional(),
     privateKey: z.string().optional(),
 });
 
+const connectionSchema = connectionBaseSchema.superRefine((value, ctx) => {
+    if (value.authType === 'password' && !value.password) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: 'Password is required' });
+    }
+    if (value.authType === 'key' && !value.privateKey) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['privateKey'], message: 'Private key is required' });
+    }
+});
+
+const addVPSSchema = connectionBaseSchema.extend({
+    name: z.string().trim().min(1).max(80),
+}).superRefine((value, ctx) => {
+    if (value.authType === 'password' && !value.password) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: 'Password is required' });
+    }
+    if (value.authType === 'key' && !value.privateKey) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['privateKey'], message: 'Private key is required' });
+    }
+});
+
+const updateVPSSchema = z.object({
+    name: z.string().trim().min(1).max(80).optional(),
+    ipAddress: z.string().trim().min(1).max(253).refine((value) => z.string().ip().safeParse(value).success || hostnamePattern.test(value), {
+        message: 'Enter a valid IP address or hostname',
+    }).optional(),
+    port: z.coerce.number().int().min(1).max(65535).optional(),
+    username: z.string().trim().min(1).max(64).optional(),
+    authType: z.enum(['password', 'key', 'ssh_key']).transform((value) => (value === 'ssh_key' ? 'key' : value)).optional(),
+    password: z.string().optional(),
+    privateKey: z.string().optional(),
+}).superRefine((value, ctx) => {
+    if (value.authType === 'password' && value.privateKey) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['privateKey'], message: 'Private key cannot be used with password auth' });
+    }
+    if (value.authType === 'key' && value.password) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: 'Password cannot be used with private key auth' });
+    }
+});
+
+const testConnectionSchema = z.union([
+    z.object({ id: z.string().uuid() }),
+    connectionSchema,
+]);
+
+const sshAttemptRateLimit = {
+    max: 8,
+    timeWindow: '10 minutes',
+};
+
 export default async function vpsRoutes(fastify: FastifyInstance) {
-    // 1. Add VPS
-    fastify.post('/add', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const data = addVPSSchema.parse(request.body);
-        const vps = await VPSService.validateAndAdd(request.user.id, data);
-        return { success: true, data: vps };
+    fastify.post('/add', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: sshAttemptRateLimit },
+    }, async (request, reply) => {
+        try {
+            const data = addVPSSchema.parse(request.body);
+            const vps = await VPSService.validateAndAdd(request.user!.id, data);
+            return { success: true, data: vps };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
     });
 
-    // 2. List VPS
-    fastify.get('/list', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const vpsList = await prisma.vPS.findMany({
-            where: { userId: request.user.id },
-            include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } },
-            orderBy: { createdAt: 'desc' },
-        });
+    fastify.post('/test-connection', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: sshAttemptRateLimit },
+    }, async (request, reply) => {
+        try {
+            const data = testConnectionSchema.parse(request.body);
+            const result = 'id' in data
+                ? await VPSService.testStoredConnection(request.user!.id, data.id)
+                : await VPSService.testConnection(data);
+
+            return result.success ? { success: true, data: result } : reply.status(400).send(result);
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
+    });
+
+    fastify.get('/list', { preHandler: [(fastify as any).authGuard] }, async (request) => {
+        const vpsList = await VPSService.list(request.user!.id);
         return { success: true, data: vpsList };
     });
 
-    // 3. Get Single VPS
     fastify.get('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
-        const vps = await prisma.vPS.findFirst({
-            where: { id, userId: request.user.id },
-            include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } },
-        });
-
-        if (!vps) return reply.status(404).send({ message: 'VPS not found' });
+        const vps = await VPSService.get(request.user!.id, id);
+        if (!vps) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
         return { success: true, data: vps };
     });
 
-    // 4. Delete VPS
-    fastify.delete('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { id } = request.params as { id: string };
-        await prisma.vPS.deleteMany({ where: { id, userId: request.user.id } });
-        return { success: true, message: 'VPS deleted' };
+    fastify.patch('/:id', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: sshAttemptRateLimit },
+    }, async (request, reply) => {
+        try {
+            const { id } = request.params as { id: string };
+            const data = updateVPSSchema.parse(request.body);
+            const vps = await VPSService.update(request.user!.id, id, data);
+            if (!vps) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
+            return { success: true, data: vps };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
     });
 
-    // 5. Get Health History
-    fastify.get('/:id/health', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.delete('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+        try {
+            const { id } = request.params as { id: string };
+            const deleted = await VPSService.delete(request.user!.id, id);
+            if (!deleted) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
+            return { success: true, message: 'VPS deleted' };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
+    });
+
+    fastify.get('/:id/health', { preHandler: [(fastify as any).authGuard] }, async (request) => {
         const { id } = request.params as { id: string };
         const health = await prisma.vPSHealth.findMany({
-            where: { vpsId: id, vps: { userId: request.user.id } },
+            where: { vpsId: id, vps: { userId: request.user!.id } },
             take: 20,
             orderBy: { checkedAt: 'desc' },
         });
         return { success: true, data: health };
     });
 
-    // 6. Manual Health Check
-    fastify.post('/:id/health-check', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { id } = request.params as { id: string };
-        const health = await VPSService.performHealthCheck(id);
-        return { success: true, data: health };
+    fastify.post('/:id/health-check', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: sshAttemptRateLimit },
+    }, async (request, reply) => {
+        try {
+            const { id } = request.params as { id: string };
+            const vps = await VPSService.get(request.user!.id, id);
+            if (!vps) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
+            const health = await VPSService.performHealthCheck(id);
+            return { success: true, data: health };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
     });
+}
+
+function sendVpsError(reply: FastifyReply, error: unknown) {
+    if (error instanceof z.ZodError) {
+        return reply.status(400).send({
+            success: false,
+            message: error.errors[0]?.message || 'Invalid VPS request',
+            errorCode: 'VALIDATION_ERROR',
+        });
+    }
+    if (error instanceof VPSConnectionFailure) {
+        const status = error.errorCode === 'VPS_NOT_FOUND' ? 404 : 400;
+        return reply.status(status).send({ success: false, message: error.message, errorCode: error.errorCode });
+    }
+    const message = error instanceof Error ? error.message : 'VPS request failed';
+    return reply.status(500).send({ success: false, message, errorCode: 'VPS_ERROR' });
 }

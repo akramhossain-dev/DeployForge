@@ -57,7 +57,7 @@ export default function DashboardPage() {
                 ) : (
                     <>
                         <StatCard title="Total Deployments" value={deploymentList.length} icon={<Rocket size={22} />} detail={`${running} running`} />
-                        <StatCard title="Active Servers" value={vpsList.filter((item) => item.status === 'ACTIVE').length} icon={<Server size={22} />} detail={`${vpsList.length} total`} />
+                        <StatCard title="Active Servers" value={vpsList.filter((item) => item.status.toLowerCase() === 'active').length} icon={<Server size={22} />} detail={`${vpsList.length} total`} />
                         <StatCard title="Build Success" value={`${successRate}%`} icon={<Activity size={22} />} detail={failed ? `${failed} failed` : 'Stable'} />
                         <StatCard title="GitHub Repos" value={repos.data?.length || 0} icon={<Github size={22} />} detail={github.data ? 'Connected' : 'Disconnected'} />
                     </>

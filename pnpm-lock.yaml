@@ -29,6 +29,9 @@ importers:
       '@deployforge/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@deployforge/vps':
+        specifier: workspace:*
+        version: link:../../packages/vps
       '@fastify/cors':
         specifier: ^9.0.1
         version: 9.0.1
@@ -50,6 +53,9 @@ importers:
       fastify:
         specifier: ^4.26.1
         version: 4.29.1
+      fastify-plugin:
+        specifier: ^4.5.1
+        version: 4.5.1
       ioredis:
         specifier: ^5.3.2
         version: 5.11.1
