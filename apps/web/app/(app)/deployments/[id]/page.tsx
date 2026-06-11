@@ -2,9 +2,9 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Copy, Pause, Play, RefreshCw, RotateCcw, Server, TerminalSquare, Trash2 } from 'lucide-react';
+import { Copy, Pause, Play, RefreshCw, RotateCcw, Server, Square, TerminalSquare, Trash2 } from 'lucide-react';
 import { Button, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
-import { useDeleteDeployment, useDeployment, useDeploymentLogs, useDeploymentLogStream, useDeploymentStatusStream, useRestartDeployment, useRollbackDeployment } from '@/hooks/useDeployForgeData';
+import { useDeleteDeployment, useDeployment, useDeploymentLogs, useDeploymentLogStream, useDeploymentStatusStream, usePauseDeployment, useRestartDeployment, useResumeDeployment, useRollbackDeployment, useStartDeployment, useStopDeployment } from '@/hooks/useDeployForgeData';
 import type { DeploymentLog } from '@/lib/api/types';
 
 const timeline = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'RUNNING'];
@@ -14,10 +14,14 @@ export default function DeploymentDetailsPage() {
     const router = useRouter();
     const deployment = useDeployment(id);
     const initialLogs = useDeploymentLogs(id);
-    const [paused, setPaused] = useState(false);
+    const [logsPaused, setLogsPaused] = useState(false);
     const [autoScroll, setAutoScroll] = useState(true);
-    const stream = useDeploymentLogStream(id, !paused);
+    const stream = useDeploymentLogStream(id, !logsPaused);
     const liveStatus = useDeploymentStatusStream(id);
+    const start = useStartDeployment();
+    const stop = useStopDeployment();
+    const pauseDeployment = usePauseDeployment();
+    const resume = useResumeDeployment();
     const restart = useRestartDeployment();
     const rollback = useRollbackDeployment();
     const deleteDeployment = useDeleteDeployment();
@@ -31,6 +35,10 @@ export default function DeploymentDetailsPage() {
     const canRestart = current?.status === 'RUNNING' && Boolean(current.containerId);
     const canRollback = sourceType === 'github';
     const activeUrl = current?.url || (current?.vps?.ipAddress && current?.port ? `http://${current.vps.ipAddress}:${current.port}` : null);
+    const isRunning = current?.status === 'RUNNING';
+    const isPaused = current?.status === 'PAUSED';
+    const isStopped = current?.status === 'STOPPED';
+    const isDeleted = current?.status === 'DELETED';
 
     async function confirmDelete() {
         await deleteDeployment.mutateAsync(id);
@@ -47,31 +55,43 @@ export default function DeploymentDetailsPage() {
                 title={current?.name || current?.project?.name || 'Deployment'}
                 description={current?.project?.repositoryUrl || 'Deployment details and live execution output.'}
                 action={
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            variant="secondary"
-                            onClick={() => restart.mutate(id)}
-                            loading={restart.isPending}
-                            disabled={!canRestart}
-                            title={canRestart ? 'Restart deployment container' : 'Deployment not running yet'}
-                        >
-                            <RefreshCw size={16} /> Restart
-                        </Button>
-                        <Button
-                            variant="danger"
-                            onClick={() => rollback.mutate({ id })}
-                            loading={rollback.isPending}
-                            disabled={!canRollback}
-                            title={canRollback ? 'Rollback GitHub deployment' : 'Rollback is not supported for upload deployments'}
-                        >
-                            <RotateCcw size={16} /> Rollback
-                        </Button>
-                        <Button variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 size={16} /> Delete</Button>
-                    </div>
+                    !isDeleted ? (
+                        <div className="flex flex-wrap gap-2">
+                            {isStopped ? <Button variant="secondary" onClick={() => start.mutate(id)} loading={start.isPending}><Play size={16} /> Start</Button> : null}
+                            {isPaused ? <Button variant="secondary" onClick={() => resume.mutate(id)} loading={resume.isPending}><Play size={16} /> Resume</Button> : null}
+                            {isRunning ? <Button variant="secondary" onClick={() => stop.mutate(id)} loading={stop.isPending}><Square size={16} /> Stop</Button> : null}
+                            {isRunning ? <Button variant="secondary" onClick={() => pauseDeployment.mutate(id)} loading={pauseDeployment.isPending}><Pause size={16} /> Pause</Button> : null}
+                            {isRunning ? (
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => restart.mutate(id)}
+                                    loading={restart.isPending}
+                                    disabled={!canRestart}
+                                    title={canRestart ? 'Restart deployment container' : 'Deployment not running yet'}
+                                >
+                                    <RefreshCw size={16} /> Restart
+                                </Button>
+                            ) : null}
+                            <Button
+                                variant="danger"
+                                onClick={() => rollback.mutate({ id })}
+                                loading={rollback.isPending}
+                                disabled={!canRollback || !isRunning}
+                                title={canRollback ? 'Rollback GitHub deployment' : 'Rollback is not supported for upload deployments'}
+                            >
+                                <RotateCcw size={16} /> Rollback
+                            </Button>
+                            <Button variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 size={16} /> Delete</Button>
+                        </div>
+                    ) : null
                 }
             />
 
             {deployment.isError ? <ErrorState message={(deployment.error as Error)?.message} onRetry={() => deployment.refetch()} /> : null}
+            {start.isError ? <ErrorState title="Start failed" message={(start.error as Error)?.message} /> : null}
+            {stop.isError ? <ErrorState title="Stop failed" message={(stop.error as Error)?.message} /> : null}
+            {pauseDeployment.isError ? <ErrorState title="Pause failed" message={(pauseDeployment.error as Error)?.message} /> : null}
+            {resume.isError ? <ErrorState title="Resume failed" message={(resume.error as Error)?.message} /> : null}
             {restart.isError ? <ErrorState title="Restart failed" message={(restart.error as Error)?.message} /> : null}
             {rollback.isError ? <ErrorState title="Rollback failed" message={(rollback.error as Error)?.message} /> : null}
             {deleteDeployment.isError ? <ErrorState title="Delete failed" message={(deleteDeployment.error as Error)?.message} /> : null}
@@ -118,7 +138,7 @@ export default function DeploymentDetailsPage() {
                                     <span className={stream.isConnected ? 'text-xs font-bold text-emerald-300' : 'text-xs font-bold text-slate-500'}>{stream.isConnected ? 'streaming' : 'polling'}</span>
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="secondary" onClick={() => setPaused((value) => !value)}>{paused ? <Play size={16} /> : <Pause size={16} />}{paused ? 'Resume' : 'Pause'}</Button>
+                                    <Button variant="secondary" onClick={() => setLogsPaused((value) => !value)}>{logsPaused ? <Play size={16} /> : <Pause size={16} />}{logsPaused ? 'Resume logs' : 'Pause logs'}</Button>
                                     <Button variant="secondary" onClick={() => setAutoScroll((value) => !value)}>{autoScroll ? 'Auto-scroll on' : 'Auto-scroll off'}</Button>
                                 </div>
                             </div>

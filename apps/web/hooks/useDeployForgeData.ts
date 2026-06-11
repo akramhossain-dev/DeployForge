@@ -146,7 +146,7 @@ export function useDeployments(enabled = true) {
         enabled,
         refetchInterval: (query) => {
             const deployments = query.state.data || [];
-            return deployments.some((deployment) => ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING'].includes(deployment.status)) ? 4000 : 20000;
+            return deployments.some((deployment) => ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'DELETING'].includes(deployment.status)) ? 4000 : 20000;
         },
     });
 }
@@ -158,7 +158,7 @@ export function useDeployment(deploymentId?: string) {
         enabled: !!deploymentId,
         refetchInterval: (query) => {
             const status = query.state.data?.status;
-            return status && ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING'].includes(status) ? 3000 : 15000;
+            return status && ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'DELETING'].includes(status) ? 3000 : 15000;
         },
     });
 }
@@ -234,6 +234,34 @@ export function useRestartDeployment() {
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
         },
     });
+}
+
+function useLifecycleMutation(action: 'start' | 'stop' | 'pause' | 'resume') {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => api.post<{ message: string }>(`/deployments/${id}/${action}`),
+        onSuccess: (_data, id) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentLogs(id) });
+        },
+    });
+}
+
+export function useStartDeployment() {
+    return useLifecycleMutation('start');
+}
+
+export function useStopDeployment() {
+    return useLifecycleMutation('stop');
+}
+
+export function usePauseDeployment() {
+    return useLifecycleMutation('pause');
+}
+
+export function useResumeDeployment() {
+    return useLifecycleMutation('resume');
 }
 
 export function useRollbackDeployment() {

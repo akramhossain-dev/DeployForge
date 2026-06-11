@@ -11,9 +11,19 @@ const attachDomainSchema = z.object({
 export default async function domainRoutes(fastify: FastifyInstance) {
     // 1. Attach Domain
     fastify.post('/attach', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { deploymentId, domainName } = attachDomainSchema.parse(request.body);
-        const domain = await DomainService.attachDomain(request.user.id, deploymentId, domainName);
-        return { success: true, data: domain };
+        try {
+            const { deploymentId, domainName } = attachDomainSchema.parse(request.body);
+            const domain = await DomainService.attachDomain(request.user.id, deploymentId, domainName);
+            return { success: true, data: domain };
+        } catch (err: any) {
+            const status = err.errorCode === 'DEPLOYMENT_NOT_FOUND' ? 404 : err.errorCode === 'DOMAIN_ALREADY_EXISTS' ? 409 : 400;
+            return reply.status(status).send({
+                success: false,
+                stage: err.stage || 'domain_bind',
+                message: err.message || 'Domain binding failed',
+                errorCode: err.errorCode || 'DOMAIN_BIND_FAILED',
+            });
+        }
     });
 
     // 2. Issue SSL

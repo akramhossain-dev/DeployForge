@@ -42,7 +42,7 @@ export type Repository = {
     createdAt: string;
 };
 
-export type DeploymentState = 'idle' | 'pending' | 'cloning' | 'uploading' | 'building' | 'deploying' | 'running' | 'failed' | 'rolled_back' | 'stopped' | string;
+export type DeploymentState = 'idle' | 'pending' | 'cloning' | 'uploading' | 'building' | 'deploying' | 'running' | 'paused' | 'failed' | 'rolled_back' | 'stopped' | 'deleting' | 'deleted' | string;
 
 export type VpsHealth = {
     id?: string;
@@ -114,7 +114,7 @@ export type Project = {
 export type Deployment = {
     id: string;
     name?: string | null;
-    status: 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'BROKEN' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED' | string;
+    status: 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'PAUSED' | 'FAILED' | 'ROLLED_BACK' | 'STOPPED' | 'DELETING' | 'DELETED' | string;
     framework?: string | null;
     port?: number | null;
     sourceType?: 'github' | 'upload' | string;

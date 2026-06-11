@@ -10,7 +10,7 @@ import path from 'node:path';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
-type DeploymentStatus = 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED';
+type DeploymentStatus = 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'PAUSED' | 'DELETING' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED';
 type ProjectKind = 'DOCKER' | 'NEXTJS' | 'VITE_REACT' | 'NODE_API' | 'NODEJS' | 'STATIC';
 type SourceType = 'github' | 'upload';
 
@@ -83,7 +83,7 @@ export class DeploymentService {
         const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
         const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
         if (!project || !vps) throw new DeploymentError('pending', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
-        await this.validateDomainSelection(userId, metadata.domainName);
+        const domainName = await this.validateDomainSelection(userId, metadata.domainName);
         const encryptedEnv = this.encryptEnv(metadata.env);
 
         const githubAccount = await prisma.gitHubAccount.findUnique({ where: { userId } });
@@ -106,6 +106,8 @@ export class DeploymentService {
                 commitHash: metadata.commitHash,
                 commitMessage: metadata.commitMessage,
                 env: encryptedEnv,
+                domain: domainName || null,
+                hostType: domainName ? 'domain' : 'ip',
             },
         });
 
@@ -124,7 +126,7 @@ export class DeploymentService {
                 accessToken,
                 commitHash: metadata.commitHash,
                 commitMessage: metadata.commitMessage,
-                domainName: metadata.domainName,
+                domainName,
                 env: metadata.env,
             } satisfies GitHubDeploymentSource,
         }, {
@@ -138,7 +140,7 @@ export class DeploymentService {
         const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
         const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
         if (!project || !vps) throw new DeploymentError('uploading', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
-        await this.validateDomainSelection(userId, upload.domainName);
+        const domainName = await this.validateDomainSelection(userId, upload.domainName);
         const encryptedEnv = this.encryptEnv(upload.env);
 
         this.validateUploadFile(upload.originalFileName);
@@ -157,6 +159,8 @@ export class DeploymentService {
                 uploadPath: upload.originalFileName,
                 commitHash: null,
                 env: encryptedEnv,
+                domain: domainName || null,
+                hostType: domainName ? 'domain' : 'ip',
             },
         });
 
@@ -175,7 +179,7 @@ export class DeploymentService {
                 vpsId,
                 uploadPath: uploadWorkspace.archivePath,
                 originalFileName: uploadWorkspace.archiveName,
-                domainName: upload.domainName,
+                domainName,
                 env: upload.env,
             } satisfies UploadedFileDeploymentSource,
         }, {
@@ -292,7 +296,7 @@ export class DeploymentService {
                     await prisma.domain.updateMany({ where: { deploymentId }, data: { status: 'DELETED' } });
                 }
             }
-            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null } });
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null, domain: null, hostType: 'ip' } });
             await LoggingService.log(deploymentId, `Deployment failed during ${stage}: ${message}`, 'error', 'error');
             throw err;
         } finally {
@@ -331,6 +335,7 @@ export class DeploymentService {
             include: { vps: true, project: true },
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        this.assertLifecycleTransition(deployment.status, 'STOPPED');
         if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no running container', 'NO_RUNNING_CONTAINER');
 
         const ssh = new SSHService();
@@ -343,7 +348,36 @@ export class DeploymentService {
             });
             await this.stopContainerIfExists(ssh, deploymentId, deployment.containerId);
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'STOPPED' } });
-            await LoggingService.log(deploymentId, 'Deployment stopped', 'system');
+            await this.logLifecycle(deploymentId, userId, 'deployment_stopped', 'success');
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    static async pauseDeployment(userId: string, deploymentId: string) {
+        const deployment = await prisma.deployment.findFirst({
+            where: { id: deploymentId, userId },
+            include: { vps: true },
+        });
+        if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        this.assertLifecycleTransition(deployment.status, 'PAUSED');
+        if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no running container', 'NO_RUNNING_CONTAINER');
+
+        const ssh = new SSHService();
+        try {
+            await ssh.connect({
+                host: deployment.vps.ipAddress,
+                port: deployment.vps.port,
+                username: deployment.vps.username,
+                ...this.getVpsAuth(deployment.vps),
+            });
+            if (!(await this.containerExists(ssh, deployment.containerId))) {
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null } });
+                throw new DeploymentError('container_sync', 'Container reference is missing on the server.', 'CONTAINER_NOT_FOUND');
+            }
+            await this.run(ssh, deploymentId, 'system', `docker pause ${shellQuote(deployment.containerId)}`, 'deploying', 'CONTAINER_PAUSE_FAILED');
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'PAUSED' } });
+            await this.logLifecycle(deploymentId, userId, 'deployment_paused', 'success');
         } finally {
             ssh.disconnect();
         }
@@ -352,13 +386,16 @@ export class DeploymentService {
     static async deleteDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId, userId },
-            include: { vps: true, domains: true },
+            include: { vps: true, domains: true, history: true },
         });
         if (!deployment) throw new DeploymentError('delete', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
-        if (deployment.status === 'DELETED') throw new DeploymentError('delete', 'Deployment is already deleted', 'DEPLOYMENT_ALREADY_DELETED');
+        if (deployment.status === 'DELETED') return { success: true, deleted: true };
+        if (deployment.status === 'DELETING') return { success: true, deleting: true };
+        this.assertLifecycleTransition(deployment.status, 'DELETING');
 
         const ssh = new SSHService();
         try {
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'DELETING' } });
             await ssh.connect({
                 host: deployment.vps.ipAddress,
                 port: deployment.vps.port,
@@ -370,30 +407,44 @@ export class DeploymentService {
             if (deployment.containerId) {
                 await this.removeContainerIfExists(ssh, deploymentId, deployment.containerId, 'Removed deployment container');
             }
+            const imageTags = Array.from(new Set(deployment.history.map((item: any) => item.imageTag).filter(Boolean)));
+            for (const imageTag of imageTags) {
+                await this.removeImageIfExists(ssh, imageTag);
+            }
             await this.cleanupNginx(ssh, deploymentId, deployment.domains.map((domain: any) => domain.domainName));
+            await this.cleanupDeploymentWorkspace(deploymentId, deployment.uploadPath);
 
-            await prisma.domain.updateMany({ where: { deploymentId }, data: { status: 'DELETED' } });
+            await this.logLifecycle(deploymentId, userId, 'deployment_deleted', 'success');
+            await prisma.$transaction([
+                prisma.deploymentJob.deleteMany({ where: { deploymentId } }),
+                prisma.deploymentLog.deleteMany({ where: { deploymentId } }),
+                prisma.log.deleteMany({ where: { deploymentId } }),
+                prisma.deploymentSandbox.deleteMany({ where: { deploymentId } }),
+                prisma.deploymentHistory.deleteMany({ where: { deploymentId } }),
+                prisma.domain.deleteMany({ where: { deploymentId } }),
+                prisma.deployment.delete({ where: { id: deploymentId } }),
+            ]);
+            return { success: true, deleted: true };
+        } catch (err: any) {
             await prisma.deployment.update({
                 where: { id: deploymentId },
-                data: { status: 'DELETED', containerId: null },
-            });
-            await LoggingService.log(deploymentId, 'Deployment soft deleted', 'system');
-            return { success: true };
-        } catch (err: any) {
-            await LoggingService.log(deploymentId, `Delete failed: ${err.message}`, 'error', 'error');
-            throw err;
+                data: { status: deployment.status === 'DELETING' ? 'FAILED' : deployment.status },
+            }).catch(() => undefined);
+            await LoggingService.log(deploymentId, `Delete failed: ${err.message}`, 'error', 'error').catch(() => undefined);
+            if (err instanceof DeploymentError) throw err;
+            throw new DeploymentError('delete', err.message || 'Delete cleanup failed', 'DELETE_CLEANUP_FAILED');
         } finally {
             ssh.disconnect();
         }
     }
 
-    static async startDeployment(userId: string, deploymentId: string) {
+    static async resumeDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId, userId },
-            include: { vps: true },
+            include: { vps: true, domains: true, project: true, history: { where: { imageTag: { not: null } }, orderBy: { createdAt: 'desc' }, take: 1 } },
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
-        if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no existing container', 'NO_CONTAINER');
+        this.assertLifecycleTransition(deployment.status, 'RUNNING');
 
         const ssh = new SSHService();
         try {
@@ -403,12 +454,45 @@ export class DeploymentService {
                 username: deployment.vps.username,
                 ...this.getVpsAuth(deployment.vps),
             });
-            await this.run(ssh, deploymentId, 'system', `docker start ${shellQuote(deployment.containerId)}`);
+            if (deployment.containerId && await this.containerExists(ssh, deployment.containerId)) {
+                if (deployment.status === 'PAUSED') {
+                    await this.run(ssh, deploymentId, 'system', `docker unpause ${shellQuote(deployment.containerId)}`, 'deploying', 'CONTAINER_START_FAILED');
+                } else {
+                    await this.run(ssh, deploymentId, 'system', `docker start ${shellQuote(deployment.containerId)}`, 'deploying', 'CONTAINER_START_FAILED');
+                }
+                await this.verifyContainerRunningOnly(ssh, deploymentId, deployment.containerId);
+            } else if (deployment.history[0]?.imageTag) {
+                const port = await this.getAvailablePort(deployment.vpsId, deployment.vps);
+                const safeProjectName = sanitizeName(deployment.project.name);
+                const dockerName = `df-${safeProjectName}-${deploymentId.slice(0, 8)}`;
+                const appPort = ['STATIC', 'VITE_REACT'].includes(deployment.framework || '') ? 80 : 3000;
+                const resumeDir = `/tmp/deployforge-resume-${deploymentId}`;
+                await this.run(ssh, deploymentId, 'system', `rm -rf ${shellQuote(resumeDir)} && mkdir -p ${shellQuote(resumeDir)}`);
+                const hasEnv = await this.injectEnvironment(ssh, deploymentId, resumeDir, deployment.env);
+                const containerId = await this.deployContainer(ssh, deploymentId, resumeDir, dockerName, deployment.history[0].imageTag!, port, appPort, hasEnv);
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { containerId, port } });
+                deployment.containerId = containerId;
+                deployment.port = port;
+                await this.run(ssh, deploymentId, 'system', `rm -rf ${shellQuote(resumeDir)}`).catch(() => undefined);
+            } else {
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null } });
+                throw new DeploymentError('container_sync', 'Container reference is missing and no successful image snapshot is available.', 'CONTAINER_NOT_FOUND');
+            }
+
+            const host = deployment.domain || deployment.vps.ipAddress;
+            if (deployment.port) {
+                await this.configureNginx(ssh, deploymentId, host, deployment.port, deployment.hostType === 'domain');
+            }
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'RUNNING' } });
-            await LoggingService.log(deploymentId, 'Deployment started', 'system');
+            await this.logLifecycle(deploymentId, userId, deployment.status === 'PAUSED' ? 'deployment_resumed' : 'deployment_started', 'success');
+            return { success: true };
         } finally {
             ssh.disconnect();
         }
+    }
+
+    static async startDeployment(userId: string, deploymentId: string) {
+        return this.resumeDeployment(userId, deploymentId);
     }
 
     static async restartDeployment(userId: string, deploymentId: string) {
@@ -684,6 +768,55 @@ export class DeploymentService {
         return inspect?.code === 0;
     }
 
+    private static async removeImageIfExists(ssh: SSHService, imageTag: string) {
+        if (!imageTag) return;
+        const inspect = await ssh.execute(`docker image inspect ${shellQuote(imageTag)} >/dev/null 2>&1`).catch(() => null);
+        if (inspect?.code === 0) {
+            await ssh.execute(`docker rmi -f ${shellQuote(imageTag)} >/dev/null 2>&1 || true`).catch(() => undefined);
+        }
+    }
+
+    private static async cleanupDeploymentWorkspace(deploymentId: string, uploadPath?: string | null) {
+        await fs.rm(path.join('/tmp/deployforge', 'deployments', deploymentId), { recursive: true, force: true }).catch(() => undefined);
+        if (uploadPath && uploadPath.startsWith('/tmp/deployforge/deployments/')) {
+            await fs.rm(path.dirname(uploadPath), { recursive: true, force: true }).catch(() => undefined);
+        }
+    }
+
+    private static async verifyContainerRunningOnly(ssh: SSHService, deploymentId: string, containerId: string) {
+        const { stdout: state } = await this.run(ssh, deploymentId, 'system', `docker inspect --format '{{.State.Running}} {{.State.Restarting}} {{.State.Status}}' ${shellQuote(containerId)}`, 'deploying', 'CONTAINER_START_FAILED');
+        const [running, restarting, status] = state.trim().split(/\s+/);
+        if (running !== 'true' || restarting === 'true' || status === 'restarting') {
+            throw new DeploymentError('deploying', 'Container did not reach a stable running state', 'CONTAINER_START_FAILED');
+        }
+    }
+
+    private static assertLifecycleTransition(current: string, next: DeploymentStatus) {
+        const normalizedCurrent = current.toUpperCase();
+        const allowed: Record<string, DeploymentStatus[]> = {
+            PENDING: ['BUILDING', 'DELETING'],
+            CLONING: ['BUILDING', 'DELETING', 'FAILED'],
+            UPLOADING: ['BUILDING', 'DELETING', 'FAILED'],
+            EXTRACTING: ['BUILDING', 'DELETING', 'FAILED'],
+            BUILDING: ['DEPLOYING', 'DELETING', 'FAILED'],
+            DEPLOYING: ['RUNNING', 'DELETING', 'FAILED'],
+            RUNNING: ['STOPPED', 'PAUSED', 'DELETING', 'FAILED'],
+            PAUSED: ['RUNNING', 'DELETING'],
+            STOPPED: ['RUNNING', 'DELETING'],
+            FAILED: ['DELETING'],
+            ROLLED_BACK: ['STOPPED', 'PAUSED', 'DELETING', 'FAILED'],
+            DELETING: ['DELETED'],
+            DELETED: [],
+        };
+        if (!allowed[normalizedCurrent]?.includes(next)) {
+            throw new DeploymentError('state', `Invalid deployment state transition: ${current} -> ${next}`, 'INVALID_STATE_TRANSITION');
+        }
+    }
+
+    private static async logLifecycle(deploymentId: string, userId: string, action: string, result: 'success' | 'failed') {
+        await LoggingService.log(deploymentId, `${action} userId=${userId} deploymentId=${deploymentId} result=${result} timestamp=${new Date().toISOString()}`, 'system', result === 'success' ? 'info' : 'error').catch(() => undefined);
+    }
+
     private static async assertRemotePortAvailable(ssh: SSHService, deploymentId: string, port: number) {
         const result = await ssh.execute(`if command -v ss >/dev/null 2>&1; then ss -ltn "( sport = :${port} )" | tail -n +2 | grep -q .; else netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '[:.]${port}$'; fi`);
         if (result.code === 0) throw new DeploymentError('port_alloc', `Port ${port} is already in use on the target server`, 'PORT_IN_USE');
@@ -734,17 +867,37 @@ export class DeploymentService {
             : { password: this.decrypt(vps.encryptedPassword!) };
     }
 
-    private static async validateDomainSelection(userId: string, domainName?: string) {
-        if (!domainName) return;
-        const clean = sanitizeDomain(domainName);
-        if (clean !== domainName) throw new DeploymentError('pending', 'Invalid domain name', 'INVALID_DOMAIN');
+    static normalizeCustomDomain(domainName?: string | null) {
+        const clean = String(domainName || '').trim().toLowerCase();
+        if (!clean) return null;
+        if (/^https?:\/\//i.test(clean) || clean.includes('/') || clean.includes(' ') || clean.includes('_')) {
+            throw new DeploymentError('domain_validation', 'Domain must not include protocol, paths, spaces, or invalid characters', 'INVALID_DOMAIN_FORMAT');
+        }
+        if (clean.length > 253 || clean.includes('..') || !clean.includes('.')) {
+            throw new DeploymentError('domain_validation', 'Enter a valid root domain or subdomain, for example example.com or app.example.com', 'INVALID_DOMAIN_FORMAT');
+        }
+        const labels = clean.split('.');
+        if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
+            throw new DeploymentError('domain_validation', 'Domain format is invalid', 'INVALID_DOMAIN_FORMAT');
+        }
+        const tld = labels[labels.length - 1];
+        if (!/^[a-z]{2,63}$/.test(tld)) {
+            throw new DeploymentError('domain_validation', 'Domain top-level extension is invalid', 'INVALID_DOMAIN_FORMAT');
+        }
+        return clean;
+    }
+
+    private static async validateDomainSelection(_userId: string, domainName?: string) {
+        const clean = this.normalizeCustomDomain(domainName);
+        if (!clean) return undefined;
         const existing = await prisma.domain.findFirst({
             where: {
-                domainName,
-                deployment: { userId, status: { not: 'DELETED' } },
+                domainName: clean,
+                deployment: { status: { not: 'DELETED' } },
             },
         });
-        if (existing) throw new DeploymentError('pending', 'Domain is already in use by another deployment', 'DOMAIN_IN_USE');
+        if (existing) throw new DeploymentError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
+        return clean;
     }
 
     private static async prepareUploadWorkspace(deploymentId: string, incomingPath: string, originalFileName: string) {
@@ -834,6 +987,7 @@ export class DeploymentService {
                     nginxConfigPath: `/etc/nginx/conf.d/deployforge-${deploymentId}.conf`,
                 },
             });
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { domain: domainName, hostType: 'domain' } });
             return;
         }
 
@@ -846,6 +1000,7 @@ export class DeploymentService {
                 nginxConfigPath: `/etc/nginx/conf.d/deployforge-${deploymentId}.conf`,
             },
         });
+        await prisma.deployment.update({ where: { id: deploymentId }, data: { domain: domainName, hostType: 'domain' } });
     }
 
     private static decrypt(encryptedString: string) {

@@ -255,6 +255,8 @@ model Deployment {
   commitHash    String?
   commitMessage String?
   lastStableVersion String?
+  domain        String?
+  hostType      String   @default("ip") // ip | domain
   logs          Log[]
   deploymentLogs DeploymentLog[]
   history       DeploymentHistory[]
@@ -268,6 +270,8 @@ model Deployment {
   @@index([projectId])
   @@index([vpsId])
   @@index([sourceType])
+  @@index([domain])
+  @@index([hostType])
 }
 
 model DeploymentJob {

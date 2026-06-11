@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Github, PackagePlus, Plus, Trash2, UploadCloud } from 'lucide-react';
 import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, inputClassName } from '@/components/ui';
-import { useCreateGithubDeployment, useCreateUploadDeployment, useDomains, useRepositories, useVpsList } from '@/hooks/useDeployForgeData';
+import { useCreateGithubDeployment, useCreateUploadDeployment, useRepositories, useVpsList } from '@/hooks/useDeployForgeData';
 
 type EnvName = 'production' | 'development';
 type EnvRow = { id: string; key: string; value: string };
@@ -35,7 +35,6 @@ function GithubDeployForm() {
     const router = useRouter();
     const repositories = useRepositories();
     const vps = useVpsList();
-    const domains = useDomains();
     const deploy = useCreateGithubDeployment();
     const [repositoryId, setRepositoryId] = useState('');
     const [branch, setBranch] = useState('main');
@@ -50,14 +49,14 @@ function GithubDeployForm() {
     const selectedRepo = repositories.data?.find((repo) => repo.id === repositoryId);
     const selectedVps = vps.data?.find((server) => server.id === vpsId);
     const branchOptions = useMemo(() => Array.from(new Set(['main', 'master', selectedRepo?.defaultBranch].filter(Boolean) as string[])), [selectedRepo?.defaultBranch]);
-    const uniqueDomains = useMemo(() => Array.from(new Set((domains.data || []).map((domain) => domain.domainName))), [domains.data]);
+    const domainInvalid = hostType === 'domain' && !isValidDomainInput(domainName);
 
     async function submit() {
         const deployment = await deploy.mutateAsync({ repositoryId, vpsId, branch, environment, autoDeploy, domainName: hostType === 'domain' ? domainName : undefined, env: useEnv ? envRowsToRecord(envRows) : {} });
         router.push(`/deployments/${deployment.id}`);
     }
 
-    if (repositories.isLoading || vps.isLoading || domains.isLoading) return <Panel><SkeletonBlock className="h-80" /></Panel>;
+    if (repositories.isLoading || vps.isLoading) return <Panel><SkeletonBlock className="h-80" /></Panel>;
     if (!repositories.data?.length) return <EmptyState title="No synced repositories" description="Connect GitHub and sync repositories before creating a GitHub deployment." />;
     if (!vps.data?.length) return <EmptyState title="No VPS targets" description="Add a VPS before creating a deployment." />;
 
@@ -114,11 +113,10 @@ function GithubDeployForm() {
                 setHostType={setHostType}
                 domainName={domainName}
                 setDomainName={setDomainName}
-                domains={uniqueDomains}
                 ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
             />
             <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} />
-            <Button onClick={submit} loading={deploy.isPending} disabled={!repositoryId || !vpsId || (hostType === 'domain' && !domainName) || (useEnv && hasInvalidEnvRows(envRows))}><Github size={16} /> Deploy repository</Button>
+            <Button onClick={submit} loading={deploy.isPending} disabled={!repositoryId || !vpsId || domainInvalid || (useEnv && hasInvalidEnvRows(envRows))}><Github size={16} /> Deploy repository</Button>
         </Panel>
     );
 }
@@ -126,7 +124,6 @@ function GithubDeployForm() {
 function UploadDeployForm() {
     const router = useRouter();
     const vps = useVpsList();
-    const domains = useDomains();
     const deploy = useCreateUploadDeployment();
     const [file, setFile] = useState<File | null>(null);
     const [projectName, setProjectName] = useState('');
@@ -140,7 +137,7 @@ function UploadDeployForm() {
     const isValid = !!file && /\.(zip|tar\.gz|tgz)$/i.test(file.name);
     const progress = deploy.isPending ? 75 : deploy.isSuccess ? 100 : file ? 35 : 0;
     const selectedVps = vps.data?.find((server) => server.id === vpsId);
-    const uniqueDomains = useMemo(() => Array.from(new Set((domains.data || []).map((domain) => domain.domainName))), [domains.data]);
+    const domainInvalid = hostType === 'domain' && !isValidDomainInput(domainName);
 
     async function submit() {
         if (!file) return;
@@ -148,7 +145,7 @@ function UploadDeployForm() {
         router.push(`/deployments/${deployment.id}`);
     }
 
-    if (vps.isLoading || domains.isLoading) return <Panel><SkeletonBlock className="h-80" /></Panel>;
+    if (vps.isLoading) return <Panel><SkeletonBlock className="h-80" /></Panel>;
     if (!vps.data?.length) return <EmptyState title="No VPS targets" description="Add a VPS before uploading a deployment archive." />;
 
     return (
@@ -195,11 +192,10 @@ function UploadDeployForm() {
                 setHostType={setHostType}
                 domainName={domainName}
                 setDomainName={setDomainName}
-                domains={uniqueDomains}
                 ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
             />
             <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} />
-            <Button onClick={submit} loading={deploy.isPending} disabled={!isValid || !vpsId || (hostType === 'domain' && !domainName) || (useEnv && hasInvalidEnvRows(envRows))}><PackagePlus size={16} /> Deploy upload</Button>
+            <Button onClick={submit} loading={deploy.isPending} disabled={!isValid || !vpsId || domainInvalid || (useEnv && hasInvalidEnvRows(envRows))}><PackagePlus size={16} /> Deploy upload</Button>
         </Panel>
     );
 }
@@ -213,16 +209,16 @@ function HostingConfiguration({
     setHostType,
     domainName,
     setDomainName,
-    domains,
     ipPreview,
 }: {
     hostType: 'ip' | 'domain';
     setHostType: (value: 'ip' | 'domain') => void;
     domainName: string;
     setDomainName: (value: string) => void;
-    domains: string[];
     ipPreview: string;
 }) {
+    const domainInvalid = hostType === 'domain' && domainName.trim().length > 0 && !isValidDomainInput(domainName);
+
     return (
         <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4">
             <p className="font-black text-white">Hosting Configuration</p>
@@ -237,13 +233,18 @@ function HostingConfiguration({
                 <label className={hostType === 'domain' ? 'rounded-lg border border-cyan-300/30 bg-cyan-300/10 p-4' : 'rounded-lg border border-white/10 bg-white/[0.04] p-4'}>
                     <span className="flex items-center gap-3 font-black text-white">
                         <input type="radio" checked={hostType === 'domain'} onChange={() => setHostType('domain')} className="accent-cyan-300" />
-                        Use Domain
+                        Use Custom Domain
                     </span>
-                    <select value={domainName} onChange={(event) => setDomainName(event.target.value)} disabled={hostType !== 'domain'} className={`${inputClassName} mt-3`}>
-                        <option value="">Select saved domain</option>
-                        {domains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
-                    </select>
-                    <span className="mt-2 block text-sm text-slate-400">{domainName ? `http://${domainName}` : 'No domain selected'}</span>
+                    <input
+                        value={domainName}
+                        onChange={(event) => setDomainName(event.target.value.trim().toLowerCase())}
+                        disabled={hostType !== 'domain'}
+                        placeholder="example.com or app.example.com"
+                        className={`${inputClassName} mt-3`}
+                    />
+                    <span className={domainInvalid ? 'mt-2 block text-sm text-rose-200' : 'mt-2 block text-sm text-slate-400'}>
+                        {domainInvalid ? 'Enter a valid domain without http://, spaces, or paths.' : domainName ? `http://${domainName}` : 'Root domains and subdomains are supported.'}
+                    </span>
                 </label>
             </div>
         </div>
@@ -322,4 +323,13 @@ function hasInvalidEnvRows(rows: EnvRow[]) {
         const key = row.key.trim();
         return key.length > 0 && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
     });
+}
+
+function isValidDomainInput(value: string) {
+    const clean = value.trim().toLowerCase();
+    if (!clean || /^https?:\/\//i.test(clean) || clean.includes('/') || clean.includes(' ') || clean.includes('_') || clean.includes('..') || !clean.includes('.')) return false;
+    const labels = clean.split('.');
+    if (labels.length < 2) return false;
+    if (!/^[a-z]{2,63}$/.test(labels[labels.length - 1])) return false;
+    return labels.every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
 }

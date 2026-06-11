@@ -19,17 +19,25 @@ export class DomainService {
     }
 
     static async attachDomain(userId: string, deploymentId: string, domainName: string) {
+        const cleanDomain = normalizeDomain(domainName);
         const deployment = await prisma.deployment.findUnique({
             where: { id: deploymentId },
-            include: { vps: true },
+            include: { vps: true, domains: true },
         });
-        if (!deployment) throw new Error('Deployment not found');
-        if (deployment.userId !== userId) throw new Error('Unauthorized');
+        if (!deployment) throw domainError('domain_bind', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        if (deployment.userId !== userId) throw domainError('domain_bind', 'Unauthorized', 'UNAUTHORIZED');
+        if (!deployment.port) throw domainError('domain_bind', 'Deployment does not have an assigned port', 'DOMAIN_BIND_FAILED');
+
+        const existing = await prisma.domain.findFirst({
+            where: {
+                domainName: cleanDomain,
+                deploymentId: { not: deploymentId },
+                deployment: { status: { not: 'DELETED' } },
+            },
+        });
+        if (existing) throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
 
         const vps = deployment.vps;
-        const isDnsValid = await this.verifyDNS(domainName, vps.ipAddress);
-        if (!isDnsValid) throw new Error(`DNS for ${domainName} does not point to ${vps.ipAddress}`);
-
         const ssh = new SSHService();
         try {
             const auth = vps.authType === 'key' || vps.authType === 'ssh_key'
@@ -43,35 +51,44 @@ export class DomainService {
                 ...auth,
             });
 
-            // 1. Generate Nginx Config
-            const nginxConfig = `
-server {
-    listen 80;
-    server_name ${domainName};
+            const configPath = `/etc/nginx/conf.d/deployforge-${deploymentId}.conf`;
+            const nginxConfig = `server {\n    listen 80;\n    server_name ${cleanDomain};\n\n    location / {\n        proxy_pass http://127.0.0.1:${deployment.port};\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n    }\n}`;
+            const command = `if ! command -v nginx >/dev/null 2>&1; then echo NGINX_MISSING; exit 2; fi; if [ ! -w /etc/nginx/conf.d ]; then echo NGINX_CONF_UNWRITABLE; exit 3; fi; printf '%s\\n' ${shellQuote(nginxConfig)} > ${shellQuote(configPath)} && nginx -t && nginx -s reload`;
+            const result = await ssh.execute(command);
+            if (result.code !== 0 && result.code !== null) {
+                const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+                throw domainError('nginx_config', output || 'Nginx domain configuration failed', 'NGINX_CONFIG_ERROR');
+            }
 
-    location / {
-        proxy_pass http://localhost:${deployment.port || 3000};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-      `;
+            await prisma.domain.updateMany({
+                where: { deploymentId, domainName: { not: cleanDomain } },
+                data: { status: 'DELETED' },
+            });
+            await prisma.deployment.update({
+                where: { id: deploymentId },
+                data: { domain: cleanDomain, hostType: 'domain' },
+            });
 
-            const configPath = `/etc/nginx/sites-available/${domainName}`;
-            const enabledPath = `/etc/nginx/sites-enabled/${domainName}`;
-
-            await ssh.execute(`echo '${nginxConfig}' > ${configPath}`);
-            await ssh.execute(`ln -sf ${configPath} ${enabledPath}`);
-            await ssh.execute('nginx -t && systemctl reload nginx');
+            const current = await prisma.domain.findUnique({ where: { domainName: cleanDomain } });
+            if (current) {
+                return prisma.domain.update({
+                    where: { id: current.id },
+                    data: {
+                        deploymentId,
+                        vpsId: vps.id,
+                        domainName: cleanDomain,
+                        status: 'ACTIVE',
+                        sslStatus: 'NONE',
+                        nginxConfigPath: configPath,
+                    },
+                });
+            }
 
             return await prisma.domain.create({
                 data: {
                     deploymentId,
                     vpsId: vps.id,
-                    domainName,
+                    domainName: cleanDomain,
                     status: 'ACTIVE',
                     nginxConfigPath: configPath,
                 },
@@ -128,4 +145,30 @@ server {
         const [iv, tag, content] = encryptedString.split(':');
         return encryptionService.decrypt({ iv, tag, content });
     }
+}
+
+function normalizeDomain(domainName: string) {
+    const clean = String(domainName || '').trim().toLowerCase();
+    if (!clean || /^https?:\/\//i.test(clean) || clean.includes('/') || clean.includes(' ') || clean.includes('_')) {
+        throw domainError('domain_validation', 'Domain must not include protocol, paths, spaces, or invalid characters', 'INVALID_DOMAIN_FORMAT');
+    }
+    if (clean.length > 253 || clean.includes('..') || !clean.includes('.')) {
+        throw domainError('domain_validation', 'Enter a valid root domain or subdomain', 'INVALID_DOMAIN_FORMAT');
+    }
+    const labels = clean.split('.');
+    if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) || !/^[a-z]{2,63}$/.test(labels[labels.length - 1])) {
+        throw domainError('domain_validation', 'Domain format is invalid', 'INVALID_DOMAIN_FORMAT');
+    }
+    return clean;
+}
+
+function domainError(stage: string, message: string, errorCode: string) {
+    const error = new Error(message) as Error & { stage: string; errorCode: string };
+    error.stage = stage;
+    error.errorCode = errorCode;
+    return error;
+}
+
+function shellQuote(value: string | number) {
+    return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }

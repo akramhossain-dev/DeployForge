@@ -59,19 +59,66 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         }
     });
 
+    fastify.post('/:id/start', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        try {
+            const result = await DeploymentService.startDeployment(request.user.id, id);
+            return { success: true, data: result, message: 'Deployment started' };
+        } catch (err: any) {
+            return sendLifecycleError(reply, err, 'START_FAILED');
+        }
+    });
+
+    fastify.post('/:id/stop', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        try {
+            await DeploymentService.stopDeployment(request.user.id, id);
+            return { success: true, message: 'Deployment stopped' };
+        } catch (err: any) {
+            return sendLifecycleError(reply, err, 'STOP_FAILED');
+        }
+    });
+
+    fastify.post('/:id/pause', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        try {
+            await DeploymentService.pauseDeployment(request.user.id, id);
+            return { success: true, message: 'Deployment paused' };
+        } catch (err: any) {
+            return sendLifecycleError(reply, err, 'PAUSE_FAILED');
+        }
+    });
+
+    fastify.post('/:id/resume', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        try {
+            const result = await DeploymentService.resumeDeployment(request.user.id, id);
+            return { success: true, data: result, message: 'Deployment resumed' };
+        } catch (err: any) {
+            return sendLifecycleError(reply, err, 'RESUME_FAILED');
+        }
+    });
+
     fastify.delete('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         const { id } = request.params as { id: string };
         try {
             const result = await DeploymentService.deleteDeployment(request.user.id, id);
             return { success: true, data: result, message: 'Deployment deleted' };
         } catch (err: any) {
-            const status = err.errorCode === 'DEPLOYMENT_NOT_FOUND' ? 404 : err.errorCode === 'DEPLOYMENT_ALREADY_DELETED' ? 409 : 500;
-            return reply.status(status).send({
-                success: false,
-                message: err.message || 'Delete failed',
-                errorCode: err.errorCode || 'DELETE_FAILED',
-            });
+            return sendLifecycleError(reply, err, 'DELETE_FAILED');
         }
+    });
+}
+
+function sendLifecycleError(reply: any, err: any, fallbackCode: string) {
+    const status = err.errorCode === 'DEPLOYMENT_NOT_FOUND' ? 404
+        : ['INVALID_STATE_TRANSITION', 'NO_CONTAINER', 'NO_RUNNING_CONTAINER', 'CONTAINER_NOT_FOUND'].includes(err.errorCode) ? 409
+          : 500;
+    return reply.status(status).send({
+        success: false,
+        stage: err.stage || 'lifecycle',
+        message: err.message || 'Lifecycle action failed',
+        errorCode: err.errorCode || fallbackCode,
     });
 }
 
@@ -83,10 +130,11 @@ function maskDeployment(deployment: any) {
         safeDeployment.vps = safeVps;
     }
     const activeDomain = safeDeployment.domains?.find((domain: any) => domain.status === 'ACTIVE') || safeDeployment.domains?.[0];
-    const hostType = activeDomain ? 'domain' : 'ip';
+    const hostType = safeDeployment.hostType || (activeDomain ? 'domain' : 'ip');
     const sourceType = safeDeployment.sourceType || (safeDeployment.project?.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
-    const url = activeDomain
-        ? `http://${activeDomain.domainName}`
+    const domainName = safeDeployment.domain || activeDomain?.domainName || null;
+    const url = hostType === 'domain' && domainName
+        ? `http://${domainName}`
         : safeDeployment.vps?.ipAddress && safeDeployment.port
           ? `http://${safeDeployment.vps.ipAddress}:${safeDeployment.port}`
           : null;
@@ -99,6 +147,6 @@ function maskDeployment(deployment: any) {
         branch: safeDeployment.branch || (sourceType === 'github' ? safeDeployment.project?.branch : null),
         uploadPath: safeDeployment.uploadPath || (sourceType === 'upload' ? safeDeployment.project?.repositoryUrl : null),
         url,
-        domain: activeDomain?.domainName || null,
+        domain: domainName,
     };
 }

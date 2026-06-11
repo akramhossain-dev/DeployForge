@@ -200,15 +200,23 @@ export default async function deployRoutes(fastify: FastifyInstance) {
 
     // 4. Start/Stop
     fastify.post('/:id/stop', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { id } = request.params as { id: string };
-        await DeploymentService.stopDeployment(request.user.id, id);
-        return { success: true, message: 'Deployment stopped' };
+        try {
+            const { id } = request.params as { id: string };
+            await DeploymentService.stopDeployment(request.user.id, id);
+            return { success: true, message: 'Deployment stopped' };
+        } catch (err: any) {
+            return sendDeploymentError(reply, err);
+        }
     });
 
     fastify.post('/:id/start', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { id } = request.params as { id: string };
-        await DeploymentService.startDeployment(request.user.id, id);
-        return { success: true, message: 'Deployment started' };
+        try {
+            const { id } = request.params as { id: string };
+            await DeploymentService.startDeployment(request.user.id, id);
+            return { success: true, message: 'Deployment started' };
+        } catch (err: any) {
+            return sendDeploymentError(reply, err);
+        }
     });
 }
 
