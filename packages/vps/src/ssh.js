@@ -38,6 +38,17 @@ class SSHService {
                 host: config.host.trim(),
                 readyTimeout: 10000,
                 keepaliveInterval: 10000,
+                keepaliveCountMax: 3,
+                sock: config.sock,
+            });
+        });
+    }
+    async shell(pty = { term: 'xterm-256color' }) {
+        return new Promise((resolve, reject) => {
+            this.client.shell(pty, (err, stream) => {
+                if (err)
+                    return reject(err);
+                resolve(stream);
             });
         });
     }
@@ -79,6 +90,9 @@ function mapSSHError(error) {
     }
     if (error.code === 'ETIMEDOUT' || /timed out/i.test(message)) {
         return new SSHConnectionError('SSH connection timed out', 'SSH_TIMEOUT');
+    }
+    if (error.code === 'ECONNRESET') {
+        return new SSHConnectionError('SSH connection was reset', 'CONNECTION_RESET');
     }
     return new SSHConnectionError(message || 'SSH connection failed', 'SSH_CONNECTION_FAILED');
 }

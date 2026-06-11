@@ -1,63 +1,253 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Panel, inputClassName } from '@/components/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { FitAddon } from '@xterm/addon-fit';
+import { Terminal } from '@xterm/xterm';
+import type { IDisposable } from '@xterm/xterm';
+import { Button, Panel } from '@/components/ui';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import api from '@/lib/api/client';
 
-type TerminalStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error';
+type TerminalStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error';
+
+type TerminalEvent = {
+    event?: 'terminal:connected' | 'terminal:closed' | 'terminal:error';
+    sessionId?: string;
+    stage?: string;
+    message?: string;
+    errorCode?: string;
+};
+
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_DELAY_MS = 1500;
+const DEFAULT_COLS = 120;
+const DEFAULT_ROWS = 32;
 
 export function TerminalPanel({ vpsId }: { vpsId?: string }) {
     const token = useAuthStore((state) => state.token);
     const [status, setStatus] = useState<TerminalStatus>('idle');
-    const [input, setInput] = useState('');
-    const [output, setOutput] = useState('Select a VPS and connect to start a terminal session.\n');
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const terminalRef = useRef<Terminal | null>(null);
+    const fitAddonRef = useRef<FitAddon | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
-    const outputRef = useRef<HTMLPreElement | null>(null);
+    const dataDisposableRef = useRef<IDisposable | null>(null);
+    const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reconnectAttemptsRef = useRef(0);
+    const manualCloseRef = useRef(false);
+    const terminalReadyRef = useRef(false);
+    const shouldReconnectRef = useRef(true);
 
-    const wsUrl = useMemo(() => {
+    const wsBaseUrl = useMemo(() => {
         if (!vpsId || !token) return null;
-        const base = api.baseUrl.replace(/^http/, 'ws');
-        return `${base}/terminal/${vpsId}?token=${encodeURIComponent(token)}`;
+        return `${api.baseUrl.replace(/^http/, 'ws')}/terminal/${vpsId}?token=${encodeURIComponent(token)}`;
     }, [token, vpsId]);
 
     useEffect(() => {
-        outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight });
-    }, [output]);
+        if (!containerRef.current || terminalRef.current) return;
 
-    useEffect(() => {
-        return () => socketRef.current?.close();
+        const terminal = new Terminal({
+            cursorBlink: true,
+            convertEol: false,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+            fontSize: 13,
+            lineHeight: 1.45,
+            scrollback: 5000,
+            tabStopWidth: 8,
+            theme: {
+                background: '#020617',
+                foreground: '#d1fae5',
+                cursor: '#67e8f9',
+                selectionBackground: '#155e75',
+                black: '#0f172a',
+                red: '#fb7185',
+                green: '#34d399',
+                yellow: '#facc15',
+                blue: '#38bdf8',
+                magenta: '#c084fc',
+                cyan: '#22d3ee',
+                white: '#e2e8f0',
+                brightBlack: '#64748b',
+                brightRed: '#fda4af',
+                brightGreen: '#86efac',
+                brightYellow: '#fde047',
+                brightBlue: '#7dd3fc',
+                brightMagenta: '#d8b4fe',
+                brightCyan: '#67e8f9',
+                brightWhite: '#f8fafc',
+            },
+        });
+        const fitAddon = new FitAddon();
+
+        terminal.loadAddon(fitAddon);
+        terminal.open(containerRef.current);
+        fitAddon.fit();
+        terminal.writeln('Select a VPS and connect to start a terminal session.');
+
+        terminalRef.current = terminal;
+        fitAddonRef.current = fitAddon;
+
+        const resizeObserver = new ResizeObserver(() => {
+            fitAddon.fit();
+            sendResize();
+        });
+        resizeObserver.observe(containerRef.current);
+
+        return () => {
+            resizeObserver.disconnect();
+            dataDisposableRef.current?.dispose();
+            terminal.dispose();
+            terminalRef.current = null;
+            fitAddonRef.current = null;
+        };
     }, []);
 
-    function connect() {
-        if (!wsUrl) return;
-        socketRef.current?.close();
-        setStatus('connecting');
-        setOutput((current) => `${current}\n[deployforge] connecting...\n`);
-
-        const socket = new WebSocket(wsUrl);
-        socketRef.current = socket;
-
-        socket.onopen = () => setStatus('connected');
-        socket.onmessage = (event) => {
-            const text = typeof event.data === 'string' ? event.data : '';
-            setOutput((current) => `${current}${text}`);
+    useEffect(() => {
+        return () => {
+            manualCloseRef.current = true;
+            if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+            dataDisposableRef.current?.dispose();
+            socketRef.current?.close();
         };
-        socket.onerror = () => {
-            setStatus('error');
-            setOutput((current) => `${current}\n[deployforge] terminal connection failed.\n`);
-        };
-        socket.onclose = () => {
-            setStatus((current) => (current === 'error' ? 'error' : 'closed'));
-            setOutput((current) => `${current}\n[deployforge] session closed.\n`);
+    }, []);
+
+    function dimensions() {
+        const terminal = terminalRef.current;
+        if (!terminal) return { cols: DEFAULT_COLS, rows: DEFAULT_ROWS };
+        fitAddonRef.current?.fit();
+        return {
+            cols: terminal.cols || DEFAULT_COLS,
+            rows: terminal.rows || DEFAULT_ROWS,
         };
     }
 
-    function sendInput(event: FormEvent) {
-        event.preventDefault();
-        if (!input.trim() || socketRef.current?.readyState !== WebSocket.OPEN) return;
-        socketRef.current.send(`${input}\n`);
-        setInput('');
+    function connect(isReconnect = false) {
+        if (!wsBaseUrl || !terminalRef.current) return;
+        if (!isReconnect && (status === 'connecting' || status === 'reconnecting')) return;
+
+        terminalReadyRef.current = false;
+        shouldReconnectRef.current = true;
+        dataDisposableRef.current?.dispose();
+
+        if (socketRef.current) {
+            socketRef.current.onopen = null;
+            socketRef.current.onmessage = null;
+            socketRef.current.onerror = null;
+            socketRef.current.onclose = null;
+            socketRef.current.close();
+        }
+
+        const { cols, rows } = dimensions();
+        const socket = new WebSocket(`${wsBaseUrl}&cols=${cols}&rows=${rows}`);
+        socket.binaryType = 'arraybuffer';
+        socketRef.current = socket;
+        manualCloseRef.current = false;
+        setStatus(isReconnect ? 'reconnecting' : 'connecting');
+        writeStatus(isReconnect ? 'reconnecting...' : 'connecting...');
+
+        socket.onopen = () => {
+            writeStatus('websocket open, starting shell...');
+        };
+
+        socket.onmessage = (event) => {
+            if (typeof event.data === 'string') {
+                const terminalEvent = parseTerminalEvent(event.data);
+                if (terminalEvent) {
+                    handleTerminalEvent(terminalEvent);
+                    return;
+                }
+                terminalRef.current?.write(event.data);
+                return;
+            }
+
+            if (event.data instanceof ArrayBuffer) {
+                terminalRef.current?.write(new Uint8Array(event.data));
+            }
+        };
+
+        socket.onerror = () => {
+            shouldReconnectRef.current = false;
+            setStatus('error');
+            writeStatus('terminal connection failed.');
+        };
+
+        socket.onclose = () => {
+            dataDisposableRef.current?.dispose();
+            dataDisposableRef.current = null;
+
+            const shouldReconnect = !manualCloseRef.current
+                && shouldReconnectRef.current
+                && terminalReadyRef.current
+                && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS;
+
+            terminalReadyRef.current = false;
+
+            if (shouldReconnect) {
+                reconnectAttemptsRef.current += 1;
+                setStatus('reconnecting');
+                writeStatus(`disconnected, reconnecting (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`);
+                reconnectTimerRef.current = setTimeout(() => connect(true), RECONNECT_DELAY_MS);
+                return;
+            }
+
+            setStatus((current) => (current === 'error' ? 'error' : 'disconnected'));
+            writeStatus('disconnected.');
+        };
+    }
+
+    function bindTerminalInput(socket: WebSocket) {
+        dataDisposableRef.current?.dispose();
+        const encoder = new TextEncoder();
+        dataDisposableRef.current = terminalRef.current?.onData((data) => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(encoder.encode(data));
+            }
+        }) || null;
+    }
+
+    function handleTerminalEvent(event: TerminalEvent) {
+        if (event.event === 'terminal:connected') {
+            terminalReadyRef.current = true;
+            reconnectAttemptsRef.current = 0;
+            setStatus('connected');
+            if (socketRef.current) bindTerminalInput(socketRef.current);
+            writeStatus('connected.');
+            terminalRef.current?.focus();
+            sendResize();
+            return;
+        }
+
+        if (event.event === 'terminal:error') {
+            shouldReconnectRef.current = false;
+            setStatus('error');
+            writeStatus(`${event.message || 'terminal connection failed'}${event.errorCode ? ` (${event.errorCode})` : ''}.`);
+            return;
+        }
+
+        if (event.event === 'terminal:closed') {
+            setStatus('disconnected');
+            writeStatus('session closed.');
+        }
+    }
+
+    function sendResize() {
+        const socket = socketRef.current;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        const { cols, rows } = dimensions();
+        socket.send(JSON.stringify({ event: 'terminal:resize', cols, rows }));
+    }
+
+    function disconnect() {
+        manualCloseRef.current = true;
+        shouldReconnectRef.current = false;
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        dataDisposableRef.current?.dispose();
+        dataDisposableRef.current = null;
+        socketRef.current?.close();
+        setStatus('disconnected');
+    }
+
+    function writeStatus(message: string) {
+        terminalRef.current?.writeln(`\r\n[deployforge] ${message}`);
     }
 
     return (
@@ -67,23 +257,29 @@ export function TerminalPanel({ vpsId }: { vpsId?: string }) {
                     <p className="font-mono text-sm font-bold uppercase tracking-widest text-emerald-300">DeployForge TUI</p>
                     <p className="mt-1 text-xs text-slate-500">Status: {status}</p>
                 </div>
-                <Button variant="secondary" onClick={connect} disabled={!wsUrl || status === 'connecting'}>
-                    {status === 'connected' ? 'Reconnect' : 'Connect'}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={() => connect()} disabled={!wsBaseUrl || status === 'connecting' || status === 'reconnecting'}>
+                        {status === 'connected' ? 'Reconnect' : status === 'reconnecting' ? 'Reconnecting' : 'Connect'}
+                    </Button>
+                    {status === 'connected' && (
+                        <Button variant="secondary" onClick={disconnect}>Disconnect</Button>
+                    )}
+                </div>
             </div>
-            <pre ref={outputRef} className="terminal-scrollbar h-[520px] overflow-auto rounded-lg border border-white/10 bg-slate-950/90 p-4 font-mono text-xs leading-6 text-emerald-100">
-                {output}
-            </pre>
-            <form onSubmit={sendInput} className="mt-4 flex gap-3">
-                <input
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    disabled={status !== 'connected'}
-                    className={`${inputClassName} h-11 min-w-0 flex-1 font-mono text-emerald-100`}
-                    placeholder={status === 'connected' ? 'Type a command...' : 'Connect to enable input'}
-                />
-                <Button type="submit" disabled={status !== 'connected'}>Send</Button>
-            </form>
+            <div
+                ref={containerRef}
+                className="terminal-scrollbar h-[560px] overflow-hidden rounded-lg border border-white/10 bg-slate-950 p-3"
+            />
         </Panel>
     );
+}
+
+function parseTerminalEvent(text: string): TerminalEvent | null {
+    if (!text.startsWith('{')) return null;
+    try {
+        const parsed = JSON.parse(text) as TerminalEvent;
+        return parsed.event?.startsWith('terminal:') ? parsed : null;
+    } catch {
+        return null;
+    }
 }

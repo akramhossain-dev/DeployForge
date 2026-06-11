@@ -9,7 +9,7 @@ const tokenService = new TokenService(config.auth.jwtSecret);
 export default async function terminalRoutes(fastify: FastifyInstance) {
     fastify.get('/:vpsId', { websocket: true }, async (connection, request) => {
         const { vpsId } = request.params as { vpsId: string };
-        const { token } = request.query as { token?: string };
+        const { token, cols, rows } = request.query as { token?: string; cols?: string; rows?: string };
 
         let userId: string | undefined;
         if (token) {
@@ -31,6 +31,9 @@ export default async function terminalRoutes(fastify: FastifyInstance) {
             return;
         }
 
-        await TerminalService.createSession(userId, vpsId, connection);
+        await TerminalService.createSession(userId, vpsId, connection, {
+            cols: Number(cols) || undefined,
+            rows: Number(rows) || undefined,
+        });
     });
 }
