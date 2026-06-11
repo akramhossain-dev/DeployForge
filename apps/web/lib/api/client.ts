@@ -1,5 +1,6 @@
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
+import { webConfig } from '@/lib/config/env';
 
 export type ApiErrorShape = {
     success: false;
@@ -28,7 +29,7 @@ export type ApiResponse<T> = {
     message?: string;
 } & T;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = webConfig.apiUrl;
 
 function getToken(path: string) {
     if (typeof window === 'undefined') return null;

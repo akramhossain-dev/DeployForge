@@ -4,7 +4,7 @@ import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import { SocketStream } from '@fastify/websocket';
 
-const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(config.encryption.key);
 
 export class TerminalService {
     static async createSession(userId: string, vpsId: string, socket: SocketStream) {

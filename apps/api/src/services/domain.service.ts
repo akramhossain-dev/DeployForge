@@ -6,7 +6,7 @@ import dns from 'dns';
 import { promisify } from 'util';
 
 const resolveA = promisify(dns.resolve4);
-const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(config.encryption.key);
 
 export class DomainService {
     static async verifyDNS(domainName: string, expectedIp: string) {

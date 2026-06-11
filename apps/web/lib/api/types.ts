@@ -6,7 +6,16 @@ export type User = {
     githubId?: string | null;
     githubUsername?: string | null;
     githubAvatar?: string | null;
-    provider?: 'email' | 'github' | string;
+    googleId?: string | null;
+    googleEmail?: string | null;
+    googleAvatar?: string | null;
+    provider?: 'email' | 'github' | 'google' | string;
+    authProvider?: 'local' | 'github' | 'google' | string;
+    connectedProviders?: {
+        google: boolean;
+        github: boolean;
+        local: boolean;
+    };
     isVerified?: boolean;
     role?: 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'USER' | string;
     status?: 'ACTIVE' | 'SUSPENDED' | string;

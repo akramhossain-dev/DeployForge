@@ -23,8 +23,9 @@
     Key variables for `apps/api`:
     - `DATABASE_URL`: PostgreSQL connection string.
     - `REDIS_URL`: Redis connection string.
-    - `MASTER_ENCRYPTION_KEY`: A 32-character string for AES-256.
+    - `ENCRYPTION_KEY`: A 64-character hex string for AES-256.
     - `JWT_SECRET`: Secret for signing tokens.
+    - See `docs/ENVIRONMENT.md` for the complete environment variable reference.
 
 3.  **Database Setup**:
     ```bash

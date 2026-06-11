@@ -1,35 +1,216 @@
-import { z } from 'zod';
 import dotenv from 'dotenv';
 import path from 'path';
+import { z } from 'zod';
 
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-const envSchema = z.object({
+const url = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`).url(`${name} must be a valid URL`);
+const secret = (name: string, min = 32) => z.string({ required_error: `${name} is required` }).trim().min(min, `${name} must be at least ${min} characters`);
+const required = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
+const optional = () => z.string().trim().optional().default('');
+
+const rawEnvSchema = z.object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-    PORT: z.coerce.number().default(3001),
-    DATABASE_URL: z.string(),
-    REDIS_URL: z.string(),
-    JWT_SECRET: z.string(),
-    ADMIN_SECRET: z.string().min(24),
-    ADMIN_JWT_SECRET: z.string().min(32),
-    ENCRYPTION_KEY: z.string().length(64), // Hex string for 32 bytes
-    GITHUB_CLIENT_ID: z.string(),
-    GITHUB_CLIENT_SECRET: z.string(),
-    GITHUB_WEBHOOK_SECRET: z.string(),
-    GITHUB_REDIRECT_URI: z.string(),
-    APP_URL: z.string().default('http://localhost:3000'),
-    SMTP_HOST: z.string(),
-    SMTP_PORT: z.coerce.number().default(587),
-    SMTP_SECURE: z.enum(['true', 'false']).transform((v) => v === 'true').default('false'),
-    SMTP_USER: z.string(),
-    SMTP_PASS: z.string(),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+    APP_URL: url('APP_URL').default('http://localhost:3000'),
+    API_URL: url('API_URL').default('http://localhost:3001'),
+
+    NEXT_PUBLIC_API_URL: url('NEXT_PUBLIC_API_URL').optional(),
+
+    DATABASE_URL: required('DATABASE_URL'),
+    REDIS_URL: url('REDIS_URL'),
+
+    JWT_SECRET: secret('JWT_SECRET'),
+    ADMIN_SECRET: secret('ADMIN_SECRET', 24),
+    ADMIN_JWT_SECRET: secret('ADMIN_JWT_SECRET'),
+
+    ENCRYPTION_KEY: z.string().trim().regex(/^[a-f0-9]{64}$/i, 'ENCRYPTION_KEY must be a 64-character hex string'),
+    MASTER_KEY: z.string().trim().regex(/^[a-f0-9]{64}$/i, 'MASTER_KEY must be a 64-character hex string').optional(),
+
+    GITHUB_CLIENT_ID: required('GITHUB_CLIENT_ID'),
+    GITHUB_CLIENT_SECRET: secret('GITHUB_CLIENT_SECRET', 1),
+    GITHUB_CALLBACK_URL: url('GITHUB_CALLBACK_URL').optional(),
+    GITHUB_REDIRECT_URI: url('GITHUB_REDIRECT_URI').optional(),
+    GITHUB_WEBHOOK_SECRET: secret('GITHUB_WEBHOOK_SECRET'),
+
+    GOOGLE_OAUTH_ENABLED: z.coerce.boolean().default(true),
+    GOOGLE_CLIENT_ID: optional(),
+    GOOGLE_CLIENT_SECRET: optional(),
+    GOOGLE_CALLBACK_URL: url('GOOGLE_CALLBACK_URL').optional(),
+    GOOGLE_REDIRECT_URI: url('GOOGLE_REDIRECT_URI').optional(),
+
+    SMTP_HOST: required('SMTP_HOST'),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+    SMTP_SECURE: z.coerce.boolean().default(false),
+    SMTP_USER: required('SMTP_USER'),
+    SMTP_PASS: secret('SMTP_PASS', 1),
+
+    EMAIL_SERVICE: optional(),
+    EMAIL_USER: optional(),
+    EMAIL_PASSWORD: optional(),
+
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+    RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
+    RATE_LIMIT_WINDOW: z.string().trim().min(1).default('1 minute'),
 });
 
-const parsed = envSchema.safeParse(process.env);
+function formatEnvErrors(error: z.ZodError) {
+    return error.issues.map((issue) => {
+        const name = issue.path.join('.') || 'ENV';
+        return `${name}: ${issue.message}`;
+    });
+}
+
+const parsed = rawEnvSchema.safeParse(process.env);
 
 if (!parsed.success) {
-    console.error('❌ Invalid environment variables:', parsed.error.flatten().fieldErrors);
+    console.error('Invalid environment configuration:');
+    for (const message of formatEnvErrors(parsed.error)) {
+        console.error(`- ${message}`);
+    }
     process.exit(1);
 }
 
-export const config = parsed.data;
+const env = parsed.data;
+const githubCallbackUrl = env.GITHUB_CALLBACK_URL || env.GITHUB_REDIRECT_URI;
+const googleCallbackUrl = env.GOOGLE_CALLBACK_URL || env.GOOGLE_REDIRECT_URI;
+
+const finalChecks: string[] = [];
+if (!githubCallbackUrl) finalChecks.push('GITHUB_CALLBACK_URL is required');
+if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_ID) finalChecks.push('GOOGLE_CLIENT_ID is required when GOOGLE_OAUTH_ENABLED=true');
+if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_SECRET) finalChecks.push('GOOGLE_CLIENT_SECRET is required when GOOGLE_OAUTH_ENABLED=true');
+if (env.GOOGLE_OAUTH_ENABLED && !googleCallbackUrl) finalChecks.push('GOOGLE_CALLBACK_URL is required when GOOGLE_OAUTH_ENABLED=true');
+if (env.MASTER_KEY && env.MASTER_KEY !== env.ENCRYPTION_KEY) finalChecks.push('MASTER_KEY and ENCRYPTION_KEY must match while both are configured');
+if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
+    finalChecks.push('GOOGLE_CLIENT_ID must be a Google OAuth client ID ending in .apps.googleusercontent.com');
+}
+
+if (finalChecks.length > 0) {
+    console.error('Invalid environment configuration:');
+    for (const message of finalChecks) {
+        console.error(`- ${message}`);
+    }
+    process.exit(1);
+}
+
+export const appConfig = {
+    env: env.NODE_ENV,
+    port: env.PORT,
+    appUrl: env.APP_URL,
+    apiUrl: env.API_URL,
+    logLevel: env.LOG_LEVEL,
+} as const;
+
+export const frontendConfig = {
+    apiUrl: env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+} as const;
+
+export const databaseConfig = {
+    url: env.DATABASE_URL,
+} as const;
+
+export const redisConfig = {
+    url: env.REDIS_URL,
+} as const;
+
+export const authConfig = {
+    jwtSecret: env.JWT_SECRET,
+    adminSecret: env.ADMIN_SECRET,
+    adminJwtSecret: env.ADMIN_JWT_SECRET,
+} as const;
+
+export const encryptionConfig = {
+    key: env.ENCRYPTION_KEY,
+    masterKey: env.MASTER_KEY || env.ENCRYPTION_KEY,
+} as const;
+
+export const oauthConfig = {
+    github: {
+        clientId: env.GITHUB_CLIENT_ID,
+        clientSecret: env.GITHUB_CLIENT_SECRET,
+        callbackUrl: githubCallbackUrl!,
+        webhookSecret: env.GITHUB_WEBHOOK_SECRET,
+    },
+    google: {
+        enabled: env.GOOGLE_OAUTH_ENABLED,
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
+        callbackUrl: googleCallbackUrl || '',
+    },
+} as const;
+
+export const emailConfig = {
+    smtp: {
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        secure: env.SMTP_SECURE,
+        user: env.SMTP_USER,
+        pass: env.SMTP_PASS,
+    },
+    service: env.EMAIL_SERVICE,
+    legacyUser: env.EMAIL_USER,
+} as const;
+
+export const securityConfig = {
+    rateLimitMax: env.RATE_LIMIT_MAX,
+    rateLimitWindow: env.RATE_LIMIT_WINDOW,
+} as const;
+
+export const config = {
+    app: appConfig,
+    frontend: frontendConfig,
+    database: databaseConfig,
+    redis: redisConfig,
+    auth: authConfig,
+    encryption: encryptionConfig,
+    oauth: oauthConfig,
+    email: emailConfig,
+    security: securityConfig,
+
+    NODE_ENV: appConfig.env,
+    PORT: appConfig.port,
+    APP_URL: appConfig.appUrl,
+    API_URL: appConfig.apiUrl,
+    DATABASE_URL: databaseConfig.url,
+    REDIS_URL: redisConfig.url,
+    JWT_SECRET: authConfig.jwtSecret,
+    ADMIN_SECRET: authConfig.adminSecret,
+    ADMIN_JWT_SECRET: authConfig.adminJwtSecret,
+    ENCRYPTION_KEY: encryptionConfig.key,
+    GITHUB_CLIENT_ID: oauthConfig.github.clientId,
+    GITHUB_CLIENT_SECRET: oauthConfig.github.clientSecret,
+    GITHUB_CALLBACK_URL: oauthConfig.github.callbackUrl,
+    GITHUB_REDIRECT_URI: oauthConfig.github.callbackUrl,
+    GITHUB_WEBHOOK_SECRET: oauthConfig.github.webhookSecret,
+    GOOGLE_OAUTH_ENABLED: oauthConfig.google.enabled,
+    GOOGLE_CLIENT_ID: oauthConfig.google.clientId,
+    GOOGLE_CLIENT_SECRET: oauthConfig.google.clientSecret,
+    GOOGLE_CALLBACK_URL: oauthConfig.google.callbackUrl,
+    GOOGLE_REDIRECT_URI: oauthConfig.google.callbackUrl,
+    SMTP_HOST: emailConfig.smtp.host,
+    SMTP_PORT: emailConfig.smtp.port,
+    SMTP_SECURE: emailConfig.smtp.secure,
+    SMTP_USER: emailConfig.smtp.user,
+    SMTP_PASS: emailConfig.smtp.pass,
+    RATE_LIMIT_MAX: securityConfig.rateLimitMax,
+    RATE_LIMIT_WINDOW: securityConfig.rateLimitWindow,
+} as const;
+
+export function validateOAuthConfig(logger: Pick<Console, 'info' | 'warn'> = console) {
+    logger.info('[oauth] GitHub OAuth configuration loaded', {
+        clientIdConfigured: Boolean(oauthConfig.github.clientId),
+        clientSecretConfigured: Boolean(oauthConfig.github.clientSecret),
+        callbackUrlConfigured: Boolean(oauthConfig.github.callbackUrl),
+    });
+
+    if (!oauthConfig.google.enabled) {
+        logger.warn('[oauth] Google OAuth disabled by GOOGLE_OAUTH_ENABLED=false');
+        return;
+    }
+
+    logger.info('[oauth] Google OAuth configuration loaded', {
+        clientIdConfigured: Boolean(oauthConfig.google.clientId),
+        clientSecretConfigured: Boolean(oauthConfig.google.clientSecret),
+        callbackUrlConfigured: Boolean(oauthConfig.google.callbackUrl),
+    });
+}

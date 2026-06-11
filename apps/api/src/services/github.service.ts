@@ -4,32 +4,32 @@ import { config } from '../config/env';
 import crypto from 'crypto';
 import { AuthService } from './auth.service';
 
-const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(config.encryption.key);
 
 export class GitHubService {
     static validateOAuthConfig() {
-        const clientId = config.GITHUB_CLIENT_ID.trim();
-        const clientSecret = config.GITHUB_CLIENT_SECRET.trim();
-        const redirectUri = config.GITHUB_REDIRECT_URI.trim();
+        const clientId = config.oauth.github.clientId.trim();
+        const clientSecret = config.oauth.github.clientSecret.trim();
+        const callbackUrl = config.oauth.github.callbackUrl.trim();
 
-        if (!clientId || !clientSecret || !redirectUri) {
-            throw new Error('GitHub OAuth is not configured. Set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, and GITHUB_REDIRECT_URI.');
+        if (!clientId || !clientSecret || !callbackUrl) {
+            throw new Error('GitHub OAuth is not configured. Set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, and GITHUB_CALLBACK_URL.');
         }
 
         if (clientId === clientSecret || /^[0-9a-f]{40}$/i.test(clientId)) {
             throw new Error('Invalid GitHub OAuth config: GITHUB_CLIENT_ID looks like a Client Secret. Use the OAuth App Client ID from GitHub Developer Settings.');
         }
 
-        if (!redirectUri.endsWith('/github/callback')) {
-            throw new Error('Invalid GitHub OAuth config: GITHUB_REDIRECT_URI must point to /github/callback.');
+        if (!callbackUrl.endsWith('/github/callback') && !callbackUrl.endsWith('/auth/github/callback')) {
+            throw new Error('Invalid GitHub OAuth config: GITHUB_CALLBACK_URL must point to /github/callback or /auth/github/callback.');
         }
     }
 
     static getAuthUrl(state: string) {
         this.validateOAuthConfig();
         const params = new URLSearchParams({
-            client_id: config.GITHUB_CLIENT_ID,
-            redirect_uri: config.GITHUB_REDIRECT_URI,
+            client_id: config.oauth.github.clientId,
+            redirect_uri: config.oauth.github.callbackUrl,
             scope: 'user:email,repo,admin:repo_hook',
             state,
         });
@@ -50,10 +50,10 @@ export class GitHubService {
                 Accept: 'application/json',
             },
             body: JSON.stringify({
-                client_id: config.GITHUB_CLIENT_ID,
-                client_secret: config.GITHUB_CLIENT_SECRET,
+                client_id: config.oauth.github.clientId,
+                client_secret: config.oauth.github.clientSecret,
                 code,
-                redirect_uri: config.GITHUB_REDIRECT_URI,
+                redirect_uri: config.oauth.github.callbackUrl,
             }),
         });
 
@@ -168,6 +168,7 @@ export class GitHubService {
                     avatarUrl: profile.avatar_url || user.avatarUrl,
                     name: user.name || profile.name || profile.login,
                     provider: user.passwordHash ? user.provider : 'github',
+                    authProvider: 'github',
                     isVerified: true,
                 },
             });
@@ -182,6 +183,7 @@ export class GitHubService {
                     avatarUrl: profile.avatar_url,
                     name: profile.name || profile.login,
                     provider: 'github',
+                    authProvider: 'github',
                     isVerified: true,
                 },
             });
@@ -268,6 +270,7 @@ export class GitHubService {
                     githubAvatar: profile.avatar_url,
                     githubAccessToken: tokenString,
                     avatarUrl: profile.avatar_url || undefined,
+                    authProvider: 'github',
                 },
             });
 
@@ -389,9 +392,9 @@ export class GitHubService {
                 active: true,
                 events: ['push', 'pull_request'],
                 config: {
-                    url: `${config.APP_URL.replace('3000', '4000')}/webhooks/github`,
+                    url: `${config.app.apiUrl}/webhooks/github`,
                     content_type: 'json',
-                    secret: config.GITHUB_WEBHOOK_SECRET,
+                    secret: config.oauth.github.webhookSecret,
                     insecure_ssl: '0',
                 },
             }),
@@ -416,7 +419,7 @@ export class GitHubService {
     }
 
     static verifySignature(payload: string, signature: string) {
-        const hmac = crypto.createHmac('sha256', config.GITHUB_WEBHOOK_SECRET);
+        const hmac = crypto.createHmac('sha256', config.oauth.github.webhookSecret);
         const digest = 'sha256=' + hmac.update(payload).digest('hex');
         return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
     }

@@ -2,25 +2,28 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import { config } from './config/env';
+import { config, validateOAuthConfig } from './config/env';
 
 const app = Fastify({
     logger: {
-        transport: config.NODE_ENV === 'development'
+        level: config.app.logLevel,
+        transport: config.app.env === 'development'
             ? { target: 'pino-pretty' }
             : undefined,
     },
 });
 
 export async function buildApp() {
+    validateOAuthConfig(app.log);
+
     // Security Plugins
     await app.register(helmet, { contentSecurityPolicy: false });
     await app.register(cors, {
-        origin: config.NODE_ENV === 'development' ? true : /localhost/,
+        origin: config.app.env === 'development' ? true : /localhost/,
     });
     await app.register(rateLimit, {
-        max: 100,
-        timeWindow: '1 minute',
+        max: config.security.rateLimitMax,
+        timeWindow: config.security.rateLimitWindow,
         errorResponseBuilder: () => ({
             success: false,
             message: 'Rate limit exceeded. Please try again later.'
@@ -37,6 +40,8 @@ export async function buildApp() {
     await app.register(import('./routes/admin'), { prefix: '/admin' });
     await app.register(import('./routes/github'), { prefix: '/github' });
     await app.register(import('./routes/github'), { prefix: '/auth/github' });
+    await app.register(import('./routes/google'), { prefix: '/google' });
+    await app.register(import('./routes/google'), { prefix: '/auth/google' });
     await app.register(import('./routes/webhooks'), { prefix: '/webhooks' });
     await app.register(import('./routes/vps'), { prefix: '/vps' });
     await app.register(import('./routes/deploy'), { prefix: '/deploy' });
@@ -56,7 +61,7 @@ export async function buildApp() {
         reply.status(statusCode).send({
             success: false,
             message: statusCode >= 500 ? 'Internal Server Error' : error.message,
-            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+            ...(config.app.env === 'development' && { stack: error.stack })
         });
     });
 

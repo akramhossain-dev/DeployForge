@@ -4,7 +4,7 @@ import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
 import prisma from '@deployforge/database';
 
-const tokenService = new TokenService(config.JWT_SECRET);
+const tokenService = new TokenService(config.auth.jwtSecret);
 
 export default async function terminalRoutes(fastify: FastifyInstance) {
     fastify.get('/:vpsId', { websocket: true }, async (connection, request) => {

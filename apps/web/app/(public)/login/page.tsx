@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Github, Loader2, LockKeyhole } from 'lucide-react';
+import { ArrowRight, Chrome, Github, Loader2, LockKeyhole } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
@@ -13,6 +13,7 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [githubLoading, setGithubLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { setSession } = useAuthStore();
@@ -44,6 +45,11 @@ export default function LoginPage() {
         window.location.href = `${api.baseUrl}/auth/github`;
     }
 
+    function loginWithGoogle() {
+        setGoogleLoading(true);
+        window.location.href = `${api.baseUrl}/auth/google`;
+    }
+
     return (
         <main className="relative isolate overflow-hidden bg-slate-950 px-4 py-16 text-white sm:px-6 lg:px-8">
             <AuthAurora />
@@ -65,7 +71,35 @@ export default function LoginPage() {
                             <p className="mt-2 text-sm text-slate-400">Use your DeployForge account to continue.</p>
                         </div>
 
-                        <form onSubmit={handleLogin} className="mt-7 space-y-5">
+                        <div className="mt-7 space-y-3">
+                            <button
+                                type="button"
+                                onClick={loginWithGoogle}
+                                disabled={googleLoading || githubLoading || loading || auth.isLoading}
+                                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white px-5 text-sm font-black text-slate-950 transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {googleLoading ? <Loader2 className="animate-spin" size={18} /> : <Chrome size={18} />}
+                                Continue with Google
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={loginWithGitHub}
+                                disabled={githubLoading || googleLoading || loading || auth.isLoading}
+                                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.07] px-5 text-sm font-black text-white transition-colors hover:bg-white/[0.11] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {githubLoading ? <Loader2 className="animate-spin" size={18} /> : <Github size={18} />}
+                                Continue with GitHub
+                            </button>
+                        </div>
+
+                        <div className="my-6 flex items-center gap-3">
+                            <div className="h-px flex-1 bg-white/10" />
+                            <span className="text-xs font-black uppercase text-slate-500">or</span>
+                            <div className="h-px flex-1 bg-white/10" />
+                        </div>
+
+                        <form onSubmit={handleLogin} className="space-y-5">
                             <label className="block">
                                 <span className="text-sm font-bold text-slate-300">Email address</span>
                                 <input
@@ -95,28 +129,12 @@ export default function LoginPage() {
 
                             <button
                                 type="submit"
-                                disabled={loading || githubLoading || auth.isLoading}
+                                disabled={loading || googleLoading || githubLoading || auth.isLoading}
                                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-black text-slate-950 transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 {loading ? <Loader2 className="animate-spin" size={18} /> : <>Sign In <ArrowRight size={18} /></>}
                             </button>
                         </form>
-
-                        <div className="my-6 flex items-center gap-3">
-                            <div className="h-px flex-1 bg-white/10" />
-                            <span className="text-xs font-black uppercase text-slate-500">or</span>
-                            <div className="h-px flex-1 bg-white/10" />
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={loginWithGitHub}
-                            disabled={githubLoading || loading || auth.isLoading}
-                            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.07] px-5 text-sm font-black text-white transition-colors hover:bg-white/[0.11] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            {githubLoading ? <Loader2 className="animate-spin" size={18} /> : <Github size={18} />}
-                            Login with GitHub
-                        </button>
 
                         <p className="mt-6 text-center text-sm text-slate-400">
                             Don&apos;t have an account?{' '}

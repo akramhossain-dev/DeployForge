@@ -1,0 +1,1 @@
+export { oauthConfig } from './env';

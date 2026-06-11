@@ -4,7 +4,7 @@ import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import { LoggingService } from './logging.service';
 
-const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(config.encryption.key);
 
 export class RollbackService {
     static async getHistory(deploymentId: string) {

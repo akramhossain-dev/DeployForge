@@ -17,10 +17,14 @@ model User {
   githubUsername String?
   githubAvatar String?
   githubAccessToken String?
+  googleId      String?   @unique
+  googleEmail   String?
+  googleAvatar  String?
   isVerified    Boolean   @default(false)
   role          String    @default("USER") // legacy user role; admin auth uses AdminUser
   status        String    @default("ACTIVE") // ACTIVE | SUSPENDED
-  provider      String    @default("email") // "email" | "github"
+  provider      String    @default("email") // "email" | "github" | "google"
+  authProvider  String    @default("local") // "local" | "github" | "google"
   sessions      Session[]
   vps           VPS[]
   projects      Project[]
@@ -87,6 +91,7 @@ model Session {
   userId       String
   user         User     @relation(fields: [userId], references: [id])
   refreshToken String   @unique // Hashed
+  authProvider  String   @default("local") // "local" | "github" | "google"
   userAgent    String?
   ipAddress    String?
   expiresAt    DateTime

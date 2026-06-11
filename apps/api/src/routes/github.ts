@@ -5,7 +5,7 @@ import prisma from '@deployforge/database';
 import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
 
-const tokenService = new TokenService(config.JWT_SECRET);
+const tokenService = new TokenService(config.auth.jwtSecret);
 
 export default async function githubRoutes(fastify: FastifyInstance) {
     // 0. Login/Register with GitHub (OAuth start)
@@ -21,11 +21,11 @@ export default async function githubRoutes(fastify: FastifyInstance) {
                 nonce,
             });
             const url = GitHubService.getAuthUrl(state);
-            fastify.log.info({ redirectUri: config.GITHUB_REDIRECT_URI }, 'GitHub OAuth login URL generated successfully');
+            fastify.log.info({ callbackUrl: config.oauth.github.callbackUrl }, 'GitHub OAuth login URL generated successfully');
             return reply.redirect(url);
         } catch (err: any) {
             fastify.log.error({ err }, 'GitHub OAuth login initiation failed');
-            return reply.redirect(`${config.APP_URL}/login?github=error&error_type=oauth_config&message=${encodeURIComponent(err.message || 'GitHub OAuth is unavailable')}`);
+            return reply.redirect(`${config.app.appUrl}/login?github=error&error_type=oauth_config&message=${encodeURIComponent(err.message || 'GitHub OAuth is unavailable')}`);
         }
     });
 
@@ -40,7 +40,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
                 nonce,
             });
             const url = GitHubService.getAuthUrl(state);
-            fastify.log.info({ userId: request.user.id, redirectUri: config.GITHUB_REDIRECT_URI }, 'GitHub OAuth connection URL generated successfully');
+            fastify.log.info({ userId: request.user.id, callbackUrl: config.oauth.github.callbackUrl }, 'GitHub OAuth connection URL generated successfully');
             return { url };
         } catch (err: any) {
             fastify.log.error({ err, userId: request.user?.id }, 'GitHub OAuth connection initiation failed');
@@ -81,13 +81,13 @@ export default async function githubRoutes(fastify: FastifyInstance) {
                     target = 'login';
                 }
             }
-            return reply.redirect(`${config.APP_URL}/${target}?github=error&error_type=${errorType}&message=${encodeURIComponent(error_description || error)}`);
+            return reply.redirect(`${config.app.appUrl}/${target}?github=error&error_type=${errorType}&message=${encodeURIComponent(error_description || error)}`);
         }
 
         // Validate state parameter presence
         if (!state) {
             fastify.log.warn('GitHub OAuth callback state parameter is missing');
-            return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=missing_state&message=State+parameter+is+missing`);
+            return reply.redirect(`${config.app.appUrl}/settings?github=error&error_type=missing_state&message=State+parameter+is+missing`);
         }
 
         let userId = '';
@@ -98,25 +98,25 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             const payload = tokenService.verifyToken(state) as any;
             if (!['github_oauth', 'github_auth'].includes(payload.purpose)) {
                 fastify.log.warn({ payload }, 'Invalid state purpose or missing user ID in state payload');
-                return reply.redirect(`${config.APP_URL}/login?github=error&error_type=session_error&message=Invalid+state+purpose`);
+                return reply.redirect(`${config.app.appUrl}/login?github=error&error_type=session_error&message=Invalid+state+purpose`);
             }
             if (payload.purpose === 'github_oauth' && !payload.userId) {
                 fastify.log.warn({ payload }, 'Missing user ID in GitHub connect state payload');
-                return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=session_error&message=Invalid+state+purpose+or+user+identity`);
+                return reply.redirect(`${config.app.appUrl}/settings?github=error&error_type=session_error&message=Invalid+state+purpose+or+user+identity`);
             }
             purpose = payload.purpose;
             userId = payload.userId;
             fastify.log.info({ userId, purpose }, 'State parameter verified successfully');
         } catch (err: any) {
             fastify.log.error({ err, state }, 'State verification failed');
-            return reply.redirect(`${config.APP_URL}/login?github=error&error_type=session_error&message=${encodeURIComponent(err.message || 'State validation expired or failed')}`);
+            return reply.redirect(`${config.app.appUrl}/login?github=error&error_type=session_error&message=${encodeURIComponent(err.message || 'State validation expired or failed')}`);
         }
 
         // Validate code presence
         if (!code) {
             fastify.log.warn({ userId }, 'GitHub OAuth callback code parameter is missing');
             const target = purpose === 'github_auth' ? 'login' : 'settings';
-            return reply.redirect(`${config.APP_URL}/${target}?github=error&error_type=bad_verification_code&message=Verification+code+is+missing`);
+            return reply.redirect(`${config.app.appUrl}/${target}?github=error&error_type=bad_verification_code&message=Verification+code+is+missing`);
         }
 
         let accessToken = '';
@@ -137,7 +137,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
                 errorType = 'callback_mismatch';
             }
             const target = purpose === 'github_auth' ? 'login' : 'settings';
-            return reply.redirect(`${config.APP_URL}/${target}?github=error&error_type=${errorType}&message=${encodeURIComponent(errMsg)}`);
+            return reply.redirect(`${config.app.appUrl}/${target}?github=error&error_type=${errorType}&message=${encodeURIComponent(errMsg)}`);
         }
 
         if (purpose === 'github_auth') {
@@ -148,10 +148,10 @@ export default async function githubRoutes(fastify: FastifyInstance) {
                     refreshToken: session.refreshToken,
                 });
                 fastify.log.info({ userId: session.user.id }, 'GitHub OAuth login completed successfully');
-                return reply.redirect(`${config.APP_URL}/github/callback?${params.toString()}`);
+                return reply.redirect(`${config.app.appUrl}/github/callback?${params.toString()}`);
             } catch (err: any) {
                 fastify.log.error({ err }, 'GitHub OAuth login failed');
-                return reply.redirect(`${config.APP_URL}/login?github=error&error_type=${encodeURIComponent(err.errorCode || 'github_auth_failed')}&message=${encodeURIComponent(err.message || 'GitHub login failed')}`);
+                return reply.redirect(`${config.app.appUrl}/login?github=error&error_type=${encodeURIComponent(err.errorCode || 'github_auth_failed')}&message=${encodeURIComponent(err.message || 'GitHub login failed')}`);
             }
         }
 
@@ -173,7 +173,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
                 errorType = 'database_error';
                 cleanMsg = errMsg.replace('Database Storage Error: ', '');
             }
-            return reply.redirect(`${config.APP_URL}/settings?github=error&error_type=${errorType}&message=${encodeURIComponent(cleanMsg)}`);
+            return reply.redirect(`${config.app.appUrl}/settings?github=error&error_type=${errorType}&message=${encodeURIComponent(cleanMsg)}`);
         }
 
         // Sync user repositories immediately (Repository sync)
@@ -183,11 +183,11 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             fastify.log.info({ userId, githubAccountId: account.id, count: repos.length }, 'Repositories synced successfully');
         } catch (syncErr: any) {
             fastify.log.error({ err: syncErr, userId, githubAccountId: account.id }, 'GitHub connected successfully, but immediate repository sync failed');
-            return reply.redirect(`${config.APP_URL}/settings?github=connected&repos=sync_failed&message=${encodeURIComponent(syncErr.message || 'Immediate repository sync failed')}`);
+            return reply.redirect(`${config.app.appUrl}/settings?github=connected&repos=sync_failed&message=${encodeURIComponent(syncErr.message || 'Immediate repository sync failed')}`);
         }
 
         fastify.log.info({ userId, githubAccountId: account.id }, 'GitHub connection flow completed successfully');
-        return reply.redirect(`${config.APP_URL}/settings?github=connected`);
+        return reply.redirect(`${config.app.appUrl}/settings?github=connected`);
     });
 
     // 3. Profile

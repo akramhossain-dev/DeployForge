@@ -6,7 +6,7 @@ import { GitHubService } from './github.service';
 import { deploymentQueue } from '../utils/queue';
 import { LoggingService } from './logging.service';
 
-const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(config.encryption.key);
 
 export class DeploymentService {
     static async detectFramework(files: string[]) {

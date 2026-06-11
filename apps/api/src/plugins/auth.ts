@@ -19,8 +19,8 @@ declare module 'fastify' {
     }
 }
 
-const tokenService = new TokenService(config.JWT_SECRET);
-const adminTokenService = new TokenService(config.ADMIN_JWT_SECRET);
+const tokenService = new TokenService(config.auth.jwtSecret);
+const adminTokenService = new TokenService(config.auth.adminJwtSecret);
 const adminRoles = new Set(['SUPER_ADMIN', 'ADMIN', 'MODERATOR']);
 
 function tokenHash(token: string) {
@@ -45,13 +45,38 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
 
             const user = await prisma.user.findUnique({
                 where: { id: payload.userId },
-                select: { id: true, email: true, name: true, isVerified: true, githubId: true, githubUsername: true, githubAvatar: true, avatarUrl: true, provider: true, role: true, status: true },
+                select: {
+                    id: true,
+                    email: true,
+                    name: true,
+                    isVerified: true,
+                    githubId: true,
+                    githubUsername: true,
+                    githubAvatar: true,
+                    googleId: true,
+                    googleEmail: true,
+                    googleAvatar: true,
+                    avatarUrl: true,
+                    provider: true,
+                    authProvider: true,
+                    role: true,
+                    status: true,
+                    passwordHash: true,
+                },
             });
 
             if (!user) return reply.status(401).send({ success: false, message: 'Unauthorized' });
             if (user.status === 'SUSPENDED') return reply.status(403).send({ success: false, message: 'Account suspended' });
 
-            request.user = user;
+            const { passwordHash, ...safeUser } = user;
+            request.user = {
+                ...safeUser,
+                connectedProviders: {
+                    google: Boolean(user.googleId),
+                    github: Boolean(user.githubId),
+                    local: Boolean(user.passwordHash),
+                },
+            };
         } catch (err) {
             return reply.status(401).send({ success: false, message: 'Unauthorized' });
         }

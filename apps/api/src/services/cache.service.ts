@@ -2,7 +2,7 @@ import IORedis from 'ioredis';
 import { config } from '../config/env';
 
 export class CacheService {
-    private static redis = new IORedis(config.REDIS_URL);
+    private static redis = new IORedis(config.redis.url);
 
     static async set(key: string, value: any, ttlSeconds: number = 3600) {
         const data = JSON.stringify(value);

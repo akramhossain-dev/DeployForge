@@ -1,14 +1,15 @@
 'use client';
 
-import { Github, Unlink } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { CheckCircle2, Chrome, Github, MailCheck, Unlink, XCircle } from 'lucide-react';
+import { ReactNode, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock } from '@/components/ui';
-import { useDisconnectGitHub, useGitHubProfile, queryKeys } from '@/hooks/useDeployForgeData';
+import { useAuthSession, useDisconnectGitHub, useGitHubProfile, queryKeys } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 
 export default function SettingsPage() {
+    const auth = useAuthSession();
     const profile = useGitHubProfile();
     const disconnect = useDisconnectGitHub();
     const searchParams = useSearchParams();
@@ -56,7 +57,7 @@ export default function SettingsPage() {
             errorMessage = 'The temporary verification code provided by GitHub has expired or is invalid. Please try connecting again.';
         } else if (errorType === 'callback_mismatch') {
             errorTitle = 'Callback URL Mismatch (callback_mismatch)';
-            errorMessage = 'The GITHUB_REDIRECT_URI configured in the .env file does not match the Authorization callback URL registered in the GitHub Developer settings.';
+            errorMessage = 'The GITHUB_CALLBACK_URL configured in the .env file does not match the Authorization callback URL registered in the GitHub Developer settings.';
         } else if (errorType === 'missing_state') {
             errorTitle = 'Missing State Parameter (missing_state)';
             errorMessage = 'The security state parameter is missing from the callback, which is required to prevent CSRF attacks.';
@@ -77,6 +78,29 @@ export default function SettingsPage() {
     return (
         <div className="space-y-6">
             <PageHeader title="Settings" description="Account integrations and deployment defaults." />
+            <Panel>
+                <h3 className="mb-4 font-bold text-white">Connected Providers</h3>
+                <div className="grid gap-3 md:grid-cols-3">
+                    <ProviderStatus
+                        icon={<Chrome size={18} />}
+                        label="Google"
+                        connected={Boolean(auth.user?.connectedProviders?.google || auth.user?.googleId)}
+                        detail={auth.user?.googleEmail || auth.user?.email || 'Not connected'}
+                    />
+                    <ProviderStatus
+                        icon={<Github size={18} />}
+                        label="GitHub"
+                        connected={Boolean(auth.user?.connectedProviders?.github || auth.user?.githubId || profile.data)}
+                        detail={auth.user?.githubUsername ? `@${auth.user.githubUsername}` : profile.data?.username ? `@${profile.data.username}` : 'Not connected'}
+                    />
+                    <ProviderStatus
+                        icon={<MailCheck size={18} />}
+                        label="Email/Password"
+                        connected={Boolean(auth.user?.connectedProviders?.local)}
+                        detail={auth.user?.email || 'Not connected'}
+                    />
+                </div>
+            </Panel>
             <Panel>
                 <h3 className="mb-4 font-bold text-white">GitHub Connection</h3>
                 {profile.isLoading ? (
@@ -125,6 +149,21 @@ export default function SettingsPage() {
                 {profile.isError ? <div className="mt-4"><ErrorState title="Connection check failed" message={(profile.error as Error)?.message} onRetry={() => profile.refetch()} /></div> : null}
                 {disconnect.isError ? <div className="mt-4"><ErrorState title="Disconnect failed" message={(disconnect.error as Error)?.message} onRetry={() => disconnect.mutate()} /></div> : null}
             </Panel>
+        </div>
+    );
+}
+
+function ProviderStatus({ icon, label, connected, detail }: { icon: ReactNode; label: string; connected: boolean; detail: string }) {
+    return (
+        <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-white">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">{icon}</span>
+                    <span className="font-bold">{label}</span>
+                </div>
+                {connected ? <CheckCircle2 className="text-emerald-300" size={18} /> : <XCircle className="text-slate-600" size={18} />}
+            </div>
+            <p className="mt-3 truncate text-sm text-slate-400">{connected ? detail : 'Not connected'}</p>
         </div>
     );
 }

@@ -3,7 +3,7 @@ import { EncryptionService } from '@deployforge/security';
 import { SSHConnectionError, SSHService } from '@deployforge/vps';
 import { config } from '../config/env';
 
-const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(config.encryption.key);
 
 export type VpsAuthType = 'password' | 'key';
 

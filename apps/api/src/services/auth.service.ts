@@ -4,19 +4,19 @@ import { MailService } from '@deployforge/mail';
 import { config } from '../config/env';
 import crypto from 'crypto';
 
-const tokenService = new TokenService(config.JWT_SECRET);
+const tokenService = new TokenService(config.auth.jwtSecret);
 const mailService = new MailService({
-    host: config.SMTP_HOST,
-    port: config.SMTP_PORT,
-    secure: config.SMTP_SECURE,
+    host: config.email.smtp.host,
+    port: config.email.smtp.port,
+    secure: config.email.smtp.secure,
     auth: {
-        user: config.SMTP_USER,
-        pass: config.SMTP_PASS,
+        user: config.email.smtp.user,
+        pass: config.email.smtp.pass,
     },
 });
 
 export class AuthService {
-    static async issueSession(user: any, authProvider: 'local' | 'github', userAgent?: string, ipAddress?: string) {
+    static async issueSession(user: any, authProvider: 'local' | 'github' | 'google', userAgent?: string, ipAddress?: string) {
         const accessToken = tokenService.generateAccessToken({
             userId: user.id,
             role: user.role || 'USER',
@@ -30,6 +30,7 @@ export class AuthService {
             data: {
                 userId: user.id,
                 refreshToken: hashedRefreshToken,
+                authProvider,
                 userAgent,
                 ipAddress,
                 expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -51,6 +52,8 @@ export class AuthService {
                 email,
                 passwordHash,
                 name,
+                provider: 'email',
+                authProvider: 'local',
                 isVerified: false,
             },
         });
@@ -82,7 +85,7 @@ export class AuthService {
             await mailService.sendOTP(email, otp);
             return {};
         } catch (error) {
-            if (config.NODE_ENV !== 'development' && config.NODE_ENV !== 'test') {
+            if (config.app.env !== 'development' && config.app.env !== 'test') {
                 throw error;
             }
 
@@ -143,7 +146,7 @@ export class AuthService {
         const accessToken = tokenService.generateAccessToken({
             userId: session.userId,
             role: session.user.role || 'USER',
-            authProvider: session.user.provider === 'github' ? 'github' : 'local',
+            authProvider: session.authProvider === 'github' || session.authProvider === 'google' ? session.authProvider : 'local',
             tokenType: 'user',
         });
         return { accessToken };

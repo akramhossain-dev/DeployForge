@@ -7,7 +7,7 @@ import { config } from '../config/env';
 import { DeploymentService } from '../services/deployment.service';
 import { GitHubService } from '../services/github.service';
 
-const adminTokenService = new TokenService(config.ADMIN_JWT_SECRET);
+const adminTokenService = new TokenService(config.auth.adminJwtSecret);
 
 const adminLoginSchema = z.object({
     email: z.string().email(),
@@ -182,7 +182,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     fastify.post('/create-user', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request, reply) => {
         const data = createAdminSchema.parse(request.body);
-        if (data.adminSecret !== config.ADMIN_SECRET) {
+        if (data.adminSecret !== config.auth.adminSecret) {
             return error(reply, 403, 'Invalid admin secret', 'INVALID_ADMIN_SECRET');
         }
 
@@ -440,11 +440,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return {
             success: true,
             data: {
-                smtp: { host: process.env.SMTP_HOST || '', port: process.env.SMTP_PORT || '', secure: process.env.SMTP_SECURE === 'true', userConfigured: Boolean(process.env.SMTP_USER) },
-                github: { clientIdConfigured: Boolean(process.env.GITHUB_CLIENT_ID), clientSecretConfigured: Boolean(process.env.GITHUB_CLIENT_SECRET), redirectUri: process.env.GITHUB_REDIRECT_URI || '' },
-                queue: { redisConfigured: Boolean(process.env.REDIS_URL), maxAttempts: 3 },
-                security: { jwtConfigured: Boolean(process.env.JWT_SECRET), adminJwtConfigured: Boolean(process.env.ADMIN_JWT_SECRET), adminSecretConfigured: Boolean(process.env.ADMIN_SECRET), encryptionConfigured: Boolean(process.env.ENCRYPTION_KEY) },
-                app: { appUrl: process.env.APP_URL || '', nodeEnv: process.env.NODE_ENV || 'development' },
+                smtp: { host: config.email.smtp.host, port: config.email.smtp.port, secure: config.email.smtp.secure, userConfigured: Boolean(config.email.smtp.user) },
+                github: { clientIdConfigured: Boolean(config.oauth.github.clientId), clientSecretConfigured: Boolean(config.oauth.github.clientSecret), callbackUrl: config.oauth.github.callbackUrl },
+                google: { enabled: config.oauth.google.enabled, clientIdConfigured: Boolean(config.oauth.google.clientId), clientSecretConfigured: Boolean(config.oauth.google.clientSecret), callbackUrl: config.oauth.google.callbackUrl },
+                queue: { redisConfigured: Boolean(config.redis.url), maxAttempts: 3 },
+                security: { jwtConfigured: Boolean(config.auth.jwtSecret), adminJwtConfigured: Boolean(config.auth.adminJwtSecret), adminSecretConfigured: Boolean(config.auth.adminSecret), encryptionConfigured: Boolean(config.encryption.key) },
+                app: { appUrl: config.app.appUrl, nodeEnv: config.app.env },
             },
         };
     });

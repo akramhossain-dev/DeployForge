@@ -3,7 +3,7 @@ import { SSHService } from '@deployforge/vps';
 import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 
-const encryptionService = new EncryptionService(config.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(config.encryption.key);
 
 export class MonitoringService {
     static async collectMetrics(vpsId: string) {
