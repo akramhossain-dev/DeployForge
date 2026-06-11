@@ -39,6 +39,7 @@ export default function DeploymentDetailsPage() {
     const isPaused = current?.status === 'PAUSED';
     const isStopped = current?.status === 'STOPPED';
     const isDeleted = current?.status === 'DELETED';
+    const isSandbox = current?.mode === 'sandbox';
 
     async function confirmDelete() {
         await deleteDeployment.mutateAsync(id);
@@ -57,11 +58,12 @@ export default function DeploymentDetailsPage() {
                 action={
                     !isDeleted ? (
                         <div className="flex flex-wrap gap-2">
-                            {isStopped ? <Button variant="secondary" onClick={() => start.mutate(id)} loading={start.isPending}><Play size={16} /> Start</Button> : null}
-                            {isPaused ? <Button variant="secondary" onClick={() => resume.mutate(id)} loading={resume.isPending}><Play size={16} /> Resume</Button> : null}
-                            {isRunning ? <Button variant="secondary" onClick={() => stop.mutate(id)} loading={stop.isPending}><Square size={16} /> Stop</Button> : null}
-                            {isRunning ? <Button variant="secondary" onClick={() => pauseDeployment.mutate(id)} loading={pauseDeployment.isPending}><Pause size={16} /> Pause</Button> : null}
-                            {isRunning ? (
+                            {isSandbox && isRunning ? <Button variant="danger" onClick={() => stop.mutate(id)} loading={stop.isPending}><Square size={16} /> Stop Sandbox</Button> : null}
+                            {!isSandbox && isStopped ? <Button variant="secondary" onClick={() => start.mutate(id)} loading={start.isPending}><Play size={16} /> Start</Button> : null}
+                            {!isSandbox && isPaused ? <Button variant="secondary" onClick={() => resume.mutate(id)} loading={resume.isPending}><Play size={16} /> Resume</Button> : null}
+                            {!isSandbox && isRunning ? <Button variant="secondary" onClick={() => stop.mutate(id)} loading={stop.isPending}><Square size={16} /> Stop</Button> : null}
+                            {!isSandbox && isRunning ? <Button variant="secondary" onClick={() => pauseDeployment.mutate(id)} loading={pauseDeployment.isPending}><Pause size={16} /> Pause</Button> : null}
+                            {!isSandbox && isRunning ? (
                                 <Button
                                     variant="secondary"
                                     onClick={() => restart.mutate(id)}
@@ -72,7 +74,7 @@ export default function DeploymentDetailsPage() {
                                     <RefreshCw size={16} /> Restart
                                 </Button>
                             ) : null}
-                            <Button
+                            {!isSandbox ? <Button
                                 variant="danger"
                                 onClick={() => rollback.mutate({ id })}
                                 loading={rollback.isPending}
@@ -80,7 +82,7 @@ export default function DeploymentDetailsPage() {
                                 title={canRollback ? 'Rollback GitHub deployment' : 'Rollback is not supported for upload deployments'}
                             >
                                 <RotateCcw size={16} /> Rollback
-                            </Button>
+                            </Button> : null}
                             <Button variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 size={16} /> Delete</Button>
                         </div>
                     ) : null
@@ -100,9 +102,10 @@ export default function DeploymentDetailsPage() {
                 <SkeletonBlock className="h-96" />
             ) : current ? (
                 <>
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
                         <Panel><Metric label="Status" value={<StatusBadge status={current.status} />} /></Panel>
                         <Panel><Metric label="Source" value={<span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs uppercase text-slate-200">{sourceType}</span>} /></Panel>
+                        <Panel><Metric label="Mode" value={<span className={isSandbox ? 'rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-xs uppercase text-amber-100' : 'rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs uppercase text-slate-200'}>{isSandbox ? 'Temporary Environment' : 'Production'}</span>} /></Panel>
                         <Panel><Metric label="Container" value={current.containerId ? `${current.containerId.slice(0, 12)}...` : 'pending'} /></Panel>
                         <Panel><Metric label="Port" value={current.port || 'pending'} /></Panel>
                     </div>
@@ -112,7 +115,7 @@ export default function DeploymentDetailsPage() {
                             <div className="min-w-0">
                                 <p className="text-xs font-black uppercase text-slate-500">Active URL</p>
                                 <p className="mt-2 truncate font-mono text-sm text-cyan-100">{activeUrl || 'Pending host assignment'}</p>
-                                <p className="mt-1 text-xs text-slate-500">{current.hostType === 'domain' ? 'Domain routing' : 'IP fallback hosting'}</p>
+                                <p className="mt-1 text-xs text-slate-500">{isSandbox ? 'Sandbox direct port - auto cleanup after timeout or stop' : current.hostType === 'domain' ? 'Domain routing' : 'IP fallback hosting'}</p>
                             </div>
                             <Button variant="secondary" disabled={!activeUrl} onClick={() => activeUrl && navigator.clipboard.writeText(activeUrl)}><Copy size={16} /> Copy</Button>
                         </div>
@@ -160,10 +163,10 @@ export default function DeploymentDetailsPage() {
                             <Panel>
                                 <h2 className="font-black text-white">Available Actions</h2>
                                 <div className="mt-4 space-y-2 text-sm">
-                                    <ActionRow label="Restart" enabled />
-                                    <ActionRow label="Rollback" enabled={canRollback} />
-                                    <ActionRow label="View commits" enabled={canRollback} />
-                                    <ActionRow label="Webhook deploy" enabled={canRollback} />
+                                    <ActionRow label="Restart" enabled={!isSandbox} />
+                                    <ActionRow label="Rollback" enabled={!isSandbox && canRollback} />
+                                    <ActionRow label="View commits" enabled={!isSandbox && canRollback} />
+                                    <ActionRow label="Webhook deploy" enabled={!isSandbox && canRollback} />
                                 </div>
                             </Panel>
                             <Panel>

@@ -13,6 +13,7 @@ const encryptionService = new EncryptionService(config.encryption.key);
 type DeploymentStatus = 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'PAUSED' | 'DELETING' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED';
 type ProjectKind = 'DOCKER' | 'NEXTJS' | 'VITE_REACT' | 'NODE_API' | 'NODEJS' | 'STATIC';
 type SourceType = 'github' | 'upload';
+type DeploymentMode = 'production' | 'sandbox';
 
 export type GitHubDeploymentSource = {
     type: 'github_repo';
@@ -25,6 +26,7 @@ export type GitHubDeploymentSource = {
     skipWebhookRegistration?: boolean;
     domainName?: string;
     env?: Record<string, string>;
+    mode?: DeploymentMode;
 };
 
 export type UploadedFileDeploymentSource = {
@@ -35,6 +37,7 @@ export type UploadedFileDeploymentSource = {
     originalFileName: string;
     domainName?: string;
     env?: Record<string, string>;
+    mode?: DeploymentMode;
 };
 
 export type DeploymentSource = GitHubDeploymentSource | UploadedFileDeploymentSource;
@@ -68,6 +71,7 @@ export class DeploymentService {
                 skipWebhookRegistration: source.skipWebhookRegistration,
                 domainName: source.domainName,
                 env: source.env,
+                mode: source.mode,
             });
         }
 
@@ -76,14 +80,16 @@ export class DeploymentService {
             originalFileName: source.originalFileName,
             domainName: source.domainName,
             env: source.env,
+            mode: source.mode,
         });
     }
 
-    static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: Record<string, string> } = {}) {
+    static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: Record<string, string>; mode?: DeploymentMode } = {}) {
         const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
         const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
         if (!project || !vps) throw new DeploymentError('pending', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
-        const domainName = await this.validateDomainSelection(userId, metadata.domainName);
+        const mode = metadata.mode === 'sandbox' ? 'sandbox' : 'production';
+        const domainName = mode === 'sandbox' ? undefined : await this.validateDomainSelection(userId, metadata.domainName);
         const encryptedEnv = this.encryptEnv(metadata.env);
 
         const githubAccount = await prisma.gitHubAccount.findUnique({ where: { userId } });
@@ -108,14 +114,15 @@ export class DeploymentService {
                 env: encryptedEnv,
                 domain: domainName || null,
                 hostType: domainName ? 'domain' : 'ip',
+                mode,
             },
         });
 
-        if (!metadata.skipWebhookRegistration) {
+        if (mode === 'production' && !metadata.skipWebhookRegistration) {
             await this.ensureRepositoryWebhook(userId, project.repositoryUrl, deployment.id);
         }
 
-        await LoggingService.log(deployment.id, `Deployment queued from GitHub for ${project.repositoryUrl} on branch ${branch}`, 'system');
+        await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from GitHub for ${project.repositoryUrl} on branch ${branch}` : `Deployment queued from GitHub for ${project.repositoryUrl} on branch ${branch}`, 'system');
         await deploymentQueue.add('deploy', {
             deploymentId: deployment.id,
             source: {
@@ -128,19 +135,21 @@ export class DeploymentService {
                 commitMessage: metadata.commitMessage,
                 domainName,
                 env: metadata.env,
+                mode,
             } satisfies GitHubDeploymentSource,
         }, {
-            jobId: `deploy-${projectId}-${branch}-${Date.now()}`,
+            jobId: `${mode === 'sandbox' ? 'sandbox' : 'deploy'}-${projectId}-${branch}-${Date.now()}`,
         });
 
         return deployment;
     }
 
-    static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: Record<string, string> }) {
+    static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: Record<string, string>; mode?: DeploymentMode }) {
         const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
         const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
         if (!project || !vps) throw new DeploymentError('uploading', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
-        const domainName = await this.validateDomainSelection(userId, upload.domainName);
+        const mode = upload.mode === 'sandbox' ? 'sandbox' : 'production';
+        const domainName = mode === 'sandbox' ? undefined : await this.validateDomainSelection(userId, upload.domainName);
         const encryptedEnv = this.encryptEnv(upload.env);
 
         this.validateUploadFile(upload.originalFileName);
@@ -161,6 +170,7 @@ export class DeploymentService {
                 env: encryptedEnv,
                 domain: domainName || null,
                 hostType: domainName ? 'domain' : 'ip',
+                mode,
             },
         });
 
@@ -170,7 +180,7 @@ export class DeploymentService {
             data: { uploadPath: uploadWorkspace.archivePath },
         });
 
-        await LoggingService.log(deployment.id, `Deployment queued from uploaded archive ${upload.originalFileName}`, 'system');
+        await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from uploaded archive ${upload.originalFileName}` : `Deployment queued from uploaded archive ${upload.originalFileName}`, 'system');
         await deploymentQueue.add('deploy', {
             deploymentId: deployment.id,
             source: {
@@ -181,9 +191,10 @@ export class DeploymentService {
                 originalFileName: uploadWorkspace.archiveName,
                 domainName,
                 env: upload.env,
+                mode,
             } satisfies UploadedFileDeploymentSource,
         }, {
-            jobId: `deploy-upload-${projectId}-${Date.now()}`,
+            jobId: `${mode === 'sandbox' ? 'sandbox-upload' : 'deploy-upload'}-${projectId}-${Date.now()}`,
         });
 
         return deployment;
@@ -209,6 +220,7 @@ export class DeploymentService {
         const dockerName = `df-${safeProjectName}-${deploymentId.slice(0, 8)}`;
         const imageTag = `deployforge/${safeProjectName}:${releaseId}`;
         const domainName = source.domainName?.trim();
+        const isSandbox = deployment.mode === 'sandbox' || source.mode === 'sandbox';
         let createdContainerId = '';
         let routingAttempted = false;
 
@@ -250,14 +262,18 @@ export class DeploymentService {
             await this.buildImage(ssh, deploymentId, workDir, imageTag, detected);
 
             await this.setStatus(deploymentId, 'DEPLOYING');
-            await LoggingService.log(deploymentId, 'Creating deployment container', 'system');
+            await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
             await this.assertRemotePortAvailable(ssh, deploymentId, deployment.port);
             createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, deployment.port, detected.appPort, hasEnv);
             await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
-            routingAttempted = true;
-            await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, deployment.port, Boolean(domainName));
-            if (domainName) {
-                await this.persistDomainBinding(deploymentId, vps.id, domainName);
+            if (!isSandbox) {
+                routingAttempted = true;
+                await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, deployment.port, Boolean(domainName));
+                if (domainName) {
+                    await this.persistDomainBinding(deploymentId, vps.id, domainName);
+                }
+            } else {
+                await LoggingService.log(deploymentId, `Sandbox direct port mode active at http://${vps.ipAddress}:${deployment.port}`, 'system', 'warn');
             }
             await this.healthCheck(ssh, deploymentId, deployment.port);
 
@@ -268,27 +284,40 @@ export class DeploymentService {
                     containerId: createdContainerId,
                     commitHash: source.type === 'github_repo' ? source.commitHash : deployment.commitHash,
                     commitMessage: source.type === 'github_repo' ? source.commitMessage : deployment.commitMessage,
-                    lastStableVersion: source.type === 'github_repo' ? source.commitHash || source.branch : releaseId,
+                    lastStableVersion: isSandbox ? imageTag : source.type === 'github_repo' ? source.commitHash || source.branch : releaseId,
                 },
             });
 
-            await prisma.deploymentHistory.create({
-                data: {
-                    deploymentId,
-                    version: source.type === 'github_repo' ? source.commitHash || source.branch : releaseId,
-                    containerId: createdContainerId,
-                    imageTag,
-                    status: 'SUCCESS',
-                    env: deployment.env,
-                },
-            });
-            await LoggingService.log(deploymentId, `Deployment running on port ${deployment.port}`, 'system');
+            if (!isSandbox) {
+                await prisma.deploymentHistory.create({
+                    data: {
+                        deploymentId,
+                        version: source.type === 'github_repo' ? source.commitHash || source.branch : releaseId,
+                        containerId: createdContainerId,
+                        imageTag,
+                        status: 'SUCCESS',
+                        env: deployment.env,
+                    },
+                });
+                await LoggingService.log(deploymentId, `Deployment running on port ${deployment.port}`, 'system');
+            } else {
+                await LoggingService.log(deploymentId, `Sandbox running on port ${deployment.port}; auto cleanup scheduled in 30 minutes`, 'system');
+                await deploymentQueue.add('sandbox-cleanup', { deploymentId }, {
+                    jobId: `sandbox-cleanup-${deploymentId}`,
+                    delay: 30 * 60 * 1000,
+                    attempts: 1,
+                });
+            }
         } catch (err: any) {
             const stage = err.stage || 'deploying';
             const message = err.message || 'Deployment failed';
             if (createdContainerId) {
                 await this.captureContainerLogs(ssh, deploymentId, createdContainerId);
                 await this.removeContainerQuietly(ssh, deploymentId, createdContainerId);
+            }
+            if (isSandbox) {
+                await this.cleanupDeploymentWorkspace(deploymentId, source.type === 'uploaded_file' ? source.uploadPath : undefined);
+                await this.removeImageIfExists(ssh, imageTag);
             }
             if (routingAttempted) {
                 await this.cleanupNginx(ssh, deploymentId, domainName ? [domainName] : []);
@@ -335,6 +364,9 @@ export class DeploymentService {
             include: { vps: true, project: true },
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        if (deployment.mode === 'sandbox') {
+            return this.deleteDeployment(userId, deploymentId);
+        }
         this.assertLifecycleTransition(deployment.status, 'STOPPED');
         if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no running container', 'NO_RUNNING_CONTAINER');
 
@@ -386,7 +418,7 @@ export class DeploymentService {
     static async deleteDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId, userId },
-            include: { vps: true, domains: true, history: true },
+            include: { vps: true, domains: true, history: true, project: true },
         });
         if (!deployment) throw new DeploymentError('delete', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
         if (deployment.status === 'DELETED') return { success: true, deleted: true };
@@ -407,11 +439,15 @@ export class DeploymentService {
             if (deployment.containerId) {
                 await this.removeContainerIfExists(ssh, deploymentId, deployment.containerId, 'Removed deployment container');
             }
-            const imageTags = Array.from(new Set(deployment.history.map((item: any) => item.imageTag).filter(Boolean)));
+            const imageTags = Array.from(new Set([
+                ...deployment.history.map((item: any) => item.imageTag).filter(Boolean),
+                deployment.lastStableVersion?.startsWith('deployforge/') ? deployment.lastStableVersion : null,
+            ].filter(Boolean)));
             for (const imageTag of imageTags) {
                 await this.removeImageIfExists(ssh, imageTag);
             }
             await this.cleanupNginx(ssh, deploymentId, deployment.domains.map((domain: any) => domain.domainName));
+            await this.cleanupRemoteWorkspace(ssh, deployment);
             await this.cleanupDeploymentWorkspace(deploymentId, deployment.uploadPath);
 
             await this.logLifecycle(deploymentId, userId, 'deployment_deleted', 'success');
@@ -781,6 +817,14 @@ export class DeploymentService {
         if (uploadPath && uploadPath.startsWith('/tmp/deployforge/deployments/')) {
             await fs.rm(path.dirname(uploadPath), { recursive: true, force: true }).catch(() => undefined);
         }
+    }
+
+    private static async cleanupRemoteWorkspace(ssh: SSHService, deployment: any) {
+        const safeProjectName = sanitizeName(deployment.project?.name || deployment.name || 'project');
+        const baseDir = `/home/${shellPath(deployment.vps.username)}/deployforge/${safeProjectName}`;
+        const releasePattern = `${baseDir}/releases/*-${deployment.id.slice(0, 8)}`;
+        const command = `rm -rf ${releasePattern}; if [ -L ${shellQuote(`${baseDir}/current`)} ] && readlink ${shellQuote(`${baseDir}/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/current`)}; fi`;
+        await ssh.execute(command).catch(() => undefined);
     }
 
     private static async verifyContainerRunningOnly(ssh: SSHService, deploymentId: string, containerId: string) {

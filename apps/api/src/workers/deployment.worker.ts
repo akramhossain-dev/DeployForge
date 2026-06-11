@@ -7,6 +7,13 @@ export const deploymentWorker = new Worker(
     'deployment-queue',
     async (job) => {
         const { deploymentId, source } = job.data;
+        if (job.name === 'sandbox-cleanup') {
+            const deployment = await prisma.deployment.findUnique({ where: { id: deploymentId }, select: { id: true, userId: true, mode: true, status: true } });
+            if (deployment?.mode === 'sandbox' && deployment.status !== 'DELETED') {
+                await DeploymentService.deleteDeployment(deployment.userId, deploymentId);
+            }
+            return;
+        }
 
         // Create a job record in DB
         const jobRecord = await prisma.deploymentJob.create({

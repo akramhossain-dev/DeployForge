@@ -18,6 +18,7 @@ const githubDeploySchema = z.object({
     vpsId: z.string().uuid(),
     branch: z.string().default('main'),
     environment: z.enum(['production', 'development']).optional(),
+    mode: z.enum(['production', 'sandbox']).optional().default('production'),
     autoDeploy: z.boolean().optional().default(true),
     domainName: z.string().trim().optional(),
     env: z.record(z.string()).optional().default({}),
@@ -27,7 +28,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     // 1. GitHub Deployment
     fastify.post('/github', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         try {
-            const { projectId, repositoryId, vpsId, branch, autoDeploy, domainName, env } = githubDeploySchema.parse(request.body);
+            const { projectId, repositoryId, vpsId, branch, autoDeploy, domainName, env, mode } = githubDeploySchema.parse(request.body);
             const project = projectId
                 ? await prisma.project.findFirst({ where: { id: projectId, userId: request.user.id } })
                 : await projectFromRepository(request.user.id, repositoryId, branch);
@@ -41,9 +42,10 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 projectId: project.id,
                 vpsId,
                 branch,
-                skipWebhookRegistration: !autoDeploy,
-                domainName: domainName || undefined,
+                skipWebhookRegistration: mode === 'sandbox' || !autoDeploy,
+                domainName: mode === 'sandbox' ? undefined : domainName || undefined,
                 env,
+                mode,
             });
             return { success: true, data: deployment };
         } catch (err: any) {
@@ -64,6 +66,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
             const domainName = fields.domainName || '';
             const projectName = fields.name || path.basename(safeName).replace(/\.(zip|tar\.gz|tgz)$/i, '');
             const env = parseEnvField(fields.env);
+            const mode = fields.mode === 'sandbox' ? 'sandbox' : 'production';
 
             if (!vpsId) {
                 return reply.status(400).send({ success: false, stage: 'uploading', message: 'vpsId is required', errorCode: 'VPS_REQUIRED' });
@@ -94,8 +97,9 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 vpsId,
                 uploadPath,
                 originalFileName: safeName,
-                domainName: domainName || undefined,
+                domainName: mode === 'sandbox' ? undefined : domainName || undefined,
                 env,
+                mode,
             });
 
             return { success: true, data: deployment };

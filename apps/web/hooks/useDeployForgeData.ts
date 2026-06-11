@@ -183,7 +183,7 @@ export function useDomains(enabled = true) {
 export function useCreateGithubDeployment() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (payload: { repositoryId: string; vpsId: string; branch: string; environment: 'production' | 'development'; autoDeploy: boolean; domainName?: string; env?: Record<string, string> }) =>
+        mutationFn: (payload: { repositoryId: string; vpsId: string; branch: string; environment: 'production' | 'development'; autoDeploy: boolean; domainName?: string; env?: Record<string, string>; mode?: 'production' | 'sandbox' }) =>
             api.post<Deployment>('/deploy/github', payload),
         onSuccess: (deployment) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
@@ -195,11 +195,12 @@ export function useCreateGithubDeployment() {
 export function useCreateUploadDeployment() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (payload: { file: File; vpsId: string; projectId?: string; name: string; environment: 'production' | 'development'; domainName?: string; env?: Record<string, string> }) => {
+        mutationFn: (payload: { file: File; vpsId: string; projectId?: string; name: string; environment: 'production' | 'development'; domainName?: string; env?: Record<string, string>; mode?: 'production' | 'sandbox' }) => {
             const form = new FormData();
             form.set('vpsId', payload.vpsId);
             form.set('name', payload.name);
             form.set('environment', payload.environment);
+            form.set('mode', payload.mode || 'production');
             if (payload.projectId) form.set('projectId', payload.projectId);
             if (payload.domainName) form.set('domainName', payload.domainName);
             if (payload.env && Object.keys(payload.env).length > 0) form.set('env', JSON.stringify(payload.env));

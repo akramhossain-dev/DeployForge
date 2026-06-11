@@ -8,6 +8,7 @@ import { useCreateGithubDeployment, useCreateUploadDeployment, useRepositories, 
 
 type EnvName = 'production' | 'development';
 type EnvRow = { id: string; key: string; value: string };
+type ExecutionMode = 'production' | 'sandbox';
 
 export default function NewDeploymentPage() {
     const [tab, setTab] = useState<'github' | 'upload'>('github');
@@ -43,6 +44,7 @@ function GithubDeployForm() {
     const [autoDeploy, setAutoDeploy] = useState(true);
     const [hostType, setHostType] = useState<'ip' | 'domain'>('ip');
     const [domainName, setDomainName] = useState('');
+    const [mode, setMode] = useState<ExecutionMode>('production');
     const [useEnv, setUseEnv] = useState(false);
     const [envRows, setEnvRows] = useState<EnvRow[]>([]);
 
@@ -52,7 +54,7 @@ function GithubDeployForm() {
     const domainInvalid = hostType === 'domain' && !isValidDomainInput(domainName);
 
     async function submit() {
-        const deployment = await deploy.mutateAsync({ repositoryId, vpsId, branch, environment, autoDeploy, domainName: hostType === 'domain' ? domainName : undefined, env: useEnv ? envRowsToRecord(envRows) : {} });
+        const deployment = await deploy.mutateAsync({ repositoryId, vpsId, branch, environment, autoDeploy, domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined, env: useEnv ? envRowsToRecord(envRows) : {}, mode });
         router.push(`/deployments/${deployment.id}`);
     }
 
@@ -98,25 +100,33 @@ function GithubDeployForm() {
                 </div>
                 <StatusBadge status={selectedRepo?.webhookId ? 'RUNNING' : 'PENDING'} />
             </div>
+            <ExecutionModeSelector mode={mode} setMode={setMode} />
             <label className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/[0.05] p-4">
                 <span>
                     <span className="block font-black text-white">Auto Deploy on Push</span>
                     <span className="mt-1 block text-sm text-slate-400">Register a GitHub webhook when this deployment starts.</span>
                 </span>
-                <input type="checkbox" checked={autoDeploy} onChange={(event) => setAutoDeploy(event.target.checked)} className="h-5 w-5 accent-cyan-300" />
+                <input type="checkbox" checked={autoDeploy && mode === 'production'} disabled={mode === 'sandbox'} onChange={(event) => setAutoDeploy(event.target.checked)} className="h-5 w-5 accent-cyan-300" />
             </label>
-            <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100">
-                Rollback enabled: GitHub deployments keep commit and image version history for CI/CD recovery.
+            <div className={mode === 'sandbox' ? 'rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100' : 'rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100'}>
+                {mode === 'sandbox' ? 'Temporary environment: no webhook, domain binding, rollback, or permanent container commitment.' : 'Rollback enabled: GitHub deployments keep commit and image version history for CI/CD recovery.'}
             </div>
-            <HostingConfiguration
-                hostType={hostType}
-                setHostType={setHostType}
-                domainName={domainName}
-                setDomainName={setDomainName}
-                ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
-            />
+            {mode === 'production' ? (
+                <HostingConfiguration
+                    hostType={hostType}
+                    setHostType={setHostType}
+                    domainName={domainName}
+                    setDomainName={setDomainName}
+                    ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
+                />
+            ) : (
+                <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-400">
+                    <p className="font-black text-white">Sandbox Networking</p>
+                    <p className="mt-1">Sandbox runs use direct ephemeral port access and skip Nginx/domain routing.</p>
+                </div>
+            )}
             <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} />
-            <Button onClick={submit} loading={deploy.isPending} disabled={!repositoryId || !vpsId || domainInvalid || (useEnv && hasInvalidEnvRows(envRows))}><Github size={16} /> Deploy repository</Button>
+            <Button onClick={submit} loading={deploy.isPending} disabled={!repositoryId || !vpsId || (mode === 'production' && domainInvalid) || (useEnv && hasInvalidEnvRows(envRows))}><Github size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy repository'}</Button>
         </Panel>
     );
 }
@@ -131,6 +141,7 @@ function UploadDeployForm() {
     const [vpsId, setVpsId] = useState('');
     const [hostType, setHostType] = useState<'ip' | 'domain'>('ip');
     const [domainName, setDomainName] = useState('');
+    const [mode, setMode] = useState<ExecutionMode>('production');
     const [useEnv, setUseEnv] = useState(false);
     const [envRows, setEnvRows] = useState<EnvRow[]>([]);
 
@@ -141,7 +152,7 @@ function UploadDeployForm() {
 
     async function submit() {
         if (!file) return;
-        const deployment = await deploy.mutateAsync({ file, vpsId, name: projectName || file.name.replace(/\.(zip|tar\.gz|tgz)$/i, ''), environment, domainName: hostType === 'domain' ? domainName : undefined, env: useEnv ? envRowsToRecord(envRows) : {} });
+        const deployment = await deploy.mutateAsync({ file, vpsId, name: projectName || file.name.replace(/\.(zip|tar\.gz|tgz)$/i, ''), environment, domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined, env: useEnv ? envRowsToRecord(envRows) : {}, mode });
         router.push(`/deployments/${deployment.id}`);
     }
 
@@ -187,15 +198,23 @@ function UploadDeployForm() {
                 <p className="font-black text-white">Manual Deployment</p>
                 <p className="mt-1">Upload deployments support logs, restart, and restoring the last container snapshot. Git commit rollback, webhooks, and branch switching are disabled.</p>
             </div>
-            <HostingConfiguration
-                hostType={hostType}
-                setHostType={setHostType}
-                domainName={domainName}
-                setDomainName={setDomainName}
-                ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
-            />
+            <ExecutionModeSelector mode={mode} setMode={setMode} />
+            {mode === 'production' ? (
+                <HostingConfiguration
+                    hostType={hostType}
+                    setHostType={setHostType}
+                    domainName={domainName}
+                    setDomainName={setDomainName}
+                    ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
+                />
+            ) : (
+                <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-400">
+                    <p className="font-black text-white">Sandbox Networking</p>
+                    <p className="mt-1">Sandbox runs use direct ephemeral port access and skip Nginx/domain routing.</p>
+                </div>
+            )}
             <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} />
-            <Button onClick={submit} loading={deploy.isPending} disabled={!isValid || !vpsId || domainInvalid || (useEnv && hasInvalidEnvRows(envRows))}><PackagePlus size={16} /> Deploy upload</Button>
+            <Button onClick={submit} loading={deploy.isPending} disabled={!isValid || !vpsId || (mode === 'production' && domainInvalid) || (useEnv && hasInvalidEnvRows(envRows))}><PackagePlus size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy upload'}</Button>
         </Panel>
     );
 }
@@ -245,6 +264,30 @@ function HostingConfiguration({
                     <span className={domainInvalid ? 'mt-2 block text-sm text-rose-200' : 'mt-2 block text-sm text-slate-400'}>
                         {domainInvalid ? 'Enter a valid domain without http://, spaces, or paths.' : domainName ? `http://${domainName}` : 'Root domains and subdomains are supported.'}
                     </span>
+                </label>
+            </div>
+        </div>
+    );
+}
+
+function ExecutionModeSelector({ mode, setMode }: { mode: ExecutionMode; setMode: (mode: ExecutionMode) => void }) {
+    return (
+        <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4">
+            <p className="font-black text-white">Execution Mode</p>
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <label className={mode === 'production' ? 'rounded-lg border border-cyan-300/30 bg-cyan-300/10 p-4' : 'rounded-lg border border-white/10 bg-white/[0.04] p-4'}>
+                    <span className="flex items-center gap-3 font-black text-white">
+                        <input type="radio" checked={mode === 'production'} onChange={() => setMode('production')} className="accent-cyan-300" />
+                        Production Deployment
+                    </span>
+                    <span className="mt-2 block text-sm text-slate-400">Persistent container, domain routing, rollback, and lifecycle controls.</span>
+                </label>
+                <label className={mode === 'sandbox' ? 'rounded-lg border border-amber-300/30 bg-amber-300/10 p-4' : 'rounded-lg border border-white/10 bg-white/[0.04] p-4'}>
+                    <span className="flex items-center gap-3 font-black text-white">
+                        <input type="radio" checked={mode === 'sandbox'} onChange={() => setMode('sandbox')} className="accent-cyan-300" />
+                        Sandbox Run
+                    </span>
+                    <span className="mt-2 block text-sm text-slate-400">Temporary test container with direct port access and auto cleanup.</span>
                 </label>
             </div>
         </div>

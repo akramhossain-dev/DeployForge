@@ -257,6 +257,7 @@ model Deployment {
   lastStableVersion String?
   domain        String?
   hostType      String   @default("ip") // ip | domain
+  mode          String   @default("production") // production | sandbox
   logs          Log[]
   deploymentLogs DeploymentLog[]
   history       DeploymentHistory[]
@@ -272,6 +273,7 @@ model Deployment {
   @@index([sourceType])
   @@index([domain])
   @@index([hostType])
+  @@index([mode])
 }
 
 model DeploymentJob {

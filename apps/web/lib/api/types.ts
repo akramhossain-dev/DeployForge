@@ -118,6 +118,7 @@ export type Deployment = {
     framework?: string | null;
     port?: number | null;
     sourceType?: 'github' | 'upload' | string;
+    mode?: 'production' | 'sandbox' | string;
     repoUrl?: string | null;
     branch?: string | null;
     uploadPath?: string | null;
