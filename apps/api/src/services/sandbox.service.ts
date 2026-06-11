@@ -70,12 +70,6 @@ export class SandboxService {
                 score -= 10;
             }
 
-            // 5. Env Validation (20 points)
-            if (!deployment.env || deployment.env === '{}') {
-                issues.push('No environment variables provided');
-                score -= 10;
-            }
-
             const status = score < 60 ? 'rejected' : score < 80 ? 'warning' : 'approved';
 
             return await prisma.deploymentSandbox.upsert({

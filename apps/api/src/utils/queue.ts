@@ -7,7 +7,7 @@ export const redisConnection = new IORedis(config.redis.url, {
 });
 
 export const deploymentQueue = new Queue('deployment-queue', {
-    connection: redisConnection,
+    connection: redisConnection as any,
     defaultJobOptions: {
         attempts: 3,
         backoff: {
@@ -20,7 +20,7 @@ export const deploymentQueue = new Queue('deployment-queue', {
 });
 
 export const webhookQueue = new Queue('webhook-queue', {
-    connection: redisConnection,
+    connection: redisConnection as any,
     defaultJobOptions: {
         removeOnComplete: true,
         removeOnFail: false,

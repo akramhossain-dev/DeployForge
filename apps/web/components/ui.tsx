@@ -110,12 +110,14 @@ export function ErrorState({
 export function StatusBadge({ status }: { status?: string }) {
     const normalized = (status || 'UNKNOWN').toUpperCase();
     const color =
-        normalized === 'RUNNING' || normalized === 'ACTIVE' || normalized === 'SUCCESS'
+        normalized === 'RUNNING' || normalized === 'ROLLED_BACK' || normalized === 'ACTIVE' || normalized === 'SUCCESS'
             ? 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/20'
-            : normalized === 'BUILDING' || normalized === 'PENDING' || normalized === 'QUEUED'
+            : normalized === 'BUILDING' || normalized === 'PENDING' || normalized === 'QUEUED' || normalized === 'CLONING' || normalized === 'UPLOADING' || normalized === 'EXTRACTING' || normalized === 'DEPLOYING'
               ? 'bg-cyan-400/10 text-cyan-300 ring-cyan-400/20'
-              : normalized === 'FAILED' || normalized === 'ERROR'
+              : normalized === 'FAILED' || normalized === 'ERROR' || normalized === 'BROKEN'
                 ? 'bg-rose-400/10 text-rose-300 ring-rose-400/20'
+                : normalized === 'DELETED'
+                  ? 'bg-slate-800 text-slate-400 ring-slate-700'
                 : 'bg-slate-700/40 text-slate-300 ring-slate-600';
 
     return <span className={clsx('inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black uppercase ring-1', color)}>{normalized}</span>;

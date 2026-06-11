@@ -42,6 +42,8 @@ export type Repository = {
     createdAt: string;
 };
 
+export type DeploymentState = 'idle' | 'pending' | 'cloning' | 'uploading' | 'building' | 'deploying' | 'running' | 'failed' | 'rolled_back' | 'stopped' | string;
+
 export type VpsHealth = {
     id?: string;
     cpuUsage: number;
@@ -63,6 +65,18 @@ export type Vps = {
     status: 'active' | 'inactive' | 'failed' | 'ACTIVE' | 'INACTIVE' | 'ERROR' | string;
     lastCheckedAt?: string | null;
     healthRecords?: VpsHealth[];
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type Domain = {
+    id: string;
+    deploymentId: string;
+    vpsId: string;
+    domainName: string;
+    status: string;
+    sslStatus?: string;
+    nginxConfigPath?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -100,13 +114,28 @@ export type Project = {
 export type Deployment = {
     id: string;
     name?: string | null;
-    status: 'PENDING' | 'BUILDING' | 'RUNNING' | 'FAILED' | 'STOPPED' | string;
+    status: 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'BROKEN' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED' | string;
     framework?: string | null;
     port?: number | null;
+    sourceType?: 'github' | 'upload' | string;
+    repoUrl?: string | null;
+    branch?: string | null;
+    uploadPath?: string | null;
     commitHash?: string | null;
     commitMessage?: string | null;
+    lastStableVersion?: string | null;
     project?: Project | null;
     vps?: Vps | null;
+    containerId?: string | null;
+    buildCommand?: string | null;
+    startCommand?: string | null;
+    deploymentLogs?: DeploymentLog[];
+    domains?: Domain[];
+    history?: Array<{ id: string; version: string; imageTag?: string | null; status: string; createdAt: string }>;
+    envPreview?: Array<{ key: string; value: string }>;
+    hostType?: 'domain' | 'ip';
+    domain?: string | null;
+    url?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -114,6 +143,7 @@ export type Deployment = {
 export type DeploymentLog = {
     id: string;
     level?: string;
+    type?: string;
     message?: string;
     output?: string;
     createdAt?: string;

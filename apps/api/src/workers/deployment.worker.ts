@@ -6,7 +6,7 @@ import prisma from '@deployforge/database';
 export const deploymentWorker = new Worker(
     'deployment-queue',
     async (job) => {
-        const { deploymentId, projectId, vpsId, branch, accessToken } = job.data;
+        const { deploymentId, source } = job.data;
 
         // Create a job record in DB
         const jobRecord = await prisma.deploymentJob.create({
@@ -17,20 +17,8 @@ export const deploymentWorker = new Worker(
         });
 
         try {
-            const project = await prisma.project.findUnique({ where: { id: projectId } });
-            const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
-
-            if (!project || !vps) throw new Error('Project or VPS not found');
-
-            // Execute actual deployment logic from Phase 5
-            // (Mapping back to the execution method in DeploymentService)
-            await (DeploymentService as any).executeDeployment(
-                deploymentId,
-                project,
-                vps,
-                branch,
-                accessToken
-            );
+            if (!source?.type) throw new Error('Deployment source is missing');
+            await DeploymentService.executeDeployment(deploymentId, source);
 
             await prisma.deploymentJob.update({
                 where: { id: jobRecord.id },
@@ -38,6 +26,10 @@ export const deploymentWorker = new Worker(
             });
 
         } catch (err: any) {
+            await prisma.deployment.update({
+                where: { id: deploymentId },
+                data: { status: 'FAILED' },
+            }).catch(() => undefined);
             await prisma.deploymentJob.update({
                 where: { id: jobRecord.id },
                 data: {
@@ -50,7 +42,7 @@ export const deploymentWorker = new Worker(
         }
     },
     {
-        connection: redisConnection,
+        connection: redisConnection as any,
         concurrency: 5, // Limit concurrent deployments
     }
 );

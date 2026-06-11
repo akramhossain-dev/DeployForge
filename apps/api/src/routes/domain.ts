@@ -28,6 +28,7 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         const domains = await prisma.domain.findMany({
             where: { deployment: { userId: request.user.id } },
             include: { deployment: true },
+            orderBy: { createdAt: 'desc' },
         });
         return { success: true, data: domains };
     });

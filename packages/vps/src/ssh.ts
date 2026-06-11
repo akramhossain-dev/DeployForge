@@ -1,4 +1,5 @@
 import { Client, ClientChannel, ConnectConfig, PseudoTtyOptions } from 'ssh2';
+import fs from 'node:fs';
 
 export interface SSHConfig extends ConnectConfig {
     host: string;
@@ -85,6 +86,30 @@ export class SSHService {
                     .stderr.on('data', (data: Buffer) => {
                         stderr += data.toString();
                     });
+            });
+        });
+    }
+
+    async uploadFile(localPath: string, remotePath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.client.sftp((err, sftp) => {
+                if (err) return reject(err);
+                const readStream = fs.createReadStream(localPath);
+                const writeStream = sftp.createWriteStream(remotePath, { mode: 0o600 });
+
+                const fail = (error: Error) => {
+                    readStream.destroy();
+                    writeStream.destroy();
+                    reject(error);
+                };
+
+                readStream.once('error', fail);
+                writeStream.once('error', fail);
+                writeStream.once('close', () => {
+                    sftp.end();
+                    resolve();
+                });
+                readStream.pipe(writeStream);
             });
         });
     }

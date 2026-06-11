@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { config, validateOAuthConfig } from './config/env';
 
@@ -16,6 +17,16 @@ const app = Fastify({
 export async function buildApp() {
     validateOAuthConfig(app.log);
 
+    app.removeContentTypeParser('application/json');
+    app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+        (request as any).rawBody = body;
+        try {
+            done(null, body ? JSON.parse(body as string) : {});
+        } catch (error: any) {
+            done(error, undefined);
+        }
+    });
+
     // Security Plugins
     await app.register(helmet, { contentSecurityPolicy: false });
     await app.register(cors, {
@@ -29,6 +40,14 @@ export async function buildApp() {
             message: 'Rate limit exceeded. Please try again later.'
         })
     });
+    await app.register(multipart, {
+        limits: {
+            fileSize: 250 * 1024 * 1024,
+            files: 1,
+            fields: 20,
+        },
+    });
+    await app.register(import('@fastify/websocket'));
 
     // Custom Plugins
     await app.register(import('./plugins/auth'));
@@ -45,12 +64,12 @@ export async function buildApp() {
     await app.register(import('./routes/webhooks'), { prefix: '/webhooks' });
     await app.register(import('./routes/vps'), { prefix: '/vps' });
     await app.register(import('./routes/deploy'), { prefix: '/deploy' });
+    await app.register(import('./routes/deployments'), { prefix: '/deployments' });
+    await app.register(import('./routes/ws'), { prefix: '/ws' });
     await app.register(import('./routes/sandbox'), { prefix: '/sandbox' });
     await app.register(import('./routes/domain'), { prefix: '/domain' });
     await app.register(import('./routes/monitoring'), { prefix: '/monitor' });
 
-    // WebSockets
-    await app.register(import('@fastify/websocket'));
     await app.register(import('./routes/terminal'), { prefix: '/terminal' });
 
     // Global Error Handler

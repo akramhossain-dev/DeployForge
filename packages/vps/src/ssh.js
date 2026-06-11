@@ -1,7 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SSHService = exports.SSHConnectionError = void 0;
 const ssh2_1 = require("ssh2");
+const node_fs_1 = __importDefault(require("node:fs"));
 class SSHConnectionError extends Error {
     code;
     constructor(message, code) {
@@ -69,6 +73,28 @@ class SSHService {
                     .stderr.on('data', (data) => {
                     stderr += data.toString();
                 });
+            });
+        });
+    }
+    async uploadFile(localPath, remotePath) {
+        return new Promise((resolve, reject) => {
+            this.client.sftp((err, sftp) => {
+                if (err)
+                    return reject(err);
+                const readStream = node_fs_1.default.createReadStream(localPath);
+                const writeStream = sftp.createWriteStream(remotePath, { mode: 0o600 });
+                const fail = (error) => {
+                    readStream.destroy();
+                    writeStream.destroy();
+                    reject(error);
+                };
+                readStream.once('error', fail);
+                writeStream.once('error', fail);
+                writeStream.once('close', () => {
+                    sftp.end();
+                    resolve();
+                });
+                readStream.pipe(writeStream);
             });
         });
     }

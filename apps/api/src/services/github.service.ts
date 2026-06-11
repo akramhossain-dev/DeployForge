@@ -402,12 +402,16 @@ export class GitHubService {
 
         const data = await response.json() as any;
         if (!response.ok) {
+            const details = Array.isArray(data.errors)
+                ? data.errors.map((item: any) => [item.resource, item.field, item.code, item.message].filter(Boolean).join(' ')).filter(Boolean).join('; ')
+                : '';
+            const message = [data.message, details].filter(Boolean).join(': ');
             console.error('[github:webhook] webhook creation failed', {
                 repoFullName,
                 status: response.status,
-                message: data.message,
+                message,
             });
-            throw new Error(data.message || 'Unable to create GitHub webhook');
+            throw new Error(message || 'Unable to create GitHub webhook');
         }
         if (data.id) {
             await prisma.repository.updateMany({
@@ -419,8 +423,12 @@ export class GitHubService {
     }
 
     static verifySignature(payload: string, signature: string) {
+        if (!signature?.startsWith('sha256=')) return false;
         const hmac = crypto.createHmac('sha256', config.oauth.github.webhookSecret);
         const digest = 'sha256=' + hmac.update(payload).digest('hex');
-        return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest));
+        const signatureBuffer = Buffer.from(signature);
+        const digestBuffer = Buffer.from(digest);
+        if (signatureBuffer.length !== digestBuffer.length) return false;
+        return crypto.timingSafeEqual(signatureBuffer, digestBuffer);
     }
 }

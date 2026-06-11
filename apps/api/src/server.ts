@@ -1,5 +1,6 @@
 import { buildApp } from './app';
 import { config } from './config/env';
+import './workers/deployment.worker';
 
 async function start() {
     const app = await buildApp();

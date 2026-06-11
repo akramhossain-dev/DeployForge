@@ -68,8 +68,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const token = getToken(path);
     const headers = new Headers(init.headers);
     const method = init.method || 'GET';
+    const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
 
-    if (!headers.has('Content-Type') && init.body) {
+    if (!headers.has('Content-Type') && init.body && !isFormData) {
         headers.set('Content-Type', 'application/json');
     }
     if (token) {
@@ -120,7 +121,7 @@ export const api = {
     baseUrl: API_URL,
     get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'GET' }),
     post: <T>(path: string, body?: unknown, init?: RequestInit) =>
-        request<T>(path, { ...init, method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+        request<T>(path, { ...init, method: 'POST', body: typeof FormData !== 'undefined' && body instanceof FormData ? body : body ? JSON.stringify(body) : undefined }),
     patch: <T>(path: string, body?: unknown, init?: RequestInit) =>
         request<T>(path, { ...init, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
     delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'DELETE' }),

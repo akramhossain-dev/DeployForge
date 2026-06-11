@@ -248,8 +248,13 @@ model Deployment {
   startCommand  String?
   env           String?  // Encrypted JSON
   containerId   String?
+  sourceType    String   @default("github") // github | upload
+  repoUrl       String?
+  branch        String?
+  uploadPath    String?
   commitHash    String?
   commitMessage String?
+  lastStableVersion String?
   logs          Log[]
   deploymentLogs DeploymentLog[]
   history       DeploymentHistory[]
@@ -262,6 +267,7 @@ model Deployment {
   @@index([userId])
   @@index([projectId])
   @@index([vpsId])
+  @@index([sourceType])
 }
 
 model DeploymentJob {

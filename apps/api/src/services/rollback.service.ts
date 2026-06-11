@@ -14,17 +14,29 @@ export class RollbackService {
         });
     }
 
-    static async rollback(userId: string, deploymentId: string, historyId: string) {
+    static async rollback(userId: string, deploymentId: string, historyId?: string) {
         const deployment = await prisma.deployment.findUnique({
             where: { id: deploymentId },
             include: { vps: true, project: true },
         });
         if (!deployment || deployment.userId !== userId) throw new Error('Deployment not found');
+        const sourceType = deployment.sourceType || (deployment.project.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
+        if (sourceType !== 'github') {
+            const error = new Error('Rollback is not supported for upload deployments. Restart the last successful container instead.') as Error & { errorCode?: string; stage?: string };
+            error.errorCode = 'ROLLBACK_NOT_SUPPORTED';
+            error.stage = 'rollback';
+            throw error;
+        }
 
-        const history = await prisma.deploymentHistory.findUnique({
-            where: { id: historyId },
-        });
+        const history = historyId
+            ? await prisma.deploymentHistory.findUnique({ where: { id: historyId } })
+            : await prisma.deploymentHistory.findFirst({
+                where: { deploymentId, status: 'SUCCESS', imageTag: { not: null } },
+                orderBy: { createdAt: 'desc' },
+                skip: deployment.status === 'RUNNING' ? 1 : 0,
+            });
         if (!history) throw new Error('History version not found');
+        if (!history.imageTag) throw new Error('History version does not contain a rollback image');
 
         const vps = deployment.vps;
         const ssh = new SSHService();
@@ -44,21 +56,32 @@ export class RollbackService {
 
             // 1. Stop current container
             if (deployment.containerId) {
-                await ssh.execute(`docker stop ${deployment.containerId} && docker rm ${deployment.containerId} || true`);
+                await removeContainerIfExists(ssh, deployment.containerId);
             }
 
-            // 2. Restart previous container
-            // If we saved image Tag, we can run it. For now we use containerId or re-run last known good image.
-            const containerName = `df-${deployment.project.name}-${deploymentId.slice(0, 8)}`;
-            const { stdout: newContainerId } = await ssh.execute(`docker run -d --name ${containerName} -p ${deployment.port}:3000 ${history.containerId}`);
+            const containerName = `df-${deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${deploymentId.slice(0, 8)}`;
+            const appPort = ['STATIC', 'VITE_REACT'].includes(deployment.framework || '') ? 80 : 3000;
+            await removeContainerIfExists(ssh, containerName);
+            const { stdout: newContainerId } = await ssh.execute(`docker run -d --name ${shellQuote(containerName)} --restart unless-stopped --security-opt no-new-privileges --cap-drop ALL -p ${deployment.port}:${appPort} ${shellQuote(history.imageTag)}`);
 
             // 3. Update DB
             await prisma.deployment.update({
                 where: { id: deploymentId },
                 data: {
-                    status: 'RUNNING',
+                    status: 'ROLLED_BACK',
                     containerId: newContainerId.trim(),
                     commitHash: history.version
+                },
+            });
+
+            await prisma.deploymentHistory.create({
+                data: {
+                    deploymentId,
+                    version: history.version,
+                    containerId: newContainerId.trim(),
+                    imageTag: history.imageTag,
+                    status: 'ROLLED_BACK',
+                    env: history.env,
                 },
             });
 
@@ -77,4 +100,14 @@ export class RollbackService {
         const [iv, tag, content] = encryptedString.split(':');
         return encryptionService.decrypt({ iv, tag, content });
     }
+}
+
+async function removeContainerIfExists(ssh: SSHService, containerIdOrName: string) {
+    const inspect = await ssh.execute(`docker inspect ${shellQuote(containerIdOrName)} >/dev/null 2>&1`).catch(() => null);
+    if (inspect?.code !== 0) return;
+    await ssh.execute(`docker rm -f ${shellQuote(containerIdOrName)} >/dev/null 2>&1`);
+}
+
+function shellQuote(value: string | number) {
+    return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
