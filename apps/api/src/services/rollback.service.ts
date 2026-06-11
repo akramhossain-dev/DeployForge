@@ -27,6 +27,12 @@ export class RollbackService {
             error.stage = 'rollback';
             throw error;
         }
+        if (deployment.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '')) {
+            const error = new Error('Static deployments use artifact publishing and do not have container images to roll back yet.') as Error & { errorCode?: string; stage?: string };
+            error.errorCode = 'STATIC_ROLLBACK_NOT_SUPPORTED';
+            error.stage = 'rollback';
+            throw error;
+        }
 
         const history = historyId
             ? await prisma.deploymentHistory.findUnique({ where: { id: historyId } })
@@ -60,7 +66,7 @@ export class RollbackService {
             }
 
             const containerName = `df-${deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${deploymentId.slice(0, 8)}`;
-            const appPort = ['STATIC', 'VITE_REACT'].includes(deployment.framework || '') ? 80 : 3000;
+            const appPort = ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '') ? 80 : 3000;
             await removeContainerIfExists(ssh, containerName);
             const { stdout: newContainerId } = await ssh.execute(`docker run -d --name ${shellQuote(containerName)} --restart unless-stopped --security-opt no-new-privileges --cap-drop ALL -p ${deployment.port}:${appPort} ${shellQuote(history.imageTag)}`);
 

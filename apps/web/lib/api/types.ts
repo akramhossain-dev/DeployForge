@@ -116,6 +116,7 @@ export type Deployment = {
     name?: string | null;
     status: 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'PAUSED' | 'FAILED' | 'ROLLED_BACK' | 'STOPPED' | 'DELETING' | 'DELETED' | string;
     framework?: string | null;
+    type?: 'STATIC' | 'SERVER' | 'FULLSTACK' | string;
     port?: number | null;
     sourceType?: 'github' | 'upload' | string;
     mode?: 'production' | 'sandbox' | string;

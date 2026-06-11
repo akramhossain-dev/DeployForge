@@ -11,9 +11,16 @@ import path from 'node:path';
 const encryptionService = new EncryptionService(config.encryption.key);
 
 type DeploymentStatus = 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'PAUSED' | 'DELETING' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED';
-type ProjectKind = 'DOCKER' | 'NEXTJS' | 'VITE_REACT' | 'NODE_API' | 'NODEJS' | 'STATIC';
+type ProjectKind = 'DOCKER' | 'NEXTJS' | 'ASTRO' | 'VITE_REACT' | 'NODE_API' | 'NODEJS' | 'STATIC';
 type SourceType = 'github' | 'upload';
 type DeploymentMode = 'production' | 'sandbox';
+type DeploymentRuntimeType = 'STATIC' | 'SERVER' | 'FULLSTACK';
+type StaticHostingResult = {
+    url: string;
+    port: number | null;
+    hostType: 'domain' | 'ip';
+    domainActivated: boolean;
+};
 
 export type GitHubDeploymentSource = {
     type: 'github_repo';
@@ -44,6 +51,7 @@ export type DeploymentSource = GitHubDeploymentSource | UploadedFileDeploymentSo
 
 type DetectedProject = {
     framework: ProjectKind;
+    deploymentType: DeploymentRuntimeType;
     buildCommand: string;
     startCommand: string;
     appPort: number;
@@ -96,14 +104,13 @@ export class DeploymentService {
         if (!githubAccount) throw new DeploymentError('pending', 'GitHub account not connected', 'GITHUB_NOT_CONNECTED');
 
         const accessToken = this.decrypt(githubAccount.accessToken);
-        const port = await this.getAvailablePort(vpsId, vps);
         const deployment = await prisma.deployment.create({
             data: {
                 userId,
                 projectId,
                 vpsId,
                 status: 'PENDING',
-                port,
+                port: null,
                 name: `${sanitizeName(project.name)}-${Date.now()}`,
                 sourceType: 'github',
                 repoUrl: project.repositoryUrl,
@@ -153,14 +160,13 @@ export class DeploymentService {
         const encryptedEnv = this.encryptEnv(upload.env);
 
         this.validateUploadFile(upload.originalFileName);
-        const port = await this.getAvailablePort(vpsId, vps);
         const deployment = await prisma.deployment.create({
             data: {
                 userId,
                 projectId,
                 vpsId,
                 status: 'PENDING',
-                port,
+                port: null,
                 name: `${sanitizeName(project.name)}-${Date.now()}`,
                 sourceType: 'upload',
                 repoUrl: null,
@@ -205,7 +211,7 @@ export class DeploymentService {
             where: { id: deploymentId },
             include: { project: true, vps: true },
         });
-        if (!deployment?.port) throw new DeploymentError('pending', 'Deployment port is not assigned', 'PORT_NOT_ASSIGNED');
+        if (!deployment) throw new DeploymentError('pending', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
         this.assertSourceMatches(deployment.sourceType as SourceType, source);
 
         const ssh = new SSHService();
@@ -216,13 +222,16 @@ export class DeploymentService {
         const baseDir = `/home/${shellPath(vps.username)}/deployforge/${safeProjectName}`;
         const releasesDir = `${baseDir}/releases`;
         const workDir = `${releasesDir}/${releaseId}`;
+        const staticDir = `${baseDir}/static/${releaseId}`;
         const currentLink = `${baseDir}/current`;
+        const currentStaticLink = `${baseDir}/static/current`;
         const dockerName = `df-${safeProjectName}-${deploymentId.slice(0, 8)}`;
         const imageTag = `deployforge/${safeProjectName}:${releaseId}`;
         const domainName = source.domainName?.trim();
         const isSandbox = deployment.mode === 'sandbox' || source.mode === 'sandbox';
         let createdContainerId = '';
         let routingAttempted = false;
+        let staticHosting: StaticHostingResult | null = null;
 
         try {
             await this.setStatus(deploymentId, source.type === 'github_repo' ? 'CLONING' : 'UPLOADING');
@@ -251,6 +260,7 @@ export class DeploymentService {
                 where: { id: deploymentId },
                 data: {
                     framework: detected.framework,
+                    type: detected.deploymentType,
                     buildCommand: detected.buildCommand,
                     startCommand: detected.startCommand,
                 },
@@ -258,33 +268,54 @@ export class DeploymentService {
 
             const hasEnv = await this.injectEnvironment(ssh, deploymentId, workDir, deployment.env);
             await this.setStatus(deploymentId, 'BUILDING');
-            await LoggingService.log(deploymentId, 'Building deployment image', 'build');
-            await this.buildImage(ssh, deploymentId, workDir, imageTag, detected);
+            if (detected.deploymentType === 'STATIC') {
+                await LoggingService.log(deploymentId, 'Building static artifact without Docker', 'build');
+                await this.buildStaticArtifact(ssh, deploymentId, workDir, staticDir, detected, hasEnv);
 
-            await this.setStatus(deploymentId, 'DEPLOYING');
-            await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
-            await this.assertRemotePortAvailable(ssh, deploymentId, deployment.port);
-            createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, deployment.port, detected.appPort, hasEnv);
-            await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
-            if (!isSandbox) {
+                await this.setStatus(deploymentId, 'DEPLOYING');
+                await this.run(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(`${baseDir}/static`)} && ln -sfn ${shellQuote(staticDir)} ${shellQuote(currentStaticLink)}`);
+                await LoggingService.log(deploymentId, isSandbox ? 'Publishing sandbox static artifact' : 'Publishing static artifact through shared static hosting', 'system');
                 routingAttempted = true;
-                await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, deployment.port, Boolean(domainName));
-                if (domainName) {
+                staticHosting = await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, staticDir, Boolean(domainName), vps.ipAddress);
+                if (domainName && staticHosting.domainActivated) {
                     await this.persistDomainBinding(deploymentId, vps.id, domainName);
                 }
+                await this.healthCheckStatic(ssh, deploymentId, staticHosting);
             } else {
-                await LoggingService.log(deploymentId, `Sandbox direct port mode active at http://${vps.ipAddress}:${deployment.port}`, 'system', 'warn');
+                const port = deployment.port || await this.getAvailablePort(deployment.vpsId, vps);
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { port } });
+                deployment.port = port;
+                await LoggingService.log(deploymentId, 'Building deployment image', 'build');
+                await this.buildImage(ssh, deploymentId, workDir, imageTag, detected);
+
+                await this.setStatus(deploymentId, 'DEPLOYING');
+                await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
+                await this.assertRemotePortAvailable(ssh, deploymentId, port);
+                createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, port, detected.appPort, hasEnv);
+                await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
+                if (!isSandbox) {
+                    routingAttempted = true;
+                    await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, port, Boolean(domainName));
+                    if (domainName) {
+                        await this.persistDomainBinding(deploymentId, vps.id, domainName);
+                    }
+                } else {
+                    await LoggingService.log(deploymentId, `Sandbox direct port mode active at http://${vps.ipAddress}:${port}`, 'system', 'warn');
+                }
+                await this.healthCheck(ssh, deploymentId, port);
             }
-            await this.healthCheck(ssh, deploymentId, deployment.port);
 
             await prisma.deployment.update({
                 where: { id: deploymentId },
                 data: {
                     status: 'RUNNING',
-                    containerId: createdContainerId,
+                    containerId: createdContainerId || null,
+                    port: staticHosting ? staticHosting.port : deployment.port,
+                    domain: staticHosting?.domainActivated ? domainName || null : detected.deploymentType === 'STATIC' ? null : deployment.domain,
+                    hostType: staticHosting ? staticHosting.hostType : deployment.hostType,
                     commitHash: source.type === 'github_repo' ? source.commitHash : deployment.commitHash,
                     commitMessage: source.type === 'github_repo' ? source.commitMessage : deployment.commitMessage,
-                    lastStableVersion: isSandbox ? imageTag : source.type === 'github_repo' ? source.commitHash || source.branch : releaseId,
+                    lastStableVersion: detected.deploymentType === 'STATIC' ? releaseId : isSandbox ? imageTag : source.type === 'github_repo' ? source.commitHash || source.branch : releaseId,
                 },
             });
 
@@ -293,15 +324,15 @@ export class DeploymentService {
                     data: {
                         deploymentId,
                         version: source.type === 'github_repo' ? source.commitHash || source.branch : releaseId,
-                        containerId: createdContainerId,
-                        imageTag,
+                        containerId: createdContainerId || null,
+                        imageTag: detected.deploymentType === 'STATIC' ? null : imageTag,
                         status: 'SUCCESS',
                         env: deployment.env,
                     },
                 });
-                await LoggingService.log(deploymentId, `Deployment running on port ${deployment.port}`, 'system');
+                await LoggingService.log(deploymentId, detected.deploymentType === 'STATIC' ? 'Static deployment running through shared nginx' : `Deployment running on port ${deployment.port}`, 'system');
             } else {
-                await LoggingService.log(deploymentId, `Sandbox running on port ${deployment.port}; auto cleanup scheduled in 30 minutes`, 'system');
+                await LoggingService.log(deploymentId, detected.deploymentType === 'STATIC' ? 'Static sandbox running through shared nginx; auto cleanup scheduled in 30 minutes' : `Sandbox running on port ${deployment.port}; auto cleanup scheduled in 30 minutes`, 'system');
                 await deploymentQueue.add('sandbox-cleanup', { deploymentId }, {
                     jobId: `sandbox-cleanup-${deploymentId}`,
                     delay: 30 * 60 * 1000,
@@ -368,7 +399,6 @@ export class DeploymentService {
             return this.deleteDeployment(userId, deploymentId);
         }
         this.assertLifecycleTransition(deployment.status, 'STOPPED');
-        if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no running container', 'NO_RUNNING_CONTAINER');
 
         const ssh = new SSHService();
         try {
@@ -378,7 +408,12 @@ export class DeploymentService {
                 username: deployment.vps.username,
                 ...this.getVpsAuth(deployment.vps),
             });
-            await this.stopContainerIfExists(ssh, deploymentId, deployment.containerId);
+            if (this.isStaticDeployment(deployment)) {
+                await this.cleanupNginx(ssh, deploymentId, []);
+            } else {
+                if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no running container', 'NO_RUNNING_CONTAINER');
+                await this.stopContainerIfExists(ssh, deploymentId, deployment.containerId);
+            }
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'STOPPED' } });
             await this.logLifecycle(deploymentId, userId, 'deployment_stopped', 'success');
         } finally {
@@ -389,11 +424,10 @@ export class DeploymentService {
     static async pauseDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId, userId },
-            include: { vps: true },
+            include: { vps: true, project: true },
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
         this.assertLifecycleTransition(deployment.status, 'PAUSED');
-        if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no running container', 'NO_RUNNING_CONTAINER');
 
         const ssh = new SSHService();
         try {
@@ -403,11 +437,16 @@ export class DeploymentService {
                 username: deployment.vps.username,
                 ...this.getVpsAuth(deployment.vps),
             });
-            if (!(await this.containerExists(ssh, deployment.containerId))) {
-                await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null } });
-                throw new DeploymentError('container_sync', 'Container reference is missing on the server.', 'CONTAINER_NOT_FOUND');
+            if (this.isStaticDeployment(deployment)) {
+                await this.cleanupNginx(ssh, deploymentId, []);
+            } else {
+                if (!deployment.containerId) throw new DeploymentError('deploying', 'Deployment has no running container', 'NO_RUNNING_CONTAINER');
+                if (!(await this.containerExists(ssh, deployment.containerId))) {
+                    await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null } });
+                    throw new DeploymentError('container_sync', 'Container reference is missing on the server.', 'CONTAINER_NOT_FOUND');
+                }
+                await this.run(ssh, deploymentId, 'system', `docker pause ${shellQuote(deployment.containerId)}`, 'deploying', 'CONTAINER_PAUSE_FAILED');
             }
-            await this.run(ssh, deploymentId, 'system', `docker pause ${shellQuote(deployment.containerId)}`, 'deploying', 'CONTAINER_PAUSE_FAILED');
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'PAUSED' } });
             await this.logLifecycle(deploymentId, userId, 'deployment_paused', 'success');
         } finally {
@@ -477,7 +516,7 @@ export class DeploymentService {
     static async resumeDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId, userId },
-            include: { vps: true, domains: true, project: true, history: { where: { imageTag: { not: null } }, orderBy: { createdAt: 'desc' }, take: 1 } },
+            include: { vps: true, domains: true, project: true, history: { orderBy: { createdAt: 'desc' }, take: 1 } },
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
         this.assertLifecycleTransition(deployment.status, 'RUNNING');
@@ -490,7 +529,18 @@ export class DeploymentService {
                 username: deployment.vps.username,
                 ...this.getVpsAuth(deployment.vps),
             });
-            if (deployment.containerId && await this.containerExists(ssh, deployment.containerId)) {
+            if (this.isStaticDeployment(deployment)) {
+                const staticDir = this.staticArtifactDir(deployment, deployment.lastStableVersion || deployment.history[0]?.version);
+                const exists = await ssh.execute(`test -f ${shellQuote(`${staticDir}/index.html`)}`).catch(() => null);
+                if (exists?.code !== 0) {
+                    await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED' } });
+                    throw new DeploymentError('static_hosting', 'Static artifact snapshot is missing on the server.', 'STATIC_ARTIFACT_NOT_FOUND');
+                }
+                const host = deployment.domain || deployment.vps.ipAddress;
+                const staticHosting = await this.configureStaticHosting(ssh, deploymentId, host, staticDir, deployment.hostType === 'domain', deployment.vps.ipAddress);
+                await this.healthCheckStatic(ssh, deploymentId, staticHosting);
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { port: staticHosting.port, domain: staticHosting.domainActivated ? deployment.domain : null, hostType: staticHosting.hostType } });
+            } else if (deployment.containerId && await this.containerExists(ssh, deployment.containerId)) {
                 if (deployment.status === 'PAUSED') {
                     await this.run(ssh, deploymentId, 'system', `docker unpause ${shellQuote(deployment.containerId)}`, 'deploying', 'CONTAINER_START_FAILED');
                 } else {
@@ -501,7 +551,7 @@ export class DeploymentService {
                 const port = await this.getAvailablePort(deployment.vpsId, deployment.vps);
                 const safeProjectName = sanitizeName(deployment.project.name);
                 const dockerName = `df-${safeProjectName}-${deploymentId.slice(0, 8)}`;
-                const appPort = ['STATIC', 'VITE_REACT'].includes(deployment.framework || '') ? 80 : 3000;
+                const appPort = ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '') ? 80 : 3000;
                 const resumeDir = `/tmp/deployforge-resume-${deploymentId}`;
                 await this.run(ssh, deploymentId, 'system', `rm -rf ${shellQuote(resumeDir)} && mkdir -p ${shellQuote(resumeDir)}`);
                 const hasEnv = await this.injectEnvironment(ssh, deploymentId, resumeDir, deployment.env);
@@ -516,7 +566,7 @@ export class DeploymentService {
             }
 
             const host = deployment.domain || deployment.vps.ipAddress;
-            if (deployment.port) {
+            if (!this.isStaticDeployment(deployment) && deployment.port) {
                 await this.configureNginx(ssh, deploymentId, host, deployment.port, deployment.hostType === 'domain');
             }
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'RUNNING' } });
@@ -534,10 +584,10 @@ export class DeploymentService {
     static async restartDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId, userId },
-            include: { vps: true },
+            include: { vps: true, project: true },
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
-        if (!deployment.containerId) {
+        if (!this.isStaticDeployment(deployment) && !deployment.containerId) {
             throw new DeploymentError('deploying', 'No active container found. Deployment was never started successfully.', 'NO_CONTAINER');
         }
         if (deployment.status !== 'RUNNING') {
@@ -553,15 +603,29 @@ export class DeploymentService {
                 ...this.getVpsAuth(deployment.vps),
             });
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'DEPLOYING' } });
-            await LoggingService.log(deploymentId, 'Restarting deployment container', 'system');
-            const inspect = await ssh.execute(`docker inspect ${shellQuote(deployment.containerId)} >/dev/null 2>&1`);
-            if (inspect.code !== 0) {
-                await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null } });
-                throw new DeploymentError('container_sync', 'Container reference is missing on the server.', 'CONTAINER_NOT_FOUND');
+            if (this.isStaticDeployment(deployment)) {
+                await LoggingService.log(deploymentId, 'Refreshing static deployment routing', 'system');
+                const staticDir = this.staticArtifactDir(deployment, deployment.lastStableVersion);
+                const exists = await ssh.execute(`test -f ${shellQuote(`${staticDir}/index.html`)}`).catch(() => null);
+                if (exists?.code !== 0) {
+                    await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED' } });
+                    throw new DeploymentError('static_hosting', 'Static artifact snapshot is missing on the server.', 'STATIC_ARTIFACT_NOT_FOUND');
+                }
+                const host = deployment.domain || deployment.vps.ipAddress;
+                const staticHosting = await this.configureStaticHosting(ssh, deploymentId, host, staticDir, deployment.hostType === 'domain', deployment.vps.ipAddress);
+                await this.healthCheckStatic(ssh, deploymentId, staticHosting);
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { port: staticHosting.port, domain: staticHosting.domainActivated ? deployment.domain : null, hostType: staticHosting.hostType } });
+            } else {
+                await LoggingService.log(deploymentId, 'Restarting deployment container', 'system');
+                const inspect = await ssh.execute(`docker inspect ${shellQuote(deployment.containerId!)} >/dev/null 2>&1`);
+                if (inspect.code !== 0) {
+                    await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED', containerId: null } });
+                    throw new DeploymentError('container_sync', 'Container reference is missing on the server.', 'CONTAINER_NOT_FOUND');
+                }
+                await this.run(ssh, deploymentId, 'system', `docker restart ${shellQuote(deployment.containerId!)}`, 'deploying', 'DOCKER_RESTART_FAILED');
             }
-            await this.run(ssh, deploymentId, 'system', `docker restart ${shellQuote(deployment.containerId)}`, 'deploying', 'DOCKER_RESTART_FAILED');
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'RUNNING' } });
-            await LoggingService.log(deploymentId, 'Deployment container restarted', 'system');
+            await LoggingService.log(deploymentId, this.isStaticDeployment(deployment) ? 'Static deployment routing refreshed' : 'Deployment container restarted', 'system');
         } catch (err: any) {
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'FAILED' } });
             await LoggingService.log(deploymentId, `Restart failed: ${err.message}`, 'error', 'error');
@@ -650,7 +714,7 @@ export class DeploymentService {
 
         if (hasDockerfile) {
             await LoggingService.log(deploymentId, 'Detected Docker project', 'build');
-            return { framework: 'DOCKER', buildCommand: 'docker build', startCommand: 'docker run', appPort: 3000, dockerfileAlreadyPresent: true };
+            return { framework: 'DOCKER', deploymentType: 'SERVER', buildCommand: 'docker build', startCommand: 'docker run', appPort: 3000, dockerfileAlreadyPresent: true };
         }
 
         if (!hasPackageJson) {
@@ -659,11 +723,11 @@ export class DeploymentService {
                 throw new DeploymentError('building', 'Project type could not be detected. package.json, Dockerfile, or static HTML entrypoint is required.', 'PROJECT_TYPE_MISMATCH');
             }
             await LoggingService.log(deploymentId, 'Detected static HTML project', 'build');
-            return { framework: 'STATIC', buildCommand: '', startCommand: 'nginx', appPort: 80, dockerfileAlreadyPresent: false };
+            return { framework: 'STATIC', deploymentType: 'STATIC', buildCommand: '', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false };
         }
 
-        const { stdout: pkgRaw } = await this.run(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && python3 - <<'PY'\nimport json\nwith open('package.json') as f:\n    p=json.load(f)\ndeps={}\ndeps.update(p.get('dependencies') or {})\ndeps.update(p.get('devDependencies') or {})\nprint(json.dumps({'scripts': p.get('scripts') or {}, 'deps': deps}))\nPY`, 'building', 'PACKAGE_PARSE_FAILED');
-        let pkg: { scripts: Record<string, string>; deps: Record<string, string> };
+        const { stdout: pkgRaw } = await this.run(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && python3 - <<'PY'\nimport json\nwith open('package.json') as f:\n    p=json.load(f)\ndeps={}\ndeps.update(p.get('dependencies') or {})\ndeps.update(p.get('devDependencies') or {})\nprint(json.dumps({'scripts': p.get('scripts') or {}, 'deps': deps, 'main': p.get('main') or ''}))\nPY`, 'building', 'PACKAGE_PARSE_FAILED');
+        let pkg: { scripts: Record<string, string>; deps: Record<string, string>; main?: string };
         try {
             pkg = JSON.parse(pkgRaw.trim());
         } catch {
@@ -675,18 +739,23 @@ export class DeploymentService {
         if (pkg.deps.next || hasNextConfig || scriptHasNext) {
             const startCommand = pkg.scripts.start ? 'npm run start' : 'npx next start -H 0.0.0.0 -p 3000';
             await LoggingService.log(deploymentId, 'Detected Next.js project; using Node runtime', 'build');
-            return { framework: 'NEXTJS', buildCommand: 'npm ci && npm run build', startCommand, appPort: 3000, dockerfileAlreadyPresent: false };
+            return { framework: 'NEXTJS', deploymentType: 'FULLSTACK', buildCommand: 'npm ci && npm run build', startCommand, appPort: 3000, dockerfileAlreadyPresent: false };
+        }
+        if (pkg.deps.astro || scriptValues.some((script) => /\bastro\b/.test(script))) {
+            await LoggingService.log(deploymentId, 'Detected Astro/static project; using static file runtime', 'build');
+            return { framework: 'ASTRO', deploymentType: 'STATIC', buildCommand: pkg.scripts.build ? 'npm ci && npm run build' : 'npm ci', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false };
         }
         if (pkg.deps.vite || pkg.deps['@vitejs/plugin-react'] || pkg.deps.react) {
-            return { framework: 'VITE_REACT', buildCommand: 'npm ci && npm run build', startCommand: 'nginx', appPort: 80, dockerfileAlreadyPresent: false };
+            await LoggingService.log(deploymentId, 'Detected Vite/React static project; using static file runtime', 'build');
+            return { framework: 'VITE_REACT', deploymentType: 'STATIC', buildCommand: 'npm ci && npm run build', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false };
         }
-        if (pkg.deps.express || pkg.deps.fastify || pkg.scripts.start || pkg.scripts.dev) {
+        if (pkg.deps.express || pkg.deps.fastify || pkg.scripts.start || pkg.scripts.dev || pkg.main) {
             const framework = pkg.deps.fastify ? 'FASTIFY' : pkg.deps.express ? 'EXPRESS' : 'NODE_API';
             await LoggingService.log(deploymentId, `Detected ${framework.toLowerCase()} project; using Node runtime`, 'build');
-            return { framework: 'NODE_API', buildCommand: pkg.scripts.build ? 'npm ci && npm run build' : 'npm ci', startCommand: pkg.scripts.start ? 'npm run start' : 'node server.js', appPort: 3000, dockerfileAlreadyPresent: false };
+            return { framework: 'NODE_API', deploymentType: 'SERVER', buildCommand: pkg.scripts.build ? 'npm ci && npm run build' : 'npm ci', startCommand: pkg.scripts.start ? 'npm run start' : runtimeResolverCommand(), appPort: 3000, dockerfileAlreadyPresent: false };
         }
-        await LoggingService.log(deploymentId, 'Detected Node.js project; using Node runtime', 'build');
-        return { framework: 'NODEJS', buildCommand: pkg.scripts.build ? 'npm ci && npm run build' : 'npm ci', startCommand: pkg.scripts.start ? 'npm run start' : 'node index.js', appPort: 3000, dockerfileAlreadyPresent: false };
+        await LoggingService.log(deploymentId, 'Project type is ambiguous; defaulting to static file runtime', 'build');
+        return { framework: 'VITE_REACT', deploymentType: 'STATIC', buildCommand: pkg.scripts.build ? 'npm ci && npm run build' : 'npm ci', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false };
     }
 
     private static async injectEnvironment(ssh: SSHService, deploymentId: string, workDir: string, encryptedEnv?: string | null) {
@@ -720,6 +789,26 @@ export class DeploymentService {
         }
 
         await this.run(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && docker build --pull -t ${shellQuote(imageTag)} .`, 'building', 'DOCKER_BUILD_FAILED');
+    }
+
+    private static async buildStaticArtifact(ssh: SSHService, deploymentId: string, workDir: string, staticDir: string, detected: DetectedProject, hasEnv: boolean) {
+        const envPrefix = hasEnv ? 'set -a && . ./.env.deployforge && set +a && ' : '';
+        const buildCommand = detected.buildCommand
+            ? `if [ -f package.json ]; then command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 || { echo "Node.js and npm are required to build this static project on the deployment worker"; exit 42; }; (npm ci || npm install) && if node -e "const p=require('./package.json'); process.exit(p.scripts&&p.scripts.build?0:1)" 2>/dev/null; then ${envPrefix}npm run build; fi; fi`
+            : 'true';
+        const publishCommand = `rm -rf ${shellQuote(staticDir)} && mkdir -p ${shellQuote(staticDir)} && cd ${shellQuote(workDir)} && ${buildCommand} && if [ -d dist ]; then cp -a dist/. ${shellQuote(staticDir)}/; elif [ -d build ]; then cp -a build/. ${shellQuote(staticDir)}/; elif [ -d out ]; then cp -a out/. ${shellQuote(staticDir)}/; elif [ -d public ] && find public -maxdepth 2 -name index.html | grep -q .; then cp -a public/. ${shellQuote(staticDir)}/; elif [ -f index.html ]; then cp -a . ${shellQuote(staticDir)}/; else echo "No static artifact found. Expected dist/, build/, out/, public/index.html, or index.html"; exit 43; fi && test -f ${shellQuote(`${staticDir}/index.html`)}`;
+        try {
+            await this.run(ssh, deploymentId, 'build', publishCommand, 'building', 'STATIC_BUILD_FAILED');
+        } catch (err: any) {
+            if (String(err.message || '').includes('exit code 42')) {
+                throw new DeploymentError('building', 'Static build worker is missing Node.js or npm', 'STATIC_BUILD_RUNTIME_MISSING');
+            }
+            if (String(err.message || '').includes('exit code 43')) {
+                throw new DeploymentError('building', 'Static build completed but no deployable artifact was found', 'STATIC_ARTIFACT_NOT_FOUND');
+            }
+            throw err;
+        }
+        await LoggingService.log(deploymentId, `Static artifact published to ${staticDir}`, 'build');
     }
 
     private static async deployContainer(ssh: SSHService, deploymentId: string, workDir: string, dockerName: string, imageTag: string, hostPort: number, appPort: number, hasEnv: boolean) {
@@ -823,8 +912,19 @@ export class DeploymentService {
         const safeProjectName = sanitizeName(deployment.project?.name || deployment.name || 'project');
         const baseDir = `/home/${shellPath(deployment.vps.username)}/deployforge/${safeProjectName}`;
         const releasePattern = `${baseDir}/releases/*-${deployment.id.slice(0, 8)}`;
-        const command = `rm -rf ${releasePattern}; if [ -L ${shellQuote(`${baseDir}/current`)} ] && readlink ${shellQuote(`${baseDir}/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/current`)}; fi`;
+        const staticPattern = `${baseDir}/static/*-${deployment.id.slice(0, 8)}`;
+        const command = `rm -rf ${releasePattern} ${staticPattern}; if [ -L ${shellQuote(`${baseDir}/current`)} ] && readlink ${shellQuote(`${baseDir}/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/current`)}; fi; if [ -L ${shellQuote(`${baseDir}/static/current`)} ] && readlink ${shellQuote(`${baseDir}/static/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/static/current`)}; fi`;
         await ssh.execute(command).catch(() => undefined);
+    }
+
+    private static isStaticDeployment(deployment: { type?: string | null; framework?: string | null }) {
+        return deployment.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '');
+    }
+
+    private static staticArtifactDir(deployment: { vps: { username: string }; project?: { name?: string | null } | null; name?: string | null; id: string }, version?: string | null) {
+        const safeProjectName = sanitizeName(deployment.project?.name || deployment.name || 'project');
+        const snapshot = sanitizeName(version || deployment.id.slice(0, 8));
+        return `/home/${shellPath(deployment.vps.username)}/deployforge/${safeProjectName}/static/${snapshot}`;
     }
 
     private static async verifyContainerRunningOnly(ssh: SSHService, deploymentId: string, containerId: string) {
@@ -888,17 +988,89 @@ export class DeploymentService {
         await LoggingService.log(deploymentId, isDomain ? `Configured domain host ${host}` : `Configured IP fallback host ${host}:${port}`, 'system');
     }
 
+    private static async configureStaticHosting(ssh: SSHService, deploymentId: string, host: string, staticDir: string, isDomain: boolean, ipAddress: string): Promise<StaticHostingResult> {
+        await this.ensureStaticNginxService(ssh, deploymentId);
+        const safeHost = sanitizeDomain(host);
+        const staticLocation = `/site/${deploymentId}/`;
+        const domainConfigPath = `/etc/nginx/conf.d/deployforge-${deploymentId}.conf`;
+        const sharedConfigPath = '/etc/nginx/conf.d/deployforge-static.conf';
+        const locationDir = '/etc/nginx/deployforge-static-locations';
+        const locationPath = `${locationDir}/deployforge-${deploymentId}.conf`;
+        const nginxConfig = `server {\n    listen 80;\n    server_name ${safeHost};\n    root ${staticDir};\n    index index.html;\n\n    location / {\n        try_files $uri $uri/ /index.html;\n    }\n}`;
+        const locationConfig = `location ${staticLocation} {\n    alias ${staticDir}/;\n    index index.html;\n    try_files $uri $uri/ ${staticLocation}index.html;\n}`;
+        const sharedConfig = `server {\n    listen 80 default_server;\n    server_name _;\n    include ${locationDir}/*.conf;\n}`;
+        const command = isDomain
+            ? `if ! command -v nginx >/dev/null 2>&1; then echo NGINX_MISSING; exit 44; fi; if [ ! -w /etc/nginx/conf.d ]; then echo NGINX_CONF_UNWRITABLE; exit 45; fi; rm -f ${shellQuote(locationPath)}; printf '%s\\n' ${shellQuote(nginxConfig)} > ${shellQuote(domainConfigPath)} && nginx -t && nginx -s reload`
+            : `if ! command -v nginx >/dev/null 2>&1; then echo NGINX_MISSING; exit 44; fi; if [ ! -w /etc/nginx/conf.d ]; then echo NGINX_CONF_UNWRITABLE; exit 45; fi; mkdir -p ${shellQuote(locationDir)} && rm -f ${shellQuote(domainConfigPath)} && printf '%s\\n' ${shellQuote(locationConfig)} > ${shellQuote(locationPath)} && if [ ! -f ${shellQuote(sharedConfigPath)} ]; then printf '%s\\n' ${shellQuote(sharedConfig)} > ${shellQuote(sharedConfigPath)}; fi && nginx -t && nginx -s reload`;
+        const result = await ssh.execute(command);
+        const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+        if (result.code === 0 || result.code === null) {
+            if (output) await LoggingService.log(deploymentId, output.slice(0, 8000), 'system');
+            await LoggingService.log(deploymentId, isDomain ? `Configured static domain host ${safeHost}` : `Configured shared static path http://${safeHost}${staticLocation}`, 'system');
+            return {
+                url: isDomain ? `http://${safeHost}` : `http://${safeHost}${staticLocation}`,
+                port: null,
+                hostType: isDomain ? 'domain' : 'ip',
+                domainActivated: isDomain,
+            };
+        }
+
+        await LoggingService.log(deploymentId, `NGINX_MISSING - activating shared fallback static server. ${output || 'nginx unavailable'}`, 'system', 'warn');
+        return this.configureFallbackStaticServer(ssh, deploymentId, ipAddress, staticDir);
+    }
+
+    private static async ensureStaticNginxService(ssh: SSHService, deploymentId: string) {
+        const command = `if command -v nginx >/dev/null 2>&1; then (systemctl enable --now nginx >/dev/null 2>&1 || service nginx start >/dev/null 2>&1 || nginx >/dev/null 2>&1 || true); exit 0; fi; if command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y nginx >/dev/null 2>&1; elif command -v yum >/dev/null 2>&1; then yum install -y nginx >/dev/null 2>&1; elif command -v apk >/dev/null 2>&1; then apk add --no-cache nginx >/dev/null 2>&1; else exit 0; fi; if command -v nginx >/dev/null 2>&1; then systemctl enable --now nginx >/dev/null 2>&1 || service nginx start >/dev/null 2>&1 || nginx >/dev/null 2>&1 || true; fi`;
+        const result = await ssh.execute(command).catch(() => null);
+        if (result?.code === 0 || result?.code === null) {
+            const installed = await ssh.execute('command -v nginx >/dev/null 2>&1').catch(() => null);
+            if (installed?.code === 0) {
+                await LoggingService.log(deploymentId, 'Shared nginx static hosting layer available', 'system').catch(() => undefined);
+                return;
+            }
+        }
+        await LoggingService.log(deploymentId, 'NGINX_MISSING - shared fallback static server will be used', 'system', 'warn').catch(() => undefined);
+    }
+
+    private static async configureFallbackStaticServer(ssh: SSHService, deploymentId: string, ipAddress: string, staticDir: string): Promise<StaticHostingResult> {
+        const root = '/tmp/deployforge-static-server';
+        const siteDir = `${root}/site`;
+        const siteLink = `${siteDir}/${deploymentId}`;
+        const logPath = `${root}/static-server.log`;
+        const command = `mkdir -p ${shellQuote(siteDir)} && ln -sfn ${shellQuote(staticDir)} ${shellQuote(siteLink)} && if command -v python3 >/dev/null 2>&1; then server_kind=python; elif command -v npx >/dev/null 2>&1; then server_kind=npx; else echo STATIC_FALLBACK_RUNTIME_MISSING; exit 46; fi; for port in $(seq 8979 8999); do if command -v ss >/dev/null 2>&1; then listening=$(ss -ltn "( sport = :$port )" | tail -n +2 | wc -l); else listening=$(netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Ec "[:.]$port$" || true); fi; if [ "$listening" = "0" ]; then if [ "$server_kind" = "python" ]; then nohup python3 -m http.server "$port" --bind 0.0.0.0 --directory ${shellQuote(root)} > ${shellQuote(logPath)} 2>&1 & else nohup npx --yes serve ${shellQuote(root)} -l "$port" > ${shellQuote(logPath)} 2>&1 & fi; echo $! > ${shellQuote(`${root}/static-server.pid`)}; sleep 2; fi; if wget -qO- --timeout=2 "http://127.0.0.1:$port/site/${deploymentId}/" >/dev/null 2>&1; then echo "PORT=$port"; exit 0; fi; done; echo STATIC_FALLBACK_PORT_UNAVAILABLE; exit 47`;
+        const { stdout } = await this.run(ssh, deploymentId, 'system', command, 'static_hosting', 'STATIC_FALLBACK_FAILED');
+        const fallbackPort = Number(stdout.match(/PORT=(\d+)/)?.[1] || 8979);
+        await LoggingService.log(deploymentId, `Fallback static server active at http://${ipAddress}:${fallbackPort}/site/${deploymentId}/`, 'system', 'warn');
+        return {
+            url: `http://${ipAddress}:${fallbackPort}/site/${deploymentId}/`,
+            port: fallbackPort,
+            hostType: 'ip',
+            domainActivated: false,
+        };
+    }
+
     private static async cleanupNginx(ssh: SSHService, deploymentId: string, domainNames: string[]) {
         const paths = [
             `/etc/nginx/conf.d/deployforge-${deploymentId}.conf`,
+            `/etc/nginx/deployforge-static-locations/deployforge-${deploymentId}.conf`,
             ...domainNames.flatMap((domain) => [`/etc/nginx/sites-enabled/${domain}`, `/etc/nginx/sites-available/${domain}`]),
         ];
-        const removeCommand = `${paths.map((item) => `rm -f ${shellQuote(item)}`).join(' && ')}; if command -v nginx >/dev/null 2>&1; then nginx -t && nginx -s reload || true; fi`;
+        const removeCommand = `${paths.map((item) => `rm -f ${shellQuote(item)}`).join(' && ')}; rm -f ${shellQuote(`/tmp/deployforge-static-server/site/${deploymentId}`)}; if command -v nginx >/dev/null 2>&1; then nginx -t && nginx -s reload || true; fi`;
         await ssh.execute(removeCommand);
     }
 
     private static async healthCheck(ssh: SSHService, deploymentId: string, port: number) {
         await this.run(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if wget -qO- --timeout=2 http://127.0.0.1:${port}/ >/dev/null 2>&1; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
+    }
+
+    private static async healthCheckStatic(ssh: SSHService, deploymentId: string, hosting: StaticHostingResult) {
+        const url = hosting.port
+            ? `http://127.0.0.1:${hosting.port}/site/${deploymentId}/`
+            : hosting.hostType === 'domain'
+              ? 'http://127.0.0.1/'
+              : `http://127.0.0.1/site/${deploymentId}/`;
+        const hostHeader = new URL(hosting.url).host;
+        await this.run(ssh, deploymentId, 'system', `for i in $(seq 1 10); do if wget -qO- --timeout=2 --header=${shellQuote(`Host: ${hostHeader}`)} ${shellQuote(url)} >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1`, 'static_hosting', 'STATIC_HEALTH_CHECK_FAILED');
     }
 
     private static async setStatus(deploymentId: string, status: DeploymentStatus) {
@@ -1113,11 +1285,29 @@ function generatedDockerfile(detected: DetectedProject) {
         return `FROM nginx:1.27-alpine\nWORKDIR /usr/share/nginx/html\nCOPY . .\nEXPOSE 80`;
     }
 
-    if (detected.framework === 'VITE_REACT') {
-        return `FROM node:20-alpine AS build\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci || npm install\nCOPY . .\nRUN npm run build\nFROM nginx:1.27-alpine\nCOPY --from=build /app/dist /usr/share/nginx/html\nEXPOSE 80`;
+    if (detected.framework === 'VITE_REACT' || detected.framework === 'ASTRO') {
+        return `FROM node:20-alpine AS build\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci || npm install\nCOPY . .\nRUN ${detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nRUN mkdir -p /deployforge-static && \\\n    if [ -d dist ]; then cp -a dist/. /deployforge-static/; \\\n    elif [ -d build ]; then cp -a build/. /deployforge-static/; \\\n    elif [ -d out ]; then cp -a out/. /deployforge-static/; \\\n    elif [ -f index.html ]; then cp -a . /deployforge-static/; \\\n    else echo '<!doctype html><title>DeployForge Sandbox</title><h1>No static output detected</h1>' > /deployforge-static/index.html; fi\nFROM nginx:1.27-alpine\nCOPY --from=build /deployforge-static /usr/share/nginx/html\nEXPOSE 80`;
     }
 
-    return `FROM node:20-alpine\nWORKDIR /app\nENV HOSTNAME=0.0.0.0\nENV PORT=3000\nCOPY package*.json ./\nRUN npm ci || npm install\nCOPY . .\nRUN ${detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nENV NODE_ENV=production\nEXPOSE 3000\nCMD ["sh", "-lc", "${detected.startCommand.replace(/"/g, '\\"')}"]`;
+    const command = detected.framework === 'NEXTJS' ? nextRuntimeCommand(detected.startCommand) : detected.startCommand;
+    return `FROM node:20-alpine\nWORKDIR /app\nENV HOSTNAME=0.0.0.0\nENV PORT=3000\nCOPY package*.json ./\nRUN npm ci || npm install\nRUN npm install -g serve\nCOPY . .\nRUN ${detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nENV NODE_ENV=production\nEXPOSE 3000\nCMD ["sh", "-lc", "${command.replace(/"/g, '\\"')}"]`;
+}
+
+function runtimeResolverCommand() {
+    return [
+        'if node -e "const p=require(\\\'./package.json\\\'); process.exit(p.scripts&&p.scripts.start?0:1)" 2>/dev/null; then npm run start; exit $?; fi',
+        'main=$(node -e "try{const p=require(\\\'./package.json\\\'); process.stdout.write(p.main||\\\'\\\')}catch{}")',
+        'for f in "$main" dist/server.js dist/index.js build/server.js build/index.js index.js server.js app.js; do if [ -n "$f" ] && [ -f "$f" ]; then exec node "$f"; fi; done',
+        'for d in dist build out public .; do if [ -d "$d" ] && find "$d" -maxdepth 2 -name index.html | grep -q .; then exec serve "$d" -l 3000; fi; done',
+        'echo "DeployForge runtime resolver could not find a Node entrypoint or static output"; exit 1',
+    ].join('; ');
+}
+
+function nextRuntimeCommand(startCommand: string) {
+    return [
+        'for d in out dist build; do if [ -d "$d" ] && find "$d" -maxdepth 2 -name index.html | grep -q .; then exec serve "$d" -l 3000; fi; done',
+        startCommand,
+    ].join('; ');
 }
 
 function safeExtractCommand(archivePath: string, destination: string) {

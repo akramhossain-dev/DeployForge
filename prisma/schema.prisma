@@ -243,6 +243,7 @@ model Deployment {
   name          String?  // Deployment name/label
   status        String   @default("PENDING") // PENDING, BUILDING, RUNNING, FAILED, STOPPED
   framework     String?
+  type          String   @default("SERVER") // STATIC | SERVER | FULLSTACK
   port          Int?
   buildCommand  String?
   startCommand  String?
@@ -271,6 +272,7 @@ model Deployment {
   @@index([projectId])
   @@index([vpsId])
   @@index([sourceType])
+  @@index([type])
   @@index([domain])
   @@index([hostType])
   @@index([mode])
@@ -324,7 +326,7 @@ model DeploymentHistory {
   deploymentId  String
   deployment    Deployment @relation(fields: [deploymentId], references: [id])
   version       String     // Commit hash or timestamp
-  containerId   String
+  containerId   String?
   imageTag      String?
   status        String
   env           String?    // Encrypted JSON snapshot

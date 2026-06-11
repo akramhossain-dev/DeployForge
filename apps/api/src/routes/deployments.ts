@@ -33,7 +33,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
             const result = await RollbackService.rollback(request.user.id, id, historyId);
             return { success: true, data: result };
         } catch (err: any) {
-            const status = err.errorCode === 'ROLLBACK_NOT_SUPPORTED' ? 409 : err.message === 'Deployment not found' ? 404 : 500;
+            const status = ['ROLLBACK_NOT_SUPPORTED', 'STATIC_ROLLBACK_NOT_SUPPORTED'].includes(err.errorCode) ? 409 : err.message === 'Deployment not found' ? 404 : 500;
             return reply.status(status).send({
                 success: false,
                 stage: err.stage || 'rollback',
@@ -135,6 +135,10 @@ function maskDeployment(deployment: any) {
     const domainName = safeDeployment.domain || activeDomain?.domainName || null;
     const url = hostType === 'domain' && domainName
         ? `http://${domainName}`
+        : safeDeployment.vps?.ipAddress && safeDeployment.type === 'STATIC'
+          ? safeDeployment.port
+            ? `http://${safeDeployment.vps.ipAddress}:${safeDeployment.port}/site/${safeDeployment.id}/`
+            : `http://${safeDeployment.vps.ipAddress}/site/${safeDeployment.id}/`
         : safeDeployment.vps?.ipAddress && safeDeployment.port
           ? `http://${safeDeployment.vps.ipAddress}:${safeDeployment.port}`
           : null;

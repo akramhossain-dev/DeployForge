@@ -32,9 +32,10 @@ export default function DeploymentDetailsPage() {
     const current = liveStatus ? { ...deployment.data, ...liveStatus } : deployment.data;
     const logs = useMemo(() => mergeLogs(initialLogs.data || [], stream.logs), [initialLogs.data, stream.logs]);
     const sourceType = getSourceType(current);
-    const canRestart = current?.status === 'RUNNING' && Boolean(current.containerId);
-    const canRollback = sourceType === 'github';
-    const activeUrl = current?.url || (current?.vps?.ipAddress && current?.port ? `http://${current.vps.ipAddress}:${current.port}` : null);
+    const isStatic = current?.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(current?.framework || '');
+    const canRestart = current?.status === 'RUNNING' && (isStatic || Boolean(current.containerId));
+    const canRollback = sourceType === 'github' && !isStatic;
+    const activeUrl = current?.url || (current?.vps?.ipAddress && isStatic ? current.port ? `http://${current.vps.ipAddress}:${current.port}/site/${current.id}/` : `http://${current.vps.ipAddress}/site/${current.id}/` : current?.vps?.ipAddress && current?.port ? `http://${current.vps.ipAddress}:${current.port}` : null);
     const isRunning = current?.status === 'RUNNING';
     const isPaused = current?.status === 'PAUSED';
     const isStopped = current?.status === 'STOPPED';
@@ -79,7 +80,7 @@ export default function DeploymentDetailsPage() {
                                 onClick={() => rollback.mutate({ id })}
                                 loading={rollback.isPending}
                                 disabled={!canRollback || !isRunning}
-                                title={canRollback ? 'Rollback GitHub deployment' : 'Rollback is not supported for upload deployments'}
+                                title={canRollback ? 'Rollback GitHub deployment' : isStatic ? 'Rollback is not available for optimized static deployments' : 'Rollback is not supported for upload deployments'}
                             >
                                 <RotateCcw size={16} /> Rollback
                             </Button> : null}
@@ -106,8 +107,8 @@ export default function DeploymentDetailsPage() {
                         <Panel><Metric label="Status" value={<StatusBadge status={current.status} />} /></Panel>
                         <Panel><Metric label="Source" value={<span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs uppercase text-slate-200">{sourceType}</span>} /></Panel>
                         <Panel><Metric label="Mode" value={<span className={isSandbox ? 'rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-xs uppercase text-amber-100' : 'rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs uppercase text-slate-200'}>{isSandbox ? 'Temporary Environment' : 'Production'}</span>} /></Panel>
-                        <Panel><Metric label="Container" value={current.containerId ? `${current.containerId.slice(0, 12)}...` : 'pending'} /></Panel>
-                        <Panel><Metric label="Port" value={current.port || 'pending'} /></Panel>
+                        <Panel><Metric label="Runtime" value={isStatic ? 'Static hosting' : current.containerId ? `${current.containerId.slice(0, 12)}...` : 'pending'} /></Panel>
+                        <Panel><Metric label="Port" value={isStatic ? 'not required' : current.port || 'pending'} /></Panel>
                     </div>
 
                     <Panel>
@@ -126,7 +127,7 @@ export default function DeploymentDetailsPage() {
                             <Server size={18} className="text-cyan-200" />
                             <h2 className="font-black text-white">Deployment Timeline</h2>
                         </div>
-                        {!canRestart && current.status !== 'FAILED' ? <p className="mb-4 text-sm text-amber-200/80">Deployment not running yet. Restart becomes available after a container is created and the status reaches running.</p> : null}
+                        {!canRestart && current.status !== 'FAILED' ? <p className="mb-4 text-sm text-amber-200/80">{isStatic ? 'Deployment not running yet. Restart becomes available after static routing is active.' : 'Deployment not running yet. Restart becomes available after a container is created and the status reaches running.'}</p> : null}
                         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
                             {timeline.map((state) => <TimelineStep key={state} state={state} current={current.status} />)}
                         </div>
@@ -163,7 +164,7 @@ export default function DeploymentDetailsPage() {
                             <Panel>
                                 <h2 className="font-black text-white">Available Actions</h2>
                                 <div className="mt-4 space-y-2 text-sm">
-                                    <ActionRow label="Restart" enabled={!isSandbox} />
+                                    <ActionRow label="Restart" enabled={!isSandbox && (isStatic || Boolean(current.containerId))} />
                                     <ActionRow label="Rollback" enabled={!isSandbox && canRollback} />
                                     <ActionRow label="View commits" enabled={!isSandbox && canRollback} />
                                     <ActionRow label="Webhook deploy" enabled={!isSandbox && canRollback} />
@@ -179,6 +180,7 @@ export default function DeploymentDetailsPage() {
                                 <h2 className="font-black text-white">Build Output</h2>
                                 <div className="mt-4 space-y-3 text-sm text-slate-400">
                                     <Row label="Framework" value={current.framework || 'Detecting'} />
+                                    <Row label="Engine" value={current.type === 'STATIC' ? 'Static engine' : current.type === 'FULLSTACK' ? 'Container engine (fullstack)' : 'Container engine'} />
                                     <Row label="Build" value={current.buildCommand || 'Pending'} />
                                     <Row label="Start" value={current.startCommand || 'Pending'} />
                                 </div>
