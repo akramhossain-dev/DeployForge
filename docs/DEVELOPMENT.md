@@ -1,67 +1,100 @@
-# 💻 DEVELOPMENT.md
+# 🛠️ DEVELOPMENT.md
 
-## 1. Local Setup
+Follow these instructions to set up DeployForge for local development.
 
-### Prerequisites
-- **Node.js**: v20 or higher
-- **pnpm**: v8 or higher
-- **Docker**: For running local DB/Redis or testing deployments
-- **PostgreSQL**: Local instance or Docker container
+---
 
-### Getting Started
+## 1. Prerequisites
+Ensure you have the following installed on your system:
+*   **Node.js:** v18 or later
+*   **pnpm:** v8.15.4 (or matching package manager)
+*   **Docker:** For running database/cache services or testing deployments locally
+*   **PostgreSQL & Redis:** Local instances or Docker services
 
-1.  **Clone & Install**:
+---
+
+## 2. Setting Up the Project
+
+### 2.1 Clone and Install
+1.  Clone the repository.
+2.  Install dependencies using pnpm:
     ```bash
-    git clone https://github.com/akramhossain-dev/DeployForge.git
-    cd DeployForge
     pnpm install
     ```
 
-2.  **Environment Variables**:
-    Copy `.env.example` to `.env` in the root and in `apps/api` and `apps/web`.
-    
-    Key variables for `apps/api`:
-    - `DATABASE_URL`: PostgreSQL connection string.
-    - `REDIS_URL`: Redis connection string.
-    - `ENCRYPTION_KEY`: A 64-character hex string for AES-256.
-    - `JWT_SECRET`: Secret for signing tokens.
-    - See `docs/ENVIRONMENT.md` for the complete environment variable reference.
+### 2.2 Configure Environment Variables
+Copy the template `.env` file from the root directory or create one with the following parameters:
+```env
+NODE_ENV=development
+PORT=3001
+APP_URL=http://localhost:3000
+API_URL=http://localhost:3001
 
-3.  **Database Setup**:
-    ```bash
-    pnpm prisma migrate dev
-    pnpm prisma db seed
-    ```
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/deployforge?schema=public
+REDIS_URL=redis://localhost:6379
 
-4.  **Run Development Server**:
-    ```bash
-    pnpm dev
-    ```
-    - API: `http://localhost:4000`
-    - Frontend: `http://localhost:3000`
+JWT_SECRET=super_secret_jwt_sign_key_minimum_32_characters
+ADMIN_SECRET=super_secret_admin_panel_signing_key
+ADMIN_JWT_SECRET=super_secret_admin_jwt_sign_key
 
----
+ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef # 64-char hex
 
-## 2. Working with Monorepo
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+GITHUB_CALLBACK_URL=http://localhost:3001/api/github/callback
+GITHUB_WEBHOOK_SECRET=your_github_webhook_secret_key
 
-DeployForge uses **Turborepo** to manage the mono-structure.
+GOOGLE_OAUTH_ENABLED=false
 
-- To run only the API: `pnpm --filter api dev`
-- To run only the Web: `pnpm --filter web dev`
-- To build everything: `pnpm build`
+SMTP_HOST=localhost
+SMTP_PORT=1025
+SMTP_USER=dummy
+SMTP_PASS=dummy
+```
 
 ---
 
-## 3. Testing
+## 3. Database Operations
 
-- **Backend Tests**: Root `pnpm test:api` (Vitest)
-- **Frontend Tests**: Root `pnpm test:web` (Cypress/Playwright)
-- **Shared Packages**: Run tests within individual package directories.
+### 3.1 Schema Push
+To sync the local database with the Prisma schema, run:
+```bash
+pnpm db:push
+```
+
+### 3.2 Prisma Client Generation
+To regenerate the client bindings after making changes to `prisma/schema.prisma`:
+```bash
+pnpm db:generate
+```
+
+### 3.3 Studio View
+Open the database manager GUI:
+```bash
+pnpm db:studio
+```
 
 ---
 
-## 4. Troubleshooting
+## 4. Running the Applications
 
-- **Redis Error**: Ensure Redis is running locally (`docker run -p 6379:6379 redis`).
-- **Prisma Types**: If types are missing, run `pnpm prisma generate`.
-- **SSH Issues**: Ensure you have an active SSH agent if testing local VPS connection.
+### 4.1 Running in Development Mode
+Start the local Fastify backend and Next.js frontend concurrently using Turborepo:
+```bash
+pnpm dev
+```
+*   **API Service:** running on `http://localhost:3001`
+*   **Web Dashboard:** running on `http://localhost:3000`
+
+### 4.2 Building for Production
+To build all applications and packages:
+```bash
+pnpm build
+```
+
+### 4.3 Linting and Testing
+To run code formatting checks and tests:
+```bash
+pnpm lint
+pnpm test
+```

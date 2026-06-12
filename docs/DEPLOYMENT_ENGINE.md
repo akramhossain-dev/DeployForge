@@ -1,59 +1,50 @@
 # ⚙️ DEPLOYMENT_ENGINE.md
 
-## 1. Engine Core (Dockerode + SSH)
+DeployForge uses a hybrid container orchestration engine. It connects to target VPS nodes over SSH and manages container state by issuing shell commands or tunneling communication to the remote Docker daemon.
 
-DeployForge uses a hybrid approach to manage remote servers. It connects over SSH but uses the Docker API to manage containers.
+---
 
-### 1.1 Remote Execution
-1.  **SSH Tunneling**: Instead of exposing the Docker daemon port to the public internet, DeployForge creates an SSH tunnel:
-    `Local Port 2375 -> SSH Gateway -> Remote Docker Socket (/var/run/docker.sock)`
-2.  **Dockerode Integration**: The engine uses the `dockerode` library to interact with the tunneled socket as if it were local.
+## 1. Engine Core (Docker & SSH)
+*   **Agentless Shell Execution:** The backend runs commands on target nodes over an SSH channel established by the `SSHService` wrapper class.
+*   **File Transfer:** Upload-based deployments transfer ZIP/TAR archives from the Control Plane to target servers via SFTP, unpack them, and build the Docker image locally on the VPS.
+*   **Dockerode Integration:** Connects to target Docker daemons over an SSH-tunneled socket `/var/run/docker.sock` to control container lifecycles programmatically.
 
 ---
 
 ## 2. The Build Process
 
-### 2.1 Framework Detection logic
-The engine scans the repository for key files:
-- `next.config.js` -> **NEXT.JS**
-- `package.json` + `server.js` -> **NODE.JS**
-- `manage.py` -> **DJANGO**
-- `composer.json` -> **LARAVEL**
+### 2.1 Framework Detection Logic
+When code is retrieved, the engine scans root configurations to identify the application type:
+*   `next.config.js` or `next.config.mjs` -> **NEXT.JS**
+*   `package.json` + `server.js` -> **NODE.JS (Express/Fastify)**
+*   `package.json` + `astro.config.mjs` -> **ASTRO (Static)**
+*   `package.json` + `vite.config.ts` / `vite.config.js` -> **VITE_REACT / VITE (Static)**
+*   `manage.py` -> **DJANGO (Python)**
+*   `composer.json` -> **LARAVEL (PHP)**
 
-### 2.2 Build Strategies
-- **Local Builder**: Build the image on the DeployForge Control Plane, then push to a private registry or directly to the target VPS. (Best for consistency).
-- **Remote Builder**: Build directly on the target VPS using the available resources. (Best for saving bandwidth).
+### 2.2 Containerization & Nixpacks
+*   If a custom `Dockerfile` exists in the repository, the engine builds the image directly.
+*   If no `Dockerfile` is present, it uses **Nixpacks** (or equivalent builder images) to analyze dependencies and automatically generate the container configuration.
 
 ---
 
 ## 3. Port & Resource Management
 
 ### 3.1 Dynamic Port Allocation
-- DeployForge maintains a map of used ports on each VPS.
-- New apps are assigned the next available port in the 3000-4000 range.
-- Port conflicts are detected *before* deployment starts by checking active listening sockets via SSH.
+*   DeployForge scans target servers to map active listening sockets.
+*   New containers are assigned the next free port starting from the `3000-4000` range.
+*   Potential port conflicts are checked via SSH before container startup is triggered.
 
-### 3.2 Resource Limits
-Every container is started with implicit constraints:
-- `MemoryLimit`: default 512MB
-- `CpuShares`: default 1024
-- `RestartPolicy`: `unless-stopped`
-
----
-
-## 4. Zero-Downtime Strategy
-
-1.  **Blue-Green Prep**: Start the *New* container on a different port.
-2.  **Health Check**: Wait for the *New* container to return HTTP 200 on its internal port.
-3.  **Handoff**: Update Nginx upstream to point to the *New* port.
-4.  **Cleanup**: Stop and remove the *Old* container after a 30-second drain period.
+### 3.2 Resource Constraints
+Containers are ran with resource limits:
+*   **Memory limits:** Default constraints set to `512MB` unless configured otherwise.
+*   **CPU Shares:** Default limits map to standard allocations.
+*   **Restart policies:** Configured to `unless-stopped` to survive server restarts.
 
 ---
 
-## 5. Deployment Sandbox
-
-The **Sandbox** validates the environment before deployment:
-- **Port Check**: Is the designated port free?
-- **Disk Check**: Is there enough space for the new image?
-- **Registry Check**: Are the credentials for pulling images valid?
-- **Env Check**: Are all required environment variables provided?
+## 4. Zero-Downtime Strategy (Blue-Green)
+1.  **Parallel Startup:** The *new* container version is started on an alternate free port.
+2.  **Health Verification:** The control plane queries the *new* container's internal port to verify it returns HTTP `200`.
+3.  **Proxy Switch:** Nginx configuration blocks are rewritten to forward requests to the *new* container port, and Nginx is reloaded.
+4.  **Draining & Clean:** The *old* container is kept active for a brief draining window, then stopped and deleted.

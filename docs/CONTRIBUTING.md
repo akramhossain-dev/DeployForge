@@ -1,38 +1,31 @@
 # 🤝 CONTRIBUTING.md
 
-## 1. How to Contribute
+Follow these instructions if you want to contribute features, bug fixes, or documentation modifications to DeployForge.
 
-We welcome contributions from the community! Whether you are fixing bugs, improving documentation, or adding new features, please follow these guidelines.
+---
+
+## 1. How to Contribute
 
 ### 1.1 Development Workflow
 1.  **Fork** the repository and create your branch from `main`.
-2.  Follow the **[Development Guide](./DEVELOPMENT.md)** to set up your local environment.
-3.  Implement your changes. Ensure you are using the shared packages (e.g., `packages/security`) for any sensitive logic.
-4.  Write **tests** for your features.
-5.  Submit a **Pull Request** with a clear description of the problem and your solution.
+2.  Follow the **[Development Guide](./DEVELOPMENT.md)** to set up your environment.
+3.  Implement your changes using the shared workspace packages (`packages/security` or `packages/vps`) for any encryption or SSH operations.
+4.  Ensure all code passes strict TypeScript checks.
+5.  Submit a **Pull Request** explaining the context, problem description, and how your changes resolve the issue.
 
 ---
 
 ## 2. Coding Standards
 
-- **TypeScript**: We enforce strict type checking. Avoid `any` at all costs.
-- **Naming**: 
-  - Variables/Functions: `camelCase`
-  - Classes/Interfaces: `PascalCase`
-  - Files: `kebab-case`
-- **Frontend**: Use `shadcn/ui` components for consistency. Avoid custom CSS unless absolutely necessary (use Tailwind).
-- **Backend**: Use Fastify hooks for validation and pre-processing.
+*   **TypeScript:** Strict type checking is active. Do not bypass type definitions.
+*   **Package Manager:** Always use `pnpm` to install packages and add dependencies. Do not commit `package-lock.json` or `yarn.lock` files.
+*   **Frontend UI:** Build components using Tailwind CSS and shadcn/ui. Ensure styling is clean, responsive, and conforms to the dashboard's design system.
+*   **Backend API:** Structure new logic inside `apps/api/src/services/` where appropriate, using Fastify routes, schemas, and guards to handle requests.
 
 ---
 
-## 3. Pull Request Policy
+## 3. Pull Request Guidelines
 
-- **Atomic Commits**: Keep your commits small and focused.
-- **Linting**: Ensure `npm run lint` passes before submitting.
-- **Review**: All PRs require at least one approval from a core maintainer.
-
----
-
-## 4. Security Policy
-
-If you find a security vulnerability, **do not open a public issue**. Please email security@deployforge.com or use the private security advisory feature on GitHub.
+*   **Lint checks:** Run `pnpm lint` and make sure it passes.
+*   **Commits:** Group commits in focused, atomic logical blocks.
+*   **Approval:** All PR submissions must receive approval from a core repository maintainer.
