@@ -37,6 +37,33 @@ export class AuthService {
             },
         });
 
+        // Parse user agent
+        let browser = 'Unknown Browser';
+        let device = 'Desktop';
+        if (userAgent) {
+            const ua = userAgent.toLowerCase();
+            if (/mobile|android|iphone|ipad|phone/i.test(ua)) device = 'Mobile';
+            else if (/tablet|ipad/i.test(ua)) device = 'Tablet';
+            
+            if (/chrome|crios/i.test(ua) && !/edge|edg|opr/i.test(ua)) browser = 'Chrome';
+            else if (/safari/i.test(ua) && !/chrome|crios/i.test(ua)) browser = 'Safari';
+            else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+            else if (/edge|edg/i.test(ua)) browser = 'Edge';
+            else if (/opr/i.test(ua)) browser = 'Opera';
+        }
+
+        await prisma.userSession.create({
+            data: {
+                userId: user.id,
+                refreshToken: hashedRefreshToken,
+                userAgent,
+                device,
+                browser,
+                ipAddress,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            },
+        });
+
         return { user, accessToken, refreshToken };
     }
 
@@ -127,6 +154,11 @@ export class AuthService {
 
         const isValid = await PasswordService.verify(user.passwordHash, password);
         if (!isValid) throw new Error('Invalid credentials');
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+        });
 
         return this.issueSession(user, 'local', userAgent, ipAddress);
     }

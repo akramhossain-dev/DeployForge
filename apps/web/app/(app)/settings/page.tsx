@@ -1,12 +1,13 @@
 'use client';
 
-import { CheckCircle2, Chrome, Github, MailCheck, Unlink, XCircle } from 'lucide-react';
+import { CheckCircle2, Chrome, Github, MailCheck, Unlink, XCircle, Save, ShieldAlert } from 'lucide-react';
 import { ReactNode, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Panel, SkeletonBlock } from '@/components/ui';
 import { useAuthSession, useDisconnectGitHub, useGitHubProfile, queryKeys } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
+import { useToastStore } from '@/lib/store/useToastStore';
 
 export default function SettingsPage() {
     const auth = useAuthSession();
@@ -14,13 +15,30 @@ export default function SettingsPage() {
     const disconnect = useDisconnectGitHub();
     const searchParams = useSearchParams();
     const queryClient = useQueryClient();
+    const addToast = useToastStore((state) => state.addToast);
+    
     const [connectError, setConnectError] = useState<string | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [isSendingVerification, setIsSendingVerification] = useState(false);
+
+    // Profile fields
+    const [name, setName] = useState('');
+    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     
     const githubStatus = searchParams.get('github');
     const repoStatus = searchParams.get('repos');
     const errorType = searchParams.get('error_type');
     const errorMessageParam = searchParams.get('message');
+
+    useEffect(() => {
+        if (auth.user) {
+            setName(auth.user.name || '');
+            setUsername(auth.user.username || '');
+            setEmail(auth.user.email || '');
+        }
+    }, [auth.user]);
 
     // Automatically refresh user state after successful connect
     useEffect(() => {
@@ -43,6 +61,37 @@ export default function SettingsPage() {
             setIsConnecting(false);
         }
     }
+
+    const handleSaveProfile = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!name.trim()) {
+            addToast({ title: 'Validation Error', description: 'Full name is required', severity: 'error' });
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            await api.patch('/profile', { name, username: username || undefined, email });
+            addToast({ title: 'Success', description: 'Profile updated successfully', severity: 'success' });
+            await auth.refetch();
+        } catch (err: any) {
+            addToast({ title: 'Error', description: err.message || 'Failed to update profile', severity: 'error' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSendVerification = async () => {
+        setIsSendingVerification(true);
+        try {
+            await api.post('/auth/send-verification');
+            addToast({ title: 'Verification Sent', description: 'Verification email sent successfully', severity: 'success' });
+        } catch (err: any) {
+            addToast({ title: 'Error', description: err.message || 'Failed to send verification email', severity: 'error' });
+        } finally {
+            setIsSendingVerification(false);
+        }
+    };
 
     // Map the error type to a detailed human-readable explanation
     let errorTitle = 'GitHub OAuth failed';
@@ -77,7 +126,73 @@ export default function SettingsPage() {
 
     return (
         <div className="space-y-6">
-            <PageHeader title="Settings" description="Account integrations and deployment defaults." />
+            {/* Email Verification banner */}
+            {auth.user && !auth.user.isVerified && (
+                <div className="flex flex-col gap-4 p-4 rounded-lg border border-amber-500/30 bg-amber-950/20 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-start gap-3">
+                        <span className="mt-0.5 text-amber-400 shrink-0"><ShieldAlert size={20} /></span>
+                        <div>
+                            <p className="font-bold text-white text-sm">Verify your email address</p>
+                            <p className="text-xs text-slate-400">
+                                Verify your account to secure it and enable email notifications.
+                            </p>
+                        </div>
+                    </div>
+                    <Button 
+                        variant="secondary" 
+                        className="text-xs whitespace-nowrap bg-amber-500/10 border-amber-500/20 text-amber-200 hover:bg-amber-500/20"
+                        onClick={handleSendVerification}
+                        loading={isSendingVerification}
+                    >
+                        Send Verification Email
+                    </Button>
+                </div>
+            )}
+
+            {/* Profile details form */}
+            <Panel>
+                <h3 className="mb-4 font-bold text-white">Profile Details</h3>
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 mb-1">Full Name</label>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                                placeholder="Full Name"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 mb-1">Username</label>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                                placeholder="username"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-1">Email Address</label>
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                            placeholder="email@example.com"
+                        />
+                    </div>
+                    <div className="flex justify-end pt-2">
+                        <Button type="submit" loading={isSaving}>
+                            <Save size={16} /> Save Profile
+                        </Button>
+                    </div>
+                </form>
+            </Panel>
+
             <Panel>
                 <h3 className="mb-4 font-bold text-white">Connected Providers</h3>
                 <div className="grid gap-3 md:grid-cols-3">
@@ -101,6 +216,7 @@ export default function SettingsPage() {
                     />
                 </div>
             </Panel>
+
             <Panel>
                 <h3 className="mb-4 font-bold text-white">GitHub Connection</h3>
                 {profile.isLoading ? (

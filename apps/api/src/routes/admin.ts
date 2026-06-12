@@ -106,7 +106,7 @@ async function deleteUserCascade(userId: string) {
     await prisma.terminalSession.deleteMany({ where: { userId } });
     await prisma.session.deleteMany({ where: { userId } });
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    if (user) await prisma.verificationToken.deleteMany({ where: { email: user.email } });
+    if (user && user.email) await prisma.verificationToken.deleteMany({ where: { email: user.email } });
     await prisma.project.deleteMany({ where: { userId } });
     await prisma.user.delete({ where: { id: userId } });
 }

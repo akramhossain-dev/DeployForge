@@ -48,6 +48,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 select: {
                     id: true,
                     email: true,
+                    username: true,
                     name: true,
                     isVerified: true,
                     githubId: true,
@@ -62,6 +63,8 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                     role: true,
                     status: true,
                     passwordHash: true,
+                    createdAt: true,
+                    lastLoginAt: true,
                 },
             });
 

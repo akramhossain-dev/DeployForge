@@ -2,10 +2,12 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Copy, Pause, Play, RefreshCw, RotateCcw, Server, Square, TerminalSquare, Trash2 } from 'lucide-react';
+import { AlertCircle, Copy, Pause, Play, RefreshCw, RotateCcw, Server, Square, TerminalSquare, Trash2 } from 'lucide-react';
 import { Button, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
 import { useDeleteDeployment, useDeployment, useDeploymentLogs, useDeploymentLogStream, useDeploymentStatusStream, usePauseDeployment, useRestartDeployment, useResumeDeployment, useRollbackDeployment, useStartDeployment, useStopDeployment } from '@/hooks/useDeployForgeData';
 import type { DeploymentLog } from '@/lib/api/types';
+import { parseError } from '@/lib/utils/errorParser';
+import { useToastStore } from '@/lib/store/useToastStore';
 
 const timeline = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'RUNNING'];
 
@@ -41,6 +43,29 @@ export default function DeploymentDetailsPage() {
     const isStopped = current?.status === 'STOPPED';
     const isDeleted = current?.status === 'DELETED';
     const isSandbox = current?.mode === 'sandbox';
+
+    const rawErrorText = useMemo(() => {
+        if (current?.status !== 'FAILED') return '';
+        const errorLogs = logs.filter(log => log.level === 'error' || log.type === 'error' || /fail|error|exception/i.test(log.message || log.output || ''));
+        if (errorLogs.length > 0) {
+            return errorLogs.slice(-5).map(log => log.message || log.output).join('\n');
+        }
+        return logs.slice(-3).map(log => log.message || log.output).join('\n');
+    }, [current?.status, logs]);
+
+    const parsedError = useMemo(() => {
+        if (!rawErrorText) return null;
+        return parseError(rawErrorText);
+    }, [rawErrorText]);
+
+    const failedStepIndex = useMemo(() => {
+        if (current?.status !== 'FAILED') return -1;
+        const logText = logs.map(l => (l.message || l.output || '').toLowerCase()).join('\n');
+        if (logText.includes('clone') || logText.includes('repository')) return 1; // CLONING
+        if (logText.includes('extract') || logText.includes('upload')) return 3; // EXTRACTING / UPLOADING
+        if (logText.includes('build') || logText.includes('install') || logText.includes('npm') || logText.includes('yarn') || logText.includes('pnpm') || logText.includes('bun')) return 4; // BUILDING
+        return 5; // DEPLOYING
+    }, [current?.status, logs]);
 
     async function confirmDelete() {
         await deleteDeployment.mutateAsync(id);
@@ -103,8 +128,93 @@ export default function DeploymentDetailsPage() {
                 <SkeletonBlock className="h-96" />
             ) : current ? (
                 <>
+                    {current.status === 'FAILED' && parsedError ? (
+                        <Panel className="border-rose-400/30 bg-rose-500/10 space-y-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="flex gap-3">
+                                    <AlertCircle className="mt-1 shrink-0 text-rose-400" size={20} />
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-black text-rose-100 uppercase">{parsedError.category}</span>
+                                            <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[11px] font-bold text-rose-200 font-mono ring-1 ring-rose-500/30">
+                                                {parsedError.code}
+                                            </span>
+                                        </div>
+                                        <p className="mt-2 text-sm font-semibold text-white whitespace-pre-line leading-relaxed">
+                                            {parsedError.explanation}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 sm:flex-col sm:items-end">
+                                    <Button
+                                        variant="secondary"
+                                        className="text-xs h-8"
+                                        onClick={() =>
+                                            useToastStore.getState().openErrorDrawer({
+                                                ...parsedError,
+                                                timestamp: current.updatedAt,
+                                                deploymentId: current.id,
+                                            })
+                                        }
+                                    >
+                                        View Details
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        className="text-xs h-8"
+                                        onClick={() => {
+                                            const textToCopy = `
+=== DEPLOYFORGE ERROR REPORT ===
+Deployment ID: ${current.id}
+Timestamp: ${current.updatedAt}
+Error Code: ${parsedError.code}
+Category: ${parsedError.category}
+Explanation: ${parsedError.explanation}
+================================
+`.trim();
+                                            navigator.clipboard.writeText(textToCopy);
+                                            useToastStore.getState().addToast({
+                                                title: 'Error Copied',
+                                                description: 'Copied diagnostics summary to clipboard.',
+                                                severity: 'success',
+                                            });
+                                        }}
+                                    >
+                                        <Copy size={12} /> Copy Error
+                                    </Button>
+                                </div>
+                            </div>
+                            
+                            {parsedError.suggestions && parsedError.suggestions.length > 0 && (
+                                <div className="border-t border-rose-400/20 pt-3">
+                                    <p className="text-xs font-black uppercase text-rose-300 tracking-wider">Suggested Fixes</p>
+                                    <ul className="mt-2 space-y-1.5">
+                                        {parsedError.suggestions.map((suggestion, index) => (
+                                            <li key={index} className="flex items-center gap-2 text-xs text-rose-100/80">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                                <span>{suggestion}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </Panel>
+                    ) : null}
+
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-                        <Panel><Metric label="Status" value={<StatusBadge status={current.status} />} /></Panel>
+                        <Panel>
+                            <Metric
+                                label="Status"
+                                value={
+                                    <div className="flex flex-col gap-1">
+                                        <StatusBadge status={current.status} />
+                                        <span className="text-[11px] font-bold text-slate-400 mt-1 uppercase">
+                                            {getProgressMessage(current.status, logs)}
+                                        </span>
+                                    </div>
+                                }
+                            />
+                        </Panel>
                         <Panel><Metric label="Source" value={<span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs uppercase text-slate-200">{sourceType}</span>} /></Panel>
                         <Panel><Metric label="Mode" value={<span className={isSandbox ? 'rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-xs uppercase text-amber-100' : 'rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs uppercase text-slate-200'}>{isSandbox ? 'Temporary Environment' : 'Production'}</span>} /></Panel>
                         <Panel><Metric label="Runtime" value={isStatic ? 'Static hosting' : current.containerId ? `${current.containerId.slice(0, 12)}...` : 'pending'} /></Panel>
@@ -129,7 +239,7 @@ export default function DeploymentDetailsPage() {
                         </div>
                         {!canRestart && current.status !== 'FAILED' ? <p className="mb-4 text-sm text-amber-200/80">{isStatic ? 'Deployment not running yet. Restart becomes available after static routing is active.' : 'Deployment not running yet. Restart becomes available after a container is created and the status reaches running.'}</p> : null}
                         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-                            {timeline.map((state) => <TimelineStep key={state} state={state} current={current.status} />)}
+                            {timeline.map((state) => <TimelineStep key={state} state={state} current={current.status} failedIndex={failedStepIndex} />)}
                         </div>
                     </Panel>
 
@@ -217,11 +327,22 @@ export default function DeploymentDetailsPage() {
     );
 }
 
-function TimelineStep({ state, current }: { state: string; current?: string }) {
+function TimelineStep({ state, current, failedIndex }: { state: string; current?: string; failedIndex: number }) {
     const currentIndex = timeline.indexOf(current || '');
     const ownIndex = timeline.indexOf(state);
-    const complete = current === 'RUNNING' || current === 'ROLLED_BACK' || (currentIndex >= ownIndex && ownIndex >= 0);
-    const failed = current === 'FAILED';
+    let complete = false;
+    let failed = false;
+    
+    if (current === 'FAILED') {
+        if (ownIndex < failedIndex) {
+            complete = true;
+        } else if (ownIndex === failedIndex) {
+            failed = true;
+        }
+    } else {
+        complete = current === 'RUNNING' || current === 'ROLLED_BACK' || (currentIndex >= ownIndex && ownIndex >= 0);
+    }
+
     return (
         <div className={complete ? 'rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3' : failed ? 'rounded-lg border border-rose-300/20 bg-rose-300/10 p-3' : 'rounded-lg border border-white/10 bg-slate-950/45 p-3'}>
             <p className={complete ? 'text-xs font-black uppercase text-emerald-200' : failed ? 'text-xs font-black uppercase text-rose-200' : 'text-xs font-black uppercase text-slate-500'}>{state.toLowerCase().replace('_', ' ')}</p>
@@ -255,4 +376,38 @@ function mergeLogs(a: DeploymentLog[], b: DeploymentLog[]) {
     const map = new Map<string, DeploymentLog>();
     [...a, ...b].forEach((log) => map.set(log.id, log));
     return Array.from(map.values()).sort((left, right) => new Date(left.createdAt || left.timestamp || 0).getTime() - new Date(right.createdAt || right.timestamp || 0).getTime());
+}
+
+function getProgressMessage(status: string, logs: DeploymentLog[]): string {
+    const s = (status || '').toUpperCase();
+    if (s === 'PENDING') return 'Queued';
+    if (s === 'CLONING') return 'Cloning Repository';
+    if (s === 'UPLOADING') return 'Uploading Archive';
+    if (s === 'EXTRACTING') return 'Extracting Archive';
+    
+    if (s === 'BUILDING') {
+        const hasInstall = logs.some(l => {
+            const msg = (l.message || l.output || '').toLowerCase();
+            return msg.includes('install') || msg.includes('npm ci') || msg.includes('yarn') || msg.includes('pnpm') || msg.includes('bun');
+        });
+        return hasInstall ? 'Installing Dependencies' : 'Building Application';
+    }
+    
+    if (s === 'DEPLOYING') {
+        const logText = logs.map(l => (l.message || l.output || '').toLowerCase()).join('\n');
+        if (logText.includes('health check') || logText.includes('healthcheck') || logText.includes('probe')) {
+            return 'Running Health Check';
+        }
+        if (logText.includes('container started') || logText.includes('starting')) {
+            return 'Starting Container';
+        }
+        return 'Creating Container';
+    }
+    
+    if (s === 'RUNNING' || s === 'SUCCESS') return 'Deployment Successful';
+    if (s === 'FAILED') return 'Deployment Failed';
+    if (s === 'STOPPED') return 'Deployment Stopped';
+    if (s === 'PAUSED') return 'Deployment Paused';
+    
+    return s || 'Queued';
 }

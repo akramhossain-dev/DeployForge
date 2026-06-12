@@ -23,6 +23,9 @@ importers:
       '@deployforge/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@deployforge/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@deployforge/security':
         specifier: workspace:*
         version: link:../../packages/security

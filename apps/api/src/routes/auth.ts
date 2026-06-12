@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { AuthService } from '../services/auth.service';
+import { AccountService } from '../services/account.service';
 
 const registerSchema = z.object({
     email: z.string().email(),
@@ -64,5 +65,31 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     fastify.get('/me', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
         return { user: request.user };
+    });
+
+    fastify.post('/forgot-password', async (request) => {
+        const { email } = z.object({ email: z.string().email() }).parse(request.body);
+        await AccountService.forgotPassword(email);
+        return { success: true, message: 'If the email exists, a password reset link has been sent' };
+    });
+
+    fastify.post('/reset-password', async (request) => {
+        const { token, password } = z.object({
+            token: z.string().min(1),
+            password: z.string().min(8),
+        }).parse(request.body);
+        await AccountService.resetPassword(token, password, request.ip, request.headers['user-agent']);
+        return { success: true, message: 'Password has been reset successfully' };
+    });
+
+    fastify.post('/send-verification', { preHandler: [(fastify as any).authGuard] }, async (request) => {
+        await AccountService.sendVerification(request.user.id);
+        return { success: true, message: 'Verification email has been sent successfully' };
+    });
+
+    fastify.post('/verify-email', async (request) => {
+        const { token } = z.object({ token: z.string().min(1) }).parse(request.body);
+        await AccountService.verifyEmail(token, request.ip, request.headers['user-agent']);
+        return { success: true, message: 'Email verified successfully' };
     });
 }

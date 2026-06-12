@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { webConfig } from '@/lib/config/env';
+import { useToastStore } from '@/lib/store/useToastStore';
+import { parseError } from '@/lib/utils/errorParser';
 import type {
     AdminDeployment,
     AdminGitHubAccount,
@@ -23,6 +25,35 @@ import type {
     VpsConnectionPayload,
     VpsConnectionResult,
 } from '@/lib/api/types';
+
+function handleMutationError(title: string, error: any, deploymentId?: string) {
+    const rawMsg = error?.message || error?.response?.data?.message || String(error || '');
+    const parsed = parseError(rawMsg);
+    
+    useToastStore.getState().addToast({
+        title,
+        description: parsed.explanation.split('\n')[0] || 'An unexpected error occurred.',
+        severity: 'error',
+        action: {
+            label: 'View Details',
+            onClick: () => {
+                useToastStore.getState().openErrorDrawer({
+                    ...parsed,
+                    timestamp: new Date().toISOString(),
+                    deploymentId: deploymentId || 'system-action',
+                });
+            },
+        },
+    });
+}
+
+function handleMutationSuccess(title: string, description: string) {
+    useToastStore.getState().addToast({
+        title,
+        description,
+        severity: 'success',
+    });
+}
 
 export const queryKeys = {
     me: ['auth', 'me'] as const,
@@ -119,9 +150,11 @@ export function useSyncRepositories() {
     return useMutation({
         mutationFn: () => api.post<{ count: number }>('/github/repos/sync'),
         onSuccess: () => {
+            handleMutationSuccess('Repositories Synced', 'Successfully synchronized your GitHub repositories.');
             queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
             queryClient.invalidateQueries({ queryKey: queryKeys.githubProfile });
         },
+        onError: (err) => handleMutationError('Sync Failed', err),
     });
 }
 
@@ -131,11 +164,13 @@ export function useDisconnectGitHub() {
     return useMutation({
         mutationFn: () => api.delete<{ message: string }>('/github/disconnect'),
         onSuccess: () => {
+            handleMutationSuccess('GitHub Disconnected', 'Successfully disconnected your GitHub account.');
             queryClient.setQueryData(queryKeys.githubProfile, null);
             queryClient.setQueryData(queryKeys.repositories, []);
             queryClient.invalidateQueries({ queryKey: queryKeys.githubProfile });
             queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
         },
+        onError: (err) => handleMutationError('Disconnect Failed', err),
     });
 }
 
@@ -186,9 +221,11 @@ export function useCreateGithubDeployment() {
         mutationFn: (payload: { repositoryId: string; vpsId: string; branch: string; environment: 'production' | 'development'; autoDeploy: boolean; domainName?: string; env?: Record<string, string>; mode?: 'production' | 'sandbox' }) =>
             api.post<Deployment>('/deploy/github', payload),
         onSuccess: (deployment) => {
+            handleMutationSuccess('Deployment Triggered', 'GitHub deployment has been successfully queued.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
             queryClient.setQueryData(queryKeys.deployment(deployment.id), deployment);
         },
+        onError: (err) => handleMutationError('Deployment Trigger Failed', err),
     });
 }
 
@@ -208,9 +245,11 @@ export function useCreateUploadDeployment() {
             return api.post<Deployment>('/deploy/upload', form);
         },
         onSuccess: (deployment) => {
+            handleMutationSuccess('Upload Completed', 'Deployment archive uploaded successfully.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
             queryClient.setQueryData(queryKeys.deployment(deployment.id), deployment);
         },
+        onError: (err) => handleMutationError('Upload Deployment Failed', err),
     });
 }
 
@@ -219,10 +258,12 @@ export function useDeleteDeployment() {
     return useMutation({
         mutationFn: (id: string) => api.delete<{ success: boolean }>(`/deployments/${id}`),
         onSuccess: (_data, id) => {
+            handleMutationSuccess('Deployment Deleted', 'Successfully stopped and removed the deployment.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.domains });
         },
+        onError: (err, id) => handleMutationError('Deletion Failed', err, id),
     });
 }
 
@@ -231,21 +272,31 @@ export function useRestartDeployment() {
     return useMutation({
         mutationFn: (id: string) => api.post<{ message: string }>(`/deployments/${id}/restart`),
         onSuccess: (_data, id) => {
+            handleMutationSuccess('Restart Initiated', 'Restart command sent to deployment container.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
         },
+        onError: (err, id) => handleMutationError('Restart Failed', err, id),
     });
 }
 
 function useLifecycleMutation(action: 'start' | 'stop' | 'pause' | 'resume') {
     const queryClient = useQueryClient();
+    const actionLabels = {
+        start: 'Started',
+        stop: 'Stopped',
+        pause: 'Paused',
+        resume: 'Resumed',
+    };
     return useMutation({
         mutationFn: (id: string) => api.post<{ message: string }>(`/deployments/${id}/${action}`),
         onSuccess: (_data, id) => {
+            handleMutationSuccess(`Deployment ${actionLabels[action]}`, `Successfully executed ${action} action.`);
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.deploymentLogs(id) });
         },
+        onError: (err, id) => handleMutationError(`Action '${action}' Failed`, err, id),
     });
 }
 
@@ -270,9 +321,11 @@ export function useRollbackDeployment() {
     return useMutation({
         mutationFn: ({ id, historyId }: { id: string; historyId?: string }) => api.post<{ success: boolean; version: string }>(`/deployments/${id}/rollback`, historyId ? { historyId } : undefined),
         onSuccess: (_data, payload) => {
+            handleMutationSuccess('Rollback Succeeded', 'Successfully reverted to the selected deployment version.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(payload.id) });
         },
+        onError: (err, payload) => handleMutationError('Rollback Failed', err, payload.id),
     });
 }
 
@@ -335,9 +388,15 @@ export function useTestVpsConnection() {
 
     return useMutation({
         mutationFn: (payload: VpsConnectionPayload | { id: string }) => api.post<VpsConnectionResult>('/vps/test-connection', payload),
-        onSuccess: (_data, payload) => {
+        onSuccess: (data, payload) => {
+            if (data.success) {
+                handleMutationSuccess('Connection Succeeded', 'VPS connection test completed successfully.');
+            } else {
+                handleMutationError('Connection Failed', data.message);
+            }
             if ('id' in payload) queryClient.invalidateQueries({ queryKey: queryKeys.vps });
         },
+        onError: (err) => handleMutationError('Connection Check Failed', err),
     });
 }
 
@@ -347,8 +406,10 @@ export function useAddVps() {
     return useMutation({
         mutationFn: (payload: VpsConnectionPayload & { name: string }) => api.post<Vps>('/vps/add', payload),
         onSuccess: () => {
+            handleMutationSuccess('VPS Added', 'Successfully registered and provisioned the VPS.');
             queryClient.invalidateQueries({ queryKey: queryKeys.vps });
         },
+        onError: (err) => handleMutationError('VPS Addition Failed', err),
     });
 }
 
@@ -358,8 +419,10 @@ export function useDeleteVps() {
     return useMutation({
         mutationFn: (id: string) => api.delete<{ message: string }>(`/vps/${id}`),
         onSuccess: () => {
+            handleMutationSuccess('VPS Deleted', 'Successfully removed VPS registration.');
             queryClient.invalidateQueries({ queryKey: queryKeys.vps });
         },
+        onError: (err) => handleMutationError('VPS Deletion Failed', err),
     });
 }
 
@@ -451,7 +514,9 @@ export function useAdminAction() {
             return api.post(path, body);
         },
         onSuccess: () => {
+            handleMutationSuccess('Admin Action Executed', 'Action completed successfully.');
             queryClient.invalidateQueries({ queryKey: ['admin'] });
         },
+        onError: (err) => handleMutationError('Admin Action Failed', err),
     });
 }

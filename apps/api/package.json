@@ -9,6 +9,7 @@
     },
     "dependencies": {
         "@deployforge/database": "workspace:*",
+        "@deployforge/mail": "workspace:*",
         "@deployforge/security": "workspace:*",
         "@deployforge/shared": "workspace:*",
         "@deployforge/vps": "workspace:*",

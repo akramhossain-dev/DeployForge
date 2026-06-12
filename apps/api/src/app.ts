@@ -54,6 +54,11 @@ export async function buildApp() {
 
     // Routes
     await app.register(import('./routes/auth'), { prefix: '/auth' });
+    await app.register(import('./routes/auth'), { prefix: '/api/auth' });
+    await app.register(import('./routes/profile'), { prefix: '/profile' });
+    await app.register(import('./routes/profile'), { prefix: '/api/profile' });
+    await app.register(import('./routes/sessions'), { prefix: '/sessions' });
+    await app.register(import('./routes/sessions'), { prefix: '/api/sessions' });
     await app.register(import('./routes/public'), { prefix: '/public' });
     await app.register(import('./routes/contact'));
     await app.register(import('./routes/admin'), { prefix: '/admin' });

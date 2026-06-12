@@ -10,6 +10,7 @@ datasource db {
 model User {
   id            String    @id @default(uuid())
   email         String?   @unique
+  username      String?   @unique
   passwordHash  String?
   name          String?
   avatarUrl     String?
@@ -26,11 +27,18 @@ model User {
   provider      String    @default("email") // "email" | "github" | "google"
   authProvider  String    @default("local") // "local" | "github" | "google"
   sessions      Session[]
+  userSessions  UserSession[]
+  passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  notificationPreferences NotificationPreference?
+  avatar        Avatar?
+  auditLogs     AuditLog[]
   vps           VPS[]
   projects      Project[]
   githubAccount GitHubAccount?
   terminalSessions TerminalSession[]
   deployments   Deployment[]
+  lastLoginAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -382,5 +390,83 @@ model ContactMessage {
 
   @@index([email])
   @@index([status])
+  @@index([createdAt])
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique // Hashed
+  userAgent    String?
+  device       String?
+  browser      String?
+  ipAddress    String?
+  lastActivity DateTime @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique // Hashed
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique // Hashed
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model NotificationPreference {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deployNotifications Boolean  @default(true)
+  buildNotifications  Boolean  @default(true)
+  domainNotifications Boolean  @default(true)
+  sslNotifications    Boolean  @default(true)
+  securityAlerts      Boolean  @default(true)
+  productUpdates      Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Avatar {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      Bytes    // Stores the avatar binary data
+  mimeType  String   // image/png, image/jpeg, image/webp
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String   // PASSWORD_CHANGE, EMAIL_CHANGE, PROFILE_UPDATE, SESSION_REVOCATION, ACCOUNT_DELETION
+  details   String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
   @@index([createdAt])
 }

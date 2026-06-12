@@ -7,21 +7,6 @@
         "paths": {
             "@/*": [
                 "src/*"
-            ],
-            "@deployforge/database": [
-                "../../packages/database/src"
-            ],
-            "@deployforge/security": [
-                "../../packages/security/src"
-            ],
-            "@deployforge/shared": [
-                "../../packages/shared/src"
-            ],
-            "@deployforge/mail": [
-                "../../packages/mail/src"
-            ],
-            "@deployforge/vps": [
-                "../../packages/vps/src"
             ]
         },
         "strict": true,
@@ -33,5 +18,10 @@
     },
     "include": [
         "src/**/*"
+    ],
+    "exclude": [
+        "src/__tests__/**/*",
+        "**/*.test.ts",
+        "**/*.spec.ts"
     ]
 }
