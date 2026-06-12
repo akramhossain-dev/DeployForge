@@ -31,7 +31,6 @@ model User {
   passwordResetTokens PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
   notificationPreferences NotificationPreference?
-  avatar        Avatar?
   auditLogs     AuditLog[]
   vps           VPS[]
   projects      Project[]
@@ -445,16 +444,6 @@ model NotificationPreference {
   productUpdates      Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-}
-
-model Avatar {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  data      Bytes    // Stores the avatar binary data
-  mimeType  String   // image/png, image/jpeg, image/webp
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model AuditLog {

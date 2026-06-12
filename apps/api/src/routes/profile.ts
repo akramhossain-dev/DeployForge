@@ -4,8 +4,6 @@ import { AccountService } from '../services/account.service';
 
 const updateProfileSchema = z.object({
     name: z.string().min(1, 'Name cannot be empty').optional(),
-    username: z.string().min(3, 'Username must be at least 3 characters long').regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain alphanumeric characters, underscores, and hyphens').optional(),
-    email: z.string().email('Invalid email address').optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -47,32 +45,6 @@ export default async function profileRoutes(fastify: FastifyInstance) {
     fastify.get('/audit-logs', async (request) => {
         const logs = await AccountService.getAuditLogs(request.user.id);
         return { success: true, data: logs };
-    });
-
-    // Avatar upload
-    fastify.post('/avatar', async (request, reply) => {
-        const fileData = await request.file();
-        if (!fileData) {
-            return reply.status(400).send({ success: false, message: 'No image file uploaded' });
-        }
-        const buffer = await fileData.toBuffer();
-        const result = await AccountService.uploadAvatar(request.user.id, buffer, fileData.mimetype);
-        return { success: true, data: result };
-    });
-
-    // Serve binary avatar
-    fastify.get('/avatar/image', async (request, reply) => {
-        const avatar = await AccountService.getAvatar(request.user.id);
-        if (!avatar) {
-            return reply.status(404).send({ success: false, message: 'No avatar set' });
-        }
-        reply.type(avatar.mimeType);
-        return avatar.data;
-    });
-
-    fastify.delete('/avatar', async (request) => {
-        await AccountService.deleteAvatar(request.user.id);
-        return { success: true, message: 'Avatar removed successfully' };
     });
 
     fastify.delete('/', async (request, reply) => {

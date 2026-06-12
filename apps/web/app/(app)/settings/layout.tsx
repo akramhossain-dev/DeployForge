@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Shield, KeyRound, Bell, AlertTriangle } from 'lucide-react';
+import { User, Shield, Bell, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/ui';
 
 interface SettingsLayoutProps {
@@ -27,19 +27,13 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
             active: pathname === '/settings/security',
         },
         {
-            name: 'Sessions',
-            href: '/settings/sessions',
-            icon: <KeyRound size={16} />,
-            active: pathname === '/settings/sessions',
-        },
-        {
             name: 'Notifications',
             href: '/settings/notifications',
             icon: <Bell size={16} />,
             active: pathname === '/settings/notifications',
         },
         {
-            name: 'Danger Zone',
+            name: 'Account',
             href: '/settings/account',
             icon: <AlertTriangle size={16} />,
             active: pathname === '/settings/account',

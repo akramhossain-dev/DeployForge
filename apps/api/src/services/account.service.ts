@@ -14,33 +14,6 @@ const mailService = new MailService({
     },
 });
 
-function parseUA(userAgent?: string) {
-    if (!userAgent) return { browser: 'Unknown', device: 'Desktop' };
-    let browser = 'Unknown';
-    let device = 'Desktop';
-    const ua = userAgent.toLowerCase();
-    
-    if (/mobile|android|iphone|ipad|phone/i.test(ua)) {
-        device = 'Mobile';
-    } else if (/tablet|ipad/i.test(ua)) {
-        device = 'Tablet';
-    }
-    
-    if (/chrome|crios/i.test(ua) && !/edge|edg|opr/i.test(ua)) {
-        browser = 'Chrome';
-    } else if (/safari/i.test(ua) && !/chrome|crios/i.test(ua)) {
-        browser = 'Safari';
-    } else if (/firefox|fxios/i.test(ua)) {
-        browser = 'Firefox';
-    } else if (/edge|edg/i.test(ua)) {
-        browser = 'Edge';
-    } else if (/opr/i.test(ua)) {
-        browser = 'Opera';
-    }
-    
-    return { browser, device };
-}
-
 export class AccountService {
     static async logAudit(userId: string, action: string, details: string, ip?: string, ua?: string) {
         await prisma.auditLog.create({
@@ -63,6 +36,8 @@ export class AccountService {
                 username: true,
                 name: true,
                 avatarUrl: true,
+                githubAvatar: true,
+                githubUsername: true,
                 isVerified: true,
                 lastLoginAt: true,
                 createdAt: true,
@@ -72,7 +47,7 @@ export class AccountService {
         return user;
     }
 
-    static async updateProfile(userId: string, data: { name?: string; username?: string; email?: string }, ip?: string, ua?: string) {
+    static async updateProfile(userId: string, data: { name?: string }, ip?: string, ua?: string) {
         const existing = await prisma.user.findUnique({ where: { id: userId } });
         if (!existing) throw new Error('User not found');
 
@@ -82,25 +57,6 @@ export class AccountService {
         if (data.name !== undefined && data.name !== existing.name) {
             updateData.name = data.name;
             changes.push(`Name changed from "${existing.name || ''}" to "${data.name}"`);
-        }
-
-        if (data.username !== undefined && data.username !== existing.username) {
-            if (data.username) {
-                const dup = await prisma.user.findUnique({ where: { username: data.username } });
-                if (dup && dup.id !== userId) throw new Error('Username is already taken');
-            }
-            updateData.username = data.username;
-            changes.push(`Username changed from "${existing.username || ''}" to "${data.username}"`);
-        }
-
-        if (data.email !== undefined && data.email !== existing.email) {
-            if (data.email) {
-                const dup = await prisma.user.findUnique({ where: { email: data.email } });
-                if (dup && dup.id !== userId) throw new Error('Email is already in use');
-            }
-            updateData.email = data.email;
-            updateData.isVerified = false;
-            changes.push(`Email changed from "${existing.email || ''}" to "${data.email}" (Verification status reset)`);
         }
 
         if (Object.keys(updateData).length === 0) {
@@ -328,42 +284,6 @@ export class AccountService {
             where: { userId },
             update: updateData,
             create: { userId, ...updateData },
-        });
-    }
-
-    static async uploadAvatar(userId: string, data: Buffer, mimeType: string) {
-        const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-        if (!allowed.includes(mimeType.toLowerCase())) {
-            throw new Error('Only PNG, JPG, JPEG, and WEBP image uploads are supported');
-        }
-
-        await prisma.avatar.upsert({
-            where: { userId },
-            update: { data, mimeType },
-            create: { userId, data, mimeType },
-        });
-
-        const avatarUrl = `/profile/avatar`;
-        await prisma.user.update({
-            where: { id: userId },
-            data: { avatarUrl },
-        });
-
-        return { avatarUrl };
-    }
-
-    static async getAvatar(userId: string) {
-        const avatar = await prisma.avatar.findUnique({
-            where: { userId },
-        });
-        return avatar;
-    }
-
-    static async deleteAvatar(userId: string) {
-        await prisma.avatar.deleteMany({ where: { userId } });
-        await prisma.user.update({
-            where: { id: userId },
-            data: { avatarUrl: null },
         });
     }
 

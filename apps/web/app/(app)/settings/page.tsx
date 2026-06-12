@@ -71,7 +71,7 @@ export default function SettingsPage() {
 
         setIsSaving(true);
         try {
-            await api.patch('/profile', { name, username: username || undefined, email });
+            await api.patch('/profile', { name });
             addToast({ title: 'Success', description: 'Profile updated successfully', severity: 'success' });
             await auth.refetch();
         } catch (err: any) {
@@ -151,7 +151,7 @@ export default function SettingsPage() {
 
             {/* Profile details form */}
             <Panel>
-                <h3 className="mb-4 font-bold text-white">Profile Details</h3>
+                <h3 className="mb-4 font-bold text-white">General Settings</h3>
                 <form onSubmit={handleSaveProfile} className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div>
@@ -165,29 +165,31 @@ export default function SettingsPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-slate-400 mb-1">Username</label>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">Username (Read-Only)</label>
                             <input
                                 type="text"
                                 value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                                readOnly
+                                disabled
+                                className="w-full bg-slate-950/50 border border-white/5 rounded-md py-2 px-3 text-slate-500 cursor-not-allowed text-sm select-none"
                                 placeholder="username"
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">Email Address</label>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Email Address (Read-Only)</label>
                         <input
                             type="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                            readOnly
+                            disabled
+                            className="w-full bg-slate-950/50 border border-white/5 rounded-md py-2 px-3 text-slate-500 cursor-not-allowed text-sm select-none"
                             placeholder="email@example.com"
                         />
                     </div>
                     <div className="flex justify-end pt-2">
                         <Button type="submit" loading={isSaving}>
-                            <Save size={16} /> Save Profile
+                            <Save size={16} /> Save Changes
                         </Button>
                     </div>
                 </form>

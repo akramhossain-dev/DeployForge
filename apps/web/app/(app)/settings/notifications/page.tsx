@@ -16,8 +16,6 @@ export default function NotificationsPage() {
     const [buildNotifications, setBuildNotifications] = useState(true);
     const [domainNotifications, setDomainNotifications] = useState(true);
     const [sslNotifications, setSslNotifications] = useState(true);
-    const [securityAlerts, setSecurityAlerts] = useState(true);
-    const [productUpdates, setProductUpdates] = useState(false);
 
     useEffect(() => {
         const fetchPreferences = async () => {
@@ -29,8 +27,6 @@ export default function NotificationsPage() {
                     setBuildNotifications(response.data.buildNotifications);
                     setDomainNotifications(response.data.domainNotifications);
                     setSslNotifications(response.data.sslNotifications);
-                    setSecurityAlerts(response.data.securityAlerts);
-                    setProductUpdates(response.data.productUpdates);
                 }
             } catch (err: any) {
                 addToast({ title: 'Error', description: err.message || 'Failed to load preferences', severity: 'error' });
@@ -51,8 +47,6 @@ export default function NotificationsPage() {
                 buildNotifications,
                 domainNotifications,
                 sslNotifications,
-                securityAlerts,
-                productUpdates,
             });
             addToast({ title: 'Success', description: 'Notification preferences saved successfully', severity: 'success' });
         } catch (err: any) {
@@ -88,45 +82,31 @@ export default function NotificationsPage() {
                     <div className="space-y-4">
                         <PreferenceCheckbox
                             id="deploy"
-                            title="Deployment Alerts"
+                            title="Deployment Notifications"
                             description="Receive emails when your deployments succeed, fail, or trigger health checks."
                             checked={deployNotifications}
                             onChange={(e) => setDeployNotifications(e.target.checked)}
                         />
                         <PreferenceCheckbox
                             id="build"
-                            title="Build Alerts"
+                            title="Build Notifications"
                             description="Get notified if compilation, static checks, or dependency builds break."
                             checked={buildNotifications}
                             onChange={(e) => setBuildNotifications(e.target.checked)}
                         />
                         <PreferenceCheckbox
                             id="domain"
-                            title="Domain Config Alerts"
+                            title="Domain Notifications"
                             description="Receive notices when domain registrations, routing tests, or custom paths fail."
                             checked={domainNotifications}
                             onChange={(e) => setDomainNotifications(e.target.checked)}
                         />
                         <PreferenceCheckbox
                             id="ssl"
-                            title="SSL Certificate Warnings"
+                            title="SSL Notifications"
                             description="Get warnings about SSL generation delays, certificate renewals, or issues."
                             checked={sslNotifications}
                             onChange={(e) => setSslNotifications(e.target.checked)}
-                        />
-                        <PreferenceCheckbox
-                            id="security"
-                            title="Security Notices"
-                            description="Receive instant alerts for suspicious log ins, key revocations, or dependency vulnerabilities."
-                            checked={securityAlerts}
-                            onChange={(e) => setSecurityAlerts(e.target.checked)}
-                        />
-                        <PreferenceCheckbox
-                            id="product"
-                            title="Product & Feature Updates"
-                            description="Subscribe to newsletters, new platform capabilities, tips, and blog announcements."
-                            checked={productUpdates}
-                            onChange={(e) => setProductUpdates(e.target.checked)}
                         />
                     </div>
 
