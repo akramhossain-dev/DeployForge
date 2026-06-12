@@ -15,7 +15,29 @@ const mailService = new MailService({
 });
 
 export class AccountService {
-    static async logAudit(userId: string, action: string, details: string, ip?: string, ua?: string) {
+    static async logAudit(userId: string | null, action: string, details: string, ip?: string, ua?: string, metadata?: any) {
+        // Parse user agent
+        let browser = 'Unknown Browser';
+        let device = 'Desktop';
+        let os = 'Unknown OS';
+        if (ua) {
+            const uaLower = ua.toLowerCase();
+            if (/mobile|android|iphone|ipad|phone/i.test(uaLower)) device = 'Mobile';
+            else if (/tablet|ipad/i.test(uaLower)) device = 'Tablet';
+            
+            if (/chrome|crios/i.test(uaLower) && !/edge|edg|opr/i.test(uaLower)) browser = 'Chrome';
+            else if (/safari/i.test(uaLower) && !/chrome|crios/i.test(uaLower)) browser = 'Safari';
+            else if (/firefox|fxios/i.test(uaLower)) browser = 'Firefox';
+            else if (/edge|edg/i.test(uaLower)) browser = 'Edge';
+            else if (/opr/i.test(uaLower)) browser = 'Opera';
+
+            if (/windows|win32/i.test(uaLower)) os = 'Windows';
+            else if (/macintosh|mac os x/i.test(uaLower)) os = 'macOS';
+            else if (/linux/i.test(uaLower)) os = 'Linux';
+            else if (/android/i.test(uaLower)) os = 'Android';
+            else if (/iphone|ipad|ipod/i.test(uaLower)) os = 'iOS';
+        }
+
         await prisma.auditLog.create({
             data: {
                 userId,
@@ -23,6 +45,10 @@ export class AccountService {
                 details,
                 ipAddress: ip,
                 userAgent: ua,
+                device,
+                browser,
+                os,
+                metadata: metadata ? JSON.stringify(metadata) : null,
             },
         });
     }
@@ -96,7 +122,7 @@ export class AccountService {
         await this.logAudit(userId, 'PASSWORD_CHANGE', 'User password successfully changed.', ip, ua);
     }
 
-    static async forgotPassword(email: string) {
+    static async forgotPassword(email: string, ip?: string, ua?: string) {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
             // Silently return to prevent user enumeration
@@ -117,6 +143,8 @@ export class AccountService {
 
         const resetLink = `${config.app.appUrl}/reset-password?token=${rawToken}`;
         
+        await this.logAudit(user.id, 'PASSWORD_RESET_REQUEST', 'Password reset link requested.', ip, ua);
+
         try {
             await mailService.sendPasswordReset(email, resetLink);
         } catch (err) {
@@ -150,7 +178,7 @@ export class AccountService {
             data: { usedAt: new Date() },
         });
 
-        await this.logAudit(resetTokenRecord.userId, 'PASSWORD_CHANGE', 'Password reset completed via token.', ip, ua);
+        await this.logAudit(resetTokenRecord.userId, 'PASSWORD_RESET_SUCCESS', 'Password reset completed via token.', ip, ua);
     }
 
     static async sendVerification(userId: string) {
@@ -210,6 +238,7 @@ export class AccountService {
         return sessions.map((s) => ({
             id: s.id,
             browser: s.browser || 'Unknown Browser',
+            os: s.os || 'Unknown OS',
             device: s.device || 'Unknown Device',
             ip: s.ipAddress || 'Unknown IP',
             lastActivity: s.lastActivity,
@@ -231,34 +260,42 @@ export class AccountService {
             where: { userId, refreshToken: session.refreshToken },
         });
 
-        await this.logAudit(userId, 'SESSION_REVOCATION', `Revoked session ID ${sessionId} (IP: ${session.ipAddress || 'unknown'}).`, ip, ua);
+        await this.logAudit(userId, 'SESSION_REVOKED', `Session ID ${sessionId} (IP: ${session.ipAddress || 'unknown'}) was revoked.`, ip, ua);
     }
 
-    static async revokeOtherSessions(userId: string, currentToken: string, ip?: string, ua?: string) {
-        const hashedToken = crypto.createHash('sha256').update(currentToken).digest('hex');
-        
+    static async revokeOtherSessions(userId: string, currentSessionId: string, ip?: string, ua?: string) {
+        const otherUserSessions = await prisma.userSession.findMany({
+            where: {
+                userId,
+                NOT: { id: currentSessionId },
+            },
+            select: { refreshToken: true },
+        });
+
+        const otherRefreshTokens = otherUserSessions.map((s) => s.refreshToken);
+
         await prisma.userSession.deleteMany({
             where: {
                 userId,
-                NOT: { refreshToken: hashedToken },
+                NOT: { id: currentSessionId },
             },
         });
 
         await prisma.session.deleteMany({
             where: {
                 userId,
-                NOT: { refreshToken: hashedToken },
+                refreshToken: { in: otherRefreshTokens },
             },
         });
 
-        await this.logAudit(userId, 'SESSION_REVOCATION', 'Revoked all other active sessions.', ip, ua);
+        await this.logAudit(userId, 'LOGOUT_ALL_SESSIONS', 'Other active sessions were successfully logged out.', ip, ua);
     }
 
     static async revokeAllSessions(userId: string, ip?: string, ua?: string) {
         await prisma.userSession.deleteMany({ where: { userId } });
         await prisma.session.deleteMany({ where: { userId } });
 
-        await this.logAudit(userId, 'SESSION_REVOCATION', 'Revoked all active sessions.', ip, ua);
+        await this.logAudit(userId, 'LOGOUT_ALL_SESSIONS', 'All active sessions were successfully logged out.', ip, ua);
     }
 
     static async getNotificationPreferences(userId: string) {
@@ -293,19 +330,82 @@ export class AccountService {
 
         if (user.passwordHash) {
             const match = await PasswordService.verify(user.passwordHash, passwordConfirm);
-            if (!match) throw new Error('Incorrect password');
+            if (!match) {
+                await this.logAudit(userId, 'ACCOUNT_DELETION_ATTEMPT', 'Account deletion attempt failed: Incorrect password.', ip, ua);
+                throw new Error('Incorrect password');
+            }
         }
+
+        await this.logAudit(userId, 'ACCOUNT_DELETED', 'Account successfully deleted.', ip, ua);
 
         // We cascade delete sessions and tokens (handled by schema cascade rules).
         // Deployments should not be deleted automatically as requested.
         await prisma.user.delete({ where: { id: userId } });
     }
 
-    static async getAuditLogs(userId: string) {
-        return prisma.auditLog.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'desc' },
-            take: 20,
-        });
+    static async getAuditLogs(
+        userId: string,
+        params: {
+            page?: number;
+            limit?: number;
+            search?: string;
+            category?: string;
+        }
+    ) {
+        const page = Math.max(1, Number(params.page) || 1);
+        const limit = Math.max(1, Math.min(100, Number(params.limit) || 20));
+        const skip = (page - 1) * limit;
+
+        const where: any = { userId };
+
+        if (params.search) {
+            where.OR = [
+                { action: { contains: params.search, mode: 'insensitive' } },
+                { details: { contains: params.search, mode: 'insensitive' } },
+                { ipAddress: { contains: params.search, mode: 'insensitive' } },
+                { browser: { contains: params.search, mode: 'insensitive' } },
+                { os: { contains: params.search, mode: 'insensitive' } },
+                { device: { contains: params.search, mode: 'insensitive' } },
+            ];
+        }
+
+        if (params.category && params.category !== 'all') {
+            let actions: string[] = [];
+            if (params.category === 'auth') {
+                actions = ['LOGIN_SUCCESS', 'LOGIN_FAILURE', 'LOGOUT'];
+            } else if (params.category === 'sessions') {
+                actions = ['SESSION_REVOKED', 'LOGOUT_ALL_SESSIONS'];
+            } else if (params.category === 'password') {
+                actions = ['PASSWORD_CHANGE', 'PASSWORD_RESET_REQUEST', 'PASSWORD_RESET_SUCCESS'];
+            } else if (params.category === 'github') {
+                actions = ['GITHUB_CONNECT', 'GITHUB_DISCONNECT'];
+            } else if (params.category === 'account') {
+                actions = ['ACCOUNT_DELETION_ATTEMPT', 'ACCOUNT_DELETED', 'EMAIL_CHANGE', 'PROFILE_UPDATE'];
+            }
+
+            if (actions.length > 0) {
+                where.action = { in: actions };
+            }
+        }
+
+        const [logs, total] = await Promise.all([
+            prisma.auditLog.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            prisma.auditLog.count({ where }),
+        ]);
+
+        return {
+            logs,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 }

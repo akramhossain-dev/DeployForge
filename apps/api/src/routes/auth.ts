@@ -59,7 +59,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     fastify.post('/logout', async (request, reply) => {
         const { refreshToken } = request.body as { refreshToken: string };
-        await AuthService.logout(refreshToken);
+        await AuthService.logout(refreshToken, request.ip, request.headers['user-agent']);
         return { message: 'Logged out successfully' };
     });
 

@@ -12,7 +12,6 @@ import {
     Rocket,
     Server,
     Settings,
-    ShieldCheck,
     Terminal,
     X,
 } from 'lucide-react';
@@ -31,7 +30,6 @@ const navItems = [
     { name: 'VPS Manager', icon: Server, href: '/vps' },
     { name: 'Terminal', icon: Terminal, href: '/terminal' },
     { name: 'Monitoring', icon: Activity, href: '/monitoring' },
-    { name: 'Sandbox', icon: ShieldCheck, href: '/sandbox' },
     { name: 'Settings', icon: Settings, href: '/settings' },
 ];
 

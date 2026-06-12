@@ -19,9 +19,11 @@ interface Session {
     id: string;
     browser: string;
     device: string;
+    os?: string;
     ip: string;
     lastActivity: string;
     createdAt: string;
+    isCurrent?: boolean;
 }
 
 export default function SecurityPage() {
@@ -47,22 +49,41 @@ export default function SecurityPage() {
     const fetchSessions = async () => {
         setIsLoadingSessions(true);
         try {
-            const response = await api.get<{ data: Session[] }>('/sessions');
-            setSessions(response.data || []);
+            const response = await api.get<any>('/sessions');
+            const sessionList = Array.isArray(response) ? response : response?.data || [];
+            setSessions(sessionList);
         } catch (err: any) {
             console.error('Failed to load sessions:', err);
+            addToast({ 
+                title: 'Load Failure', 
+                description: err.message || 'Failed to load active sessions.', 
+                severity: 'error' 
+            });
         } finally {
             setIsLoadingSessions(false);
         }
     };
 
-    const fetchAuditLogs = async () => {
+    const fetchAuditLogs = async (showToast = false) => {
         setIsLoadingLogs(true);
         try {
-            const response = await api.get<{ data: AuditLog[] }>('/profile/audit-logs');
-            setLogs(response.data || []);
+            const response = await api.get<any>('/profile/audit-logs?limit=5');
+            const logList = response?.logs || response?.data?.logs || [];
+            setLogs(logList);
+            if (showToast) {
+                addToast({ 
+                    title: 'Logs Updated', 
+                    description: 'Security log loaded successfully.', 
+                    severity: 'success' 
+                });
+            }
         } catch (err: any) {
             console.error('Failed to load audit logs:', err);
+            addToast({ 
+                title: 'Load Failure', 
+                description: err.message || 'Failed to load security activity logs.', 
+                severity: 'error' 
+            });
         } finally {
             setIsLoadingLogs(false);
         }
@@ -70,7 +91,7 @@ export default function SecurityPage() {
 
     useEffect(() => {
         fetchSessions();
-        fetchAuditLogs();
+        fetchAuditLogs(false);
     }, []);
 
     const handleChangePassword = async (e: React.FormEvent) => {
@@ -92,11 +113,11 @@ export default function SecurityPage() {
                 currentPassword: currentPassword || undefined,
                 newPassword,
             });
-            addToast({ title: 'Success', description: 'Password updated successfully', severity: 'success' });
+            addToast({ title: 'Success', description: 'Password changed successfully', severity: 'success' });
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
-            await fetchAuditLogs();
+            await fetchAuditLogs(false);
         } catch (err: any) {
             addToast({ title: 'Error', description: err.message || 'Failed to update password', severity: 'error' });
         } finally {
@@ -110,7 +131,7 @@ export default function SecurityPage() {
             await api.delete(`/sessions/${id}`);
             addToast({ title: 'Success', description: 'Session revoked successfully', severity: 'success' });
             setSessions((prev) => prev.filter((s) => s.id !== id));
-            await fetchAuditLogs();
+            await fetchAuditLogs(false);
         } catch (err: any) {
             addToast({ title: 'Error', description: err.message || 'Failed to revoke session', severity: 'error' });
         } finally {
@@ -122,12 +143,12 @@ export default function SecurityPage() {
         if (!confirm('Are you sure you want to log out all other sessions?')) return;
         setIsRevokingOthers(true);
         try {
-            await api.delete('/sessions');
+            await api.delete('/sessions/logout-others');
             addToast({ title: 'Success', description: 'Other sessions revoked successfully', severity: 'success' });
             await fetchSessions();
-            await fetchAuditLogs();
+            await fetchAuditLogs(false);
         } catch (err: any) {
-            addToast({ title: 'Error', description: err.message || 'Failed to revoke sessions', severity: 'error' });
+            addToast({ title: 'Error', description: err.message || 'Failed to revoke other sessions', severity: 'error' });
         } finally {
             setIsRevokingOthers(false);
         }
@@ -137,8 +158,8 @@ export default function SecurityPage() {
         if (!confirm('Are you sure you want to log out of ALL active sessions, including the current one?')) return;
         setIsRevokingAll(true);
         try {
-            await api.delete('/sessions?revokeAll=true');
-            addToast({ title: 'Success', description: 'Logged out of all sessions successfully', severity: 'success' });
+            await api.delete('/sessions/logout-all');
+            addToast({ title: 'Success', description: 'All sessions logged out successfully', severity: 'success' });
             setTimeout(() => {
                 window.location.assign('/');
             }, 1000);
@@ -254,11 +275,11 @@ export default function SecurityPage() {
                     </div>
                 ) : (
                     <div className="space-y-3 mb-6">
-                        {sessions.map((session, index) => (
+                        {sessions.map((session) => (
                             <div 
                                 key={session.id} 
                                 className={`flex items-center justify-between p-4 rounded-lg border bg-slate-950/50 hover:bg-slate-950/80 transition-colors ${
-                                    index === 0 ? 'border-cyan-500/30' : 'border-white/5'
+                                    session.isCurrent ? 'border-cyan-500/30' : 'border-white/5'
                                 }`}
                             >
                                 <div className="flex items-start gap-3">
@@ -268,8 +289,8 @@ export default function SecurityPage() {
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <span className="font-bold text-sm text-white">{session.browser}</span>
-                                            <span className="text-xs text-slate-400">on {session.device}</span>
-                                            {index === 0 && (
+                                            <span className="text-xs text-slate-400">on {session.os || session.device}</span>
+                                            {session.isCurrent && (
                                                 <span className="rounded bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-400 uppercase">
                                                     Current Session
                                                 </span>
@@ -282,7 +303,7 @@ export default function SecurityPage() {
                                     </div>
                                 </div>
                                 
-                                {index !== 0 && (
+                                {!session.isCurrent && (
                                     <Button 
                                         variant="danger" 
                                         className="p-2 bg-rose-500/5 hover:bg-rose-500/15 border-rose-500/10 text-rose-400"
@@ -298,20 +319,20 @@ export default function SecurityPage() {
                 )}
             </Panel>
 
-            {/* Audit Logs Panel */}
+            {/* Audit Logs Preview Panel */}
             <Panel>
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                         <Shield className="text-cyan-400" size={18} />
-                        <h3 className="font-bold text-white">Security Log</h3>
+                        <h3 className="font-bold text-white">Recent Security Activity</h3>
                     </div>
-                    <Button variant="secondary" className="p-2 text-xs" onClick={fetchAuditLogs} disabled={isLoadingLogs}>
+                    <Button variant="secondary" className="p-2 text-xs" onClick={() => fetchAuditLogs(true)} disabled={isLoadingLogs}>
                         <RefreshCw size={14} className={isLoadingLogs ? 'animate-spin' : ''} />
                     </Button>
                 </div>
 
                 <p className="text-xs text-slate-400 mb-4">
-                    This is a log of security events related to your account.
+                    Preview of your account's recent security logs. Visit the Security Activity tab for full logs, filtering, and search.
                 </p>
 
                 {isLoadingLogs ? (

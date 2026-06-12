@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Shield, Bell, AlertTriangle } from 'lucide-react';
+import { User, Shield, Bell, AlertTriangle, Clock } from 'lucide-react';
 import { PageHeader } from '@/components/ui';
 
 interface SettingsLayoutProps {
@@ -25,6 +25,12 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
             href: '/settings/security',
             icon: <Shield size={16} />,
             active: pathname === '/settings/security',
+        },
+        {
+            name: 'Security Activity',
+            href: '/settings/security-activity',
+            icon: <Clock size={16} />,
+            active: pathname === '/settings/security-activity',
         },
         {
             name: 'Notifications',

@@ -400,6 +400,7 @@ model UserSession {
   userAgent    String?
   device       String?
   browser      String?
+  os           String?
   ipAddress    String?
   lastActivity DateTime @default(now())
   expiresAt    DateTime
@@ -448,12 +449,16 @@ model NotificationPreference {
 
 model AuditLog {
   id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  action    String   // PASSWORD_CHANGE, EMAIL_CHANGE, PROFILE_UPDATE, SESSION_REVOCATION, ACCOUNT_DELETION
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String   // Event Type: LOGIN_SUCCESS, LOGIN_FAILURE, etc.
   details   String
   ipAddress String?
+  device    String?
+  browser   String?
+  os        String?
   userAgent String?
+  metadata  String?  // JSON string
   createdAt DateTime @default(now())
 
   @@index([userId])

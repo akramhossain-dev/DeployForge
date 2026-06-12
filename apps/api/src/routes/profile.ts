@@ -43,8 +43,19 @@ export default async function profileRoutes(fastify: FastifyInstance) {
     });
 
     fastify.get('/audit-logs', async (request) => {
-        const logs = await AccountService.getAuditLogs(request.user.id);
-        return { success: true, data: logs };
+        const { page, limit, search, category } = request.query as {
+            page?: string;
+            limit?: string;
+            search?: string;
+            category?: string;
+        };
+        const result = await AccountService.getAuditLogs(request.user.id, {
+            page: page ? parseInt(page) : undefined,
+            limit: limit ? parseInt(limit) : undefined,
+            search,
+            category,
+        });
+        return { success: true, ...result };
     });
 
     fastify.delete('/', async (request, reply) => {

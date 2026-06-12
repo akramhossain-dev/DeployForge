@@ -3,6 +3,7 @@ import prisma from '@deployforge/database';
 import { MailService } from '@deployforge/mail';
 import { config } from '../config/env';
 import crypto from 'crypto';
+import { AccountService } from './account.service';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 const mailService = new MailService({
@@ -17,11 +18,13 @@ const mailService = new MailService({
 
 export class AuthService {
     static async issueSession(user: any, authProvider: 'local' | 'github' | 'google', userAgent?: string, ipAddress?: string) {
+        const sessionId = crypto.randomUUID();
         const accessToken = tokenService.generateAccessToken({
             userId: user.id,
             role: user.role || 'USER',
             authProvider,
             tokenType: 'user',
+            sessionId,
         });
         const refreshToken = crypto.randomBytes(40).toString('hex');
         const hashedRefreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
@@ -40,6 +43,7 @@ export class AuthService {
         // Parse user agent
         let browser = 'Unknown Browser';
         let device = 'Desktop';
+        let os = 'Unknown OS';
         if (userAgent) {
             const ua = userAgent.toLowerCase();
             if (/mobile|android|iphone|ipad|phone/i.test(ua)) device = 'Mobile';
@@ -50,15 +54,23 @@ export class AuthService {
             else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
             else if (/edge|edg/i.test(ua)) browser = 'Edge';
             else if (/opr/i.test(ua)) browser = 'Opera';
+
+            if (/windows|win32/i.test(ua)) os = 'Windows';
+            else if (/macintosh|mac os x/i.test(ua)) os = 'macOS';
+            else if (/linux/i.test(ua)) os = 'Linux';
+            else if (/android/i.test(ua)) os = 'Android';
+            else if (/iphone|ipad|ipod/i.test(ua)) os = 'iOS';
         }
 
         await prisma.userSession.create({
             data: {
+                id: sessionId,
                 userId: user.id,
                 refreshToken: hashedRefreshToken,
                 userAgent,
                 device,
                 browser,
+                os,
                 ipAddress,
                 expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             },
@@ -147,20 +159,35 @@ export class AuthService {
 
     static async login(email: string, password: string, userAgent?: string, ipAddress?: string) {
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.passwordHash) throw new Error('Invalid credentials');
+        if (!user || !user.passwordHash) {
+            await AccountService.logAudit(null, 'LOGIN_FAILURE', `Login failed: Invalid email or password for ${email}`, ipAddress, userAgent, { email });
+            throw new Error('Invalid credentials');
+        }
 
-        if (user.status === 'SUSPENDED') throw new Error('Account suspended');
-        if (!user.isVerified) throw new Error('Please verify your email first');
+        if (user.status === 'SUSPENDED') {
+            await AccountService.logAudit(user.id, 'LOGIN_FAILURE', 'Login failed: Account suspended', ipAddress, userAgent, { email });
+            throw new Error('Account suspended');
+        }
+        if (!user.isVerified) {
+            await AccountService.logAudit(user.id, 'LOGIN_FAILURE', 'Login failed: Email not verified', ipAddress, userAgent, { email });
+            throw new Error('Please verify your email first');
+        }
 
         const isValid = await PasswordService.verify(user.passwordHash, password);
-        if (!isValid) throw new Error('Invalid credentials');
+        if (!isValid) {
+            await AccountService.logAudit(user.id, 'LOGIN_FAILURE', 'Login failed: Incorrect password', ipAddress, userAgent, { email });
+            throw new Error('Invalid credentials');
+        }
 
         await prisma.user.update({
             where: { id: user.id },
             data: { lastLoginAt: new Date() },
         });
 
-        return this.issueSession(user, 'local', userAgent, ipAddress);
+        const session = await this.issueSession(user, 'local', userAgent, ipAddress);
+        await AccountService.logAudit(user.id, 'LOGIN_SUCCESS', 'User logged in successfully via email/password.', ipAddress, userAgent);
+
+        return session;
     }
 
     static async refresh(refreshToken: string) {
@@ -171,21 +198,37 @@ export class AuthService {
         });
 
         if (!session || new Date() > session.expiresAt) {
-            if (session) await prisma.session.delete({ where: { id: session.id } });
+            if (session) {
+                await prisma.session.delete({ where: { id: session.id } });
+                await prisma.userSession.deleteMany({ where: { refreshToken: hashedToken } });
+            }
             throw new Error('Invalid or expired refresh token');
         }
+
+        const userSession = await prisma.userSession.findUnique({
+            where: { refreshToken: hashedToken }
+        });
 
         const accessToken = tokenService.generateAccessToken({
             userId: session.userId,
             role: session.user.role || 'USER',
             authProvider: session.authProvider === 'github' || session.authProvider === 'google' ? session.authProvider : 'local',
             tokenType: 'user',
+            sessionId: userSession?.id,
         });
         return { accessToken };
     }
 
-    static async logout(refreshToken: string) {
+    static async logout(refreshToken: string, ip?: string, ua?: string) {
         const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
-        await prisma.session.deleteMany({ where: { refreshToken: hashedToken } });
+        const session = await prisma.session.findUnique({
+            where: { refreshToken: hashedToken },
+            select: { userId: true }
+        });
+        if (session) {
+            await AccountService.logAudit(session.userId, 'LOGOUT', 'User logged out successfully.', ip, ua);
+            await prisma.session.deleteMany({ where: { refreshToken: hashedToken } });
+            await prisma.userSession.deleteMany({ where: { refreshToken: hashedToken } });
+        }
     }
 }

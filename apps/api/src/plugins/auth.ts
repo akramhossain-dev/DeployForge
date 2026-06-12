@@ -43,6 +43,15 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 return reply.status(401).send({ success: false, message: 'Unauthorized', errorCode: 'UNAUTHORIZED_USER_ACCESS' });
             }
 
+            if (payload.sessionId) {
+                const activeSession = await prisma.userSession.findUnique({
+                    where: { id: payload.sessionId },
+                });
+                if (!activeSession || new Date() > activeSession.expiresAt) {
+                    return reply.status(401).send({ success: false, message: 'Session revoked or expired', errorCode: 'SESSION_REVOKED' });
+                }
+            }
+
             const user = await prisma.user.findUnique({
                 where: { id: payload.userId },
                 select: {
@@ -74,6 +83,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
             const { passwordHash, ...safeUser } = user;
             request.user = {
                 ...safeUser,
+                sessionId: payload.sessionId,
                 connectedProviders: {
                     google: Boolean(user.googleId),
                     github: Boolean(user.githubId),
