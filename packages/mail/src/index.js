@@ -21,7 +21,7 @@ class MailService {
         </div>
         <p>This code will expire in 10 minutes. If you did not request this, please ignore this email.</p>
         <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #64748b; text-align: center;">&copy; 2024 DeployForge. All rights reserved.</p>
+        <p style="font-size: 12px; color: #64748b; text-align: center;">&copy; DeployForge. All rights reserved.</p>
       </div>
     `;
         await this.transporter.sendMail({

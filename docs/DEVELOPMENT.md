@@ -46,10 +46,12 @@ GITHUB_WEBHOOK_SECRET=your_github_webhook_secret_key
 
 GOOGLE_OAUTH_ENABLED=false
 
-SMTP_HOST=localhost
-SMTP_PORT=1025
-SMTP_USER=dummy
-SMTP_PASS=dummy
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_smtp_username
+SMTP_PASS=your_smtp_password_or_app_password
+SMTP_FROM=no-reply@example.com
 ```
 
 ---

@@ -52,6 +52,21 @@ export async function buildApp() {
     // Custom Plugins
     await app.register(import('./plugins/auth'));
 
+    // Global Error Handler
+    app.setErrorHandler((error, request, reply) => {
+        const statusCode = error.statusCode || 500;
+        const message = statusCode >= 500 && !(error as any).expose
+            ? 'Internal Server Error'
+            : error.message;
+        app.log.error(error);
+
+        reply.status(statusCode).send({
+            success: false,
+            message,
+            ...(config.app.env === 'development' && { stack: error.stack })
+        });
+    });
+
     // Routes
     await app.register(import('./routes/auth'), { prefix: '/auth' });
     await app.register(import('./routes/auth'), { prefix: '/api/auth' });
@@ -76,18 +91,6 @@ export async function buildApp() {
     await app.register(import('./routes/monitoring'), { prefix: '/monitor' });
 
     await app.register(import('./routes/terminal'), { prefix: '/terminal' });
-
-    // Global Error Handler
-    app.setErrorHandler((error, request, reply) => {
-        const statusCode = error.statusCode || 500;
-        app.log.error(error);
-
-        reply.status(statusCode).send({
-            success: false,
-            message: statusCode >= 500 ? 'Internal Server Error' : error.message,
-            ...(config.app.env === 'development' && { stack: error.stack })
-        });
-    });
 
     // Health Check
     app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

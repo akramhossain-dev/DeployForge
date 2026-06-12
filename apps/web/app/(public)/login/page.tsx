@@ -113,7 +113,12 @@ export default function LoginPage() {
                                 />
                             </label>
                             <label className="block">
-                                <span className="text-sm font-bold text-slate-300">Password</span>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-bold text-slate-300">Password</span>
+                                    <Link href="/forgot-password" className="text-xs font-semibold text-cyan-400 transition-colors hover:text-cyan-300">
+                                        Forgot Password?
+                                    </Link>
+                                </div>
                                 <PasswordInput
                                     autoComplete="current-password"
                                     value={password}

@@ -12,7 +12,19 @@ const mailService = new MailService({
         user: config.email.smtp.user,
         pass: config.email.smtp.pass,
     },
+    fromEmail: config.email.fromEmail,
 });
+
+function publicError(message: string, statusCode: number) {
+    return Object.assign(new Error(message), {
+        statusCode,
+        expose: true,
+    });
+}
+
+function emailServiceUnavailableError() {
+    return publicError('Email service unavailable. Please try again later.', 503);
+}
 
 export class AccountService {
     static async logAudit(userId: string | null, action: string, details: string, ip?: string, ua?: string, metadata?: any) {
@@ -122,11 +134,20 @@ export class AccountService {
         await this.logAudit(userId, 'PASSWORD_CHANGE', 'User password successfully changed.', ip, ua);
     }
 
+    /**
+     * Sends a password reset email with a secure token.
+     *
+     * Security:
+     * - Returns a proper error if email not found
+     * - Token is stored as SHA-256 hash
+     * - Token expires in 1 hour
+     * - Token is single-use (marked usedAt after consumption)
+     * - SMTP errors are caught and logged internally
+     */
     static async forgotPassword(email: string, ip?: string, ua?: string) {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
-            // Silently return to prevent user enumeration
-            return;
+            throw publicError('User not found', 404);
         }
 
         const rawToken = crypto.randomBytes(32).toString('hex');
@@ -142,13 +163,14 @@ export class AccountService {
         });
 
         const resetLink = `${config.app.appUrl}/reset-password?token=${rawToken}`;
-        
+
         await this.logAudit(user.id, 'PASSWORD_RESET_REQUEST', 'Password reset link requested.', ip, ua);
 
         try {
             await mailService.sendPasswordReset(email, resetLink);
-        } catch (err) {
-            console.warn(`[auth] SMTP error. Reset password link: ${resetLink}`);
+        } catch (error: any) {
+            console.error('[auth] Failed to send password reset email', { email, error });
+            throw emailServiceUnavailableError();
         }
     }
 
@@ -181,6 +203,15 @@ export class AccountService {
         await this.logAudit(resetTokenRecord.userId, 'PASSWORD_RESET_SUCCESS', 'Password reset completed via token.', ip, ua);
     }
 
+    /**
+     * Sends an email verification link to the user.
+     *
+     * Security:
+     * - Token is stored as SHA-256 hash
+     * - Token expires in 24 hours
+     * - Token is single-use (marked usedAt after consumption)
+     * - SMTP errors are caught and logged internally
+     */
     static async sendVerification(userId: string) {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user || !user.email) throw new Error('User not found');
@@ -202,8 +233,9 @@ export class AccountService {
 
         try {
             await mailService.sendEmailVerification(user.email, verificationLink);
-        } catch (err) {
-            console.warn(`[auth] SMTP error. Verification link: ${verificationLink}`);
+        } catch (error: any) {
+            console.error('[auth] Failed to send verification email', { email: user.email, error });
+            throw emailServiceUnavailableError();
         }
     }
 

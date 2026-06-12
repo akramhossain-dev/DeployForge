@@ -8,7 +8,7 @@ DeployForge backend routes support both base routes and `/api/*` prefixes (e.g. 
 
 ### `POST /register`
 - **Body:** `{ email, password, name, termsAccepted: true }`
-- **Response:** `200` `{ success: true, message: string, email: string }` (Returns a development OTP if SMTP is disabled)
+- **Response:** `200` `{ success: true, message: string, email: string }`
 
 ### `POST /verify-otp`
 - **Body:** `{ email, otp }`
@@ -33,6 +33,7 @@ DeployForge backend routes support both base routes and `/api/*` prefixes (e.g. 
 ### `POST /forgot-password`
 - **Body:** `{ email }`
 - **Response:** `200` `{ success: true, message: string }`
+- **Errors:** `404` when the user does not exist; `503` when the email service is unavailable.
 
 ### `POST /reset-password`
 - **Body:** `{ token, password }`

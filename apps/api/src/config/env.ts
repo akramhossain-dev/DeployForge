@@ -8,6 +8,14 @@ const url = (name: string) => z.string({ required_error: `${name} is required` }
 const secret = (name: string, min = 32) => z.string({ required_error: `${name} is required` }).trim().min(min, `${name} must be at least ${min} characters`);
 const required = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
 const optional = () => z.string().trim().optional().default('');
+const envBoolean = (defaultValue: boolean) => z.preprocess((value) => {
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+        if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+    }
+    return value;
+}, z.boolean()).default(defaultValue);
 
 const rawEnvSchema = z.object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -33,7 +41,7 @@ const rawEnvSchema = z.object({
     GITHUB_REDIRECT_URI: url('GITHUB_REDIRECT_URI').optional(),
     GITHUB_WEBHOOK_SECRET: secret('GITHUB_WEBHOOK_SECRET'),
 
-    GOOGLE_OAUTH_ENABLED: z.coerce.boolean().default(true),
+    GOOGLE_OAUTH_ENABLED: envBoolean(true),
     GOOGLE_CLIENT_ID: optional(),
     GOOGLE_CLIENT_SECRET: optional(),
     GOOGLE_CALLBACK_URL: url('GOOGLE_CALLBACK_URL').optional(),
@@ -41,9 +49,10 @@ const rawEnvSchema = z.object({
 
     SMTP_HOST: required('SMTP_HOST'),
     SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
-    SMTP_SECURE: z.coerce.boolean().default(false),
+    SMTP_SECURE: envBoolean(false),
     SMTP_USER: required('SMTP_USER'),
     SMTP_PASS: secret('SMTP_PASS', 1),
+    SMTP_FROM: z.string({ required_error: 'SMTP_FROM is required' }).trim().email('SMTP_FROM must be a valid email address'),
 
     EMAIL_SERVICE: optional(),
     EMAIL_USER: optional(),
@@ -149,6 +158,7 @@ export const emailConfig = {
     },
     service: env.EMAIL_SERVICE,
     legacyUser: env.EMAIL_USER,
+    fromEmail: env.SMTP_FROM,
 } as const;
 
 export const securityConfig = {
@@ -192,6 +202,7 @@ export const config = {
     SMTP_SECURE: emailConfig.smtp.secure,
     SMTP_USER: emailConfig.smtp.user,
     SMTP_PASS: emailConfig.smtp.pass,
+    SMTP_FROM: emailConfig.fromEmail,
     RATE_LIMIT_MAX: securityConfig.rateLimitMax,
     RATE_LIMIT_WINDOW: securityConfig.rateLimitWindow,
 } as const;

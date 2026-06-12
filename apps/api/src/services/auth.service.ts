@@ -14,7 +14,22 @@ const mailService = new MailService({
         user: config.email.smtp.user,
         pass: config.email.smtp.pass,
     },
+    fromEmail: config.email.fromEmail,
 });
+
+function emailServiceUnavailableError() {
+    return Object.assign(new Error('Email service unavailable. Please try again later.'), {
+        statusCode: 503,
+        expose: true,
+    });
+}
+
+function publicError(message: string, statusCode: number) {
+    return Object.assign(new Error(message), {
+        statusCode,
+        expose: true,
+    });
+}
 
 export class AuthService {
     static async issueSession(user: any, authProvider: 'local' | 'github' | 'google', userAgent?: string, ipAddress?: string) {
@@ -97,10 +112,28 @@ export class AuthService {
             },
         });
 
-        const otpResult = await this.sendOTP(email);
-        return { user, ...otpResult };
+        try {
+            await this.sendOTP(email);
+        } catch (error) {
+            await prisma.verificationToken.deleteMany({ where: { email } });
+            await prisma.user.delete({ where: { id: user.id } });
+            throw error;
+        }
+
+        // Return only user info.
+        return { user: { id: user.id, email: user.email, name: user.name } };
     }
 
+    /**
+     * Generates a secure 6-digit OTP, stores it hashed with expiry,
+     * and sends it via SMTP email.
+     *
+     * Security:
+     * - OTP is stored as SHA-256 hash (never plaintext)
+     * - OTP expires in 10 minutes
+     * - OTP is NEVER returned in the API response
+     * - SMTP errors are caught and logged internally
+     */
     static async sendOTP(email: string) {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
@@ -122,23 +155,21 @@ export class AuthService {
 
         try {
             await mailService.sendOTP(email, otp);
-            return {};
-        } catch (error) {
-            if (config.app.env !== 'development' && config.app.env !== 'test') {
-                throw error;
-            }
-
-            console.warn(`[auth] SMTP unavailable. Development OTP for ${email}: ${otp}`);
-            return { devOtp: otp };
+        } catch (error: any) {
+            console.error('[auth] Failed to send OTP email', { email, error });
+            throw emailServiceUnavailableError();
         }
+
+        // Return nothing — OTP must never leak into the response
+        return {};
     }
 
     static async verifyOTP(email: string, otp: string) {
         const record = await prisma.verificationToken.findUnique({ where: { email } });
-        if (!record) throw new Error('No OTP found for this email');
+        if (!record) throw publicError('OTP is required.', 400);
 
-        if (new Date() > record.expiresAt) throw new Error('OTP expired');
-        if (record.attempts >= 5) throw new Error('Too many attempts');
+        if (new Date() > record.expiresAt) throw publicError('OTP expired. Please request a new one.', 400);
+        if (record.attempts >= 5) throw publicError('Too many attempts. Please request a new code.', 429);
 
         const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
         if (hashedOTP !== record.token) {
@@ -146,7 +177,7 @@ export class AuthService {
                 where: { email },
                 data: { attempts: { increment: 1 } },
             });
-            throw new Error('Invalid OTP');
+            throw publicError('Invalid OTP. Please try again.', 400);
         }
 
         await prisma.user.update({

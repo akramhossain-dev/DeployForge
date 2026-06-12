@@ -20,7 +20,6 @@ export default function RegisterPage() {
     const [githubLoading, setGithubLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [verified, setVerified] = useState(false);
-    const [devOtp, setDevOtp] = useState<string | null>(null);
     const auth = useAuthSession();
     const router = useRouter();
 
@@ -38,9 +37,7 @@ export default function RegisterPage() {
             return;
         }
         try {
-            const response = await api.post<{ email: string; message: string; devOtp?: string }>('/auth/register', { name, email, password, termsAccepted });
-            setDevOtp(response.devOtp || null);
-            if (response.devOtp) setOtp(response.devOtp);
+            await api.post<{ email: string; message: string }>('/auth/register', { name, email, password, termsAccepted });
             setStep('verify');
         } catch (err: any) {
             setError(err.message || 'Unable to create your account.');
@@ -168,11 +165,6 @@ export default function RegisterPage() {
                                     <h2 className="mt-4 text-2xl font-black tracking-tight">Verify email</h2>
                                     <p className="mt-2 text-sm text-slate-400">Enter the 6-digit code sent to {email}.</p>
                                 </div>
-                                {devOtp ? (
-                                    <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 p-3 text-sm text-cyan-100">
-                                        Development OTP: <span className="font-mono font-bold tracking-widest">{devOtp}</span>
-                                    </div>
-                                ) : null}
                                 <input required inputMode="numeric" autoComplete="one-time-code" maxLength={6} minLength={6} value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))} className="h-14 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-center font-mono text-xl tracking-[0.4em] outline-none transition-colors focus:border-cyan-300" placeholder="000000" />
                                 {error ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p> : null}
                                 <button disabled={loading || auth.isLoading} className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-white font-black text-slate-950 transition-transform hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60">
