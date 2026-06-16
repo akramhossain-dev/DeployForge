@@ -263,7 +263,7 @@ export class AccountService {
     }
 
     static async getSessions(userId: string) {
-        const sessions = await prisma.userSession.findMany({
+        const sessions = await prisma.session.findMany({
             where: { userId },
             orderBy: { lastActivity: 'desc' },
         });
@@ -279,44 +279,21 @@ export class AccountService {
     }
 
     static async revokeSession(userId: string, sessionId: string, ip?: string, ua?: string) {
-        const session = await prisma.userSession.findFirst({
+        const session = await prisma.session.findFirst({
             where: { id: sessionId, userId },
         });
         if (!session) throw new Error('Session not found');
 
-        // Revoke from userSession
-        await prisma.userSession.delete({ where: { id: sessionId } });
-
-        // Revoke legacy session
-        await prisma.session.deleteMany({
-            where: { userId, refreshToken: session.refreshToken },
-        });
+        await prisma.session.delete({ where: { id: sessionId } });
 
         await this.logAudit(userId, 'SESSION_REVOKED', `Session ID ${sessionId} (IP: ${session.ipAddress || 'unknown'}) was revoked.`, ip, ua);
     }
 
     static async revokeOtherSessions(userId: string, currentSessionId: string, ip?: string, ua?: string) {
-        const otherUserSessions = await prisma.userSession.findMany({
-            where: {
-                userId,
-                NOT: { id: currentSessionId },
-            },
-            select: { refreshToken: true },
-        });
-
-        const otherRefreshTokens = otherUserSessions.map((s) => s.refreshToken);
-
-        await prisma.userSession.deleteMany({
-            where: {
-                userId,
-                NOT: { id: currentSessionId },
-            },
-        });
-
         await prisma.session.deleteMany({
             where: {
                 userId,
-                refreshToken: { in: otherRefreshTokens },
+                NOT: { id: currentSessionId },
             },
         });
 
@@ -324,7 +301,6 @@ export class AccountService {
     }
 
     static async revokeAllSessions(userId: string, ip?: string, ua?: string) {
-        await prisma.userSession.deleteMany({ where: { userId } });
         await prisma.session.deleteMany({ where: { userId } });
 
         await this.logAudit(userId, 'LOGOUT_ALL_SESSIONS', 'All active sessions were successfully logged out.', ip, ua);

@@ -1,13 +1,19 @@
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { AccountService } from '../services/account.service';
+
+const sessionParamsSchema = z.object({
+    id: z.string().uuid({ message: 'Invalid session ID format' }),
+});
 
 export default async function sessionsRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
     // GET /api/sessions
-    fastify.get('/', async (request) => {
+    fastify.get('/', {
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    }, async (request) => {
         const sessions = await AccountService.getSessions(request.user.id);
-        // Map active sessions, flagging the current one
         const mapped = sessions.map(s => ({
             ...s,
             isCurrent: s.id === request.user.sessionId
@@ -16,34 +22,48 @@ export default async function sessionsRoutes(fastify: FastifyInstance) {
     });
 
     // DELETE /api/sessions/logout-others
-    fastify.delete('/logout-others', async (request, reply) => {
+    fastify.delete('/logout-others', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
         const currentSessionId = request.user.sessionId;
         if (!currentSessionId) {
-            return reply.status(400).send({ success: false, message: 'Current session ID could not be identified' });
+            return reply.status(400).send({
+                success: false,
+                error: {
+                    code: 'BAD_REQUEST',
+                    message: 'Current session ID could not be identified'
+                }
+            });
         }
         await AccountService.revokeOtherSessions(request.user.id, currentSessionId, request.ip, request.headers['user-agent']);
-        return { success: true, message: 'Other sessions revoked successfully' };
+        return { success: true, data: { message: 'Other sessions revoked successfully' } };
     });
 
     // DELETE /api/sessions/logout-all
-    fastify.delete('/logout-all', async (request) => {
+    fastify.delete('/logout-all', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request) => {
         await AccountService.revokeAllSessions(request.user.id, request.ip, request.headers['user-agent']);
-        return { success: true, message: 'All sessions revoked successfully' };
+        return { success: true, data: { message: 'All sessions revoked successfully' } };
     });
 
     // DELETE /api/sessions/:id
-    fastify.delete('/:id', async (request, reply) => {
-        const { id } = request.params as { id: string };
+    fastify.delete('/:id', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
+        const { id } = sessionParamsSchema.parse(request.params);
         
-        // Prevent revoking the current session via this route by accident
         if (id === request.user.sessionId) {
             return reply.status(400).send({ 
                 success: false, 
-                message: 'To close the current session, please log out or use Logout All Sessions' 
+                error: {
+                    code: 'BAD_REQUEST',
+                    message: 'To close the current session, please log out or use Logout All Sessions' 
+                }
             });
         }
 
         await AccountService.revokeSession(request.user.id, id, request.ip, request.headers['user-agent']);
-        return { success: true, message: 'Session revoked successfully' };
+        return { success: true, data: { message: 'Session revoked successfully' } };
     });
 }

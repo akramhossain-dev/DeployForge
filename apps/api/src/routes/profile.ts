@@ -11,59 +11,82 @@ const changePasswordSchema = z.object({
     newPassword: z.string().min(8, 'New password must be at least 8 characters long'),
 });
 
+const updatePreferencesSchema = z.object({
+    emailDeployments: z.boolean().optional(),
+    emailSecurity: z.boolean().optional(),
+    emailNewsletter: z.boolean().optional(),
+}).strict();
+
+const auditLogQuerySchema = z.object({
+    page: z.preprocess((val) => val ? parseInt(val as string) : 1, z.number().int().positive().default(1)),
+    limit: z.preprocess((val) => val ? parseInt(val as string) : 10, z.number().int().positive().default(10)),
+    search: z.string().optional(),
+    category: z.string().optional(),
+});
+
+const deleteAccountSchema = z.object({
+    passwordConfirm: z.string().min(1, 'Password confirmation is required'),
+});
+
 export default async function profileRoutes(fastify: FastifyInstance) {
-    // Require authentication for all profile endpoints
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    fastify.get('/', async (request) => {
+    fastify.get('/', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request) => {
         const profile = await AccountService.getProfile(request.user.id);
         return { success: true, data: profile };
     });
 
-    fastify.patch('/', async (request) => {
+    fastify.patch('/', {
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    }, async (request) => {
         const body = updateProfileSchema.parse(request.body);
         const updated = await AccountService.updateProfile(request.user.id, body, request.ip, request.headers['user-agent']);
         return { success: true, data: updated };
     });
 
-    fastify.post('/change-password', async (request, reply) => {
+    fastify.post('/change-password', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request) => {
         const body = changePasswordSchema.parse(request.body);
         await AccountService.changePassword(request.user.id, body, request.ip, request.headers['user-agent']);
-        return { success: true, message: 'Password updated successfully' };
+        return { success: true, data: { message: 'Password updated successfully' } };
     });
 
-    fastify.get('/preferences', async (request) => {
+    fastify.get('/preferences', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request) => {
         const prefs = await AccountService.getNotificationPreferences(request.user.id);
         return { success: true, data: prefs };
     });
 
-    fastify.patch('/preferences', async (request) => {
-        const updated = await AccountService.updateNotificationPreferences(request.user.id, request.body);
+    fastify.patch('/preferences', {
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    }, async (request) => {
+        const body = updatePreferencesSchema.parse(request.body);
+        const updated = await AccountService.updateNotificationPreferences(request.user.id, body);
         return { success: true, data: updated };
     });
 
-    fastify.get('/audit-logs', async (request) => {
-        const { page, limit, search, category } = request.query as {
-            page?: string;
-            limit?: string;
-            search?: string;
-            category?: string;
-        };
+    fastify.get('/audit-logs', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request) => {
+        const query = auditLogQuerySchema.parse(request.query);
         const result = await AccountService.getAuditLogs(request.user.id, {
-            page: page ? parseInt(page) : undefined,
-            limit: limit ? parseInt(limit) : undefined,
-            search,
-            category,
+            page: query.page,
+            limit: query.limit,
+            search: query.search,
+            category: query.category,
         });
-        return { success: true, ...result };
+        return { success: true, data: result };
     });
 
-    fastify.delete('/', async (request, reply) => {
-        const { passwordConfirm } = request.body as { passwordConfirm?: string };
-        if (!passwordConfirm) {
-            return reply.status(400).send({ success: false, message: 'Password confirmation is required' });
-        }
+    fastify.delete('/', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
+        const { passwordConfirm } = deleteAccountSchema.parse(request.body);
         await AccountService.deleteAccount(request.user.id, passwordConfirm, request.ip, request.headers['user-agent']);
-        return { success: true, message: 'Account deleted successfully' };
+        return { success: true, data: { message: 'Account deleted successfully' } };
     });
 }

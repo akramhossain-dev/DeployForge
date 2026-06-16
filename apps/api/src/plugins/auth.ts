@@ -27,24 +27,43 @@ function tokenHash(token: string) {
     return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+    const cookies: Record<string, string> = {};
+    if (!cookieHeader) return cookies;
+    cookieHeader.split(';').forEach(cookie => {
+        const parts = cookie.split('=');
+        if (parts.length === 2) {
+            cookies[parts[0].trim()] = parts[1].trim();
+        }
+    });
+    return cookies;
+}
+
 const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
     fastify.decorateRequest('user', null);
 
     fastify.decorate('authGuard', async (request: FastifyRequest, reply: FastifyReply) => {
         try {
+            let token = '';
             const authHeader = request.headers.authorization;
-            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.split(' ')[1];
+            } else {
+                const cookies = parseCookies(request.headers.cookie);
+                token = cookies['accessToken'] || '';
+            }
+
+            if (!token) {
                 return reply.status(401).send({ success: false, message: 'Unauthorized' });
             }
 
-            const token = authHeader.split(' ')[1];
             const payload = tokenService.verifyToken(token);
             if (payload.tokenType && payload.tokenType !== 'user') {
                 return reply.status(401).send({ success: false, message: 'Unauthorized', errorCode: 'UNAUTHORIZED_USER_ACCESS' });
             }
 
             if (payload.sessionId) {
-                const activeSession = await prisma.userSession.findUnique({
+                const activeSession = await prisma.session.findUnique({
                     where: { id: payload.sessionId },
                 });
                 if (!activeSession || new Date() > activeSession.expiresAt) {

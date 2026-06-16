@@ -9,13 +9,18 @@ import { pipeline } from 'node:stream/promises';
 import { RollbackService } from '../services/rollback.service';
 import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
+import { sanitizeDeployment } from '../utils/sanitizers';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
+const idParamsSchema = z.object({
+    id: z.string().uuid({ message: 'Invalid ID format' }),
+});
+
 const githubDeploySchema = z.object({
-    projectId: z.string().min(1).optional(),
-    repositoryId: z.string().min(1).optional(),
-    vpsId: z.string().uuid(),
+    projectId: z.string().uuid({ message: 'Invalid projectId format' }).optional(),
+    repositoryId: z.string().uuid({ message: 'Invalid repositoryId format' }).optional(),
+    vpsId: z.string().uuid({ message: 'Invalid vpsId format' }),
     branch: z.string().default('main'),
     environment: z.enum(['production', 'development']).optional(),
     mode: z.enum(['production', 'sandbox']).optional().default('production'),
@@ -24,9 +29,24 @@ const githubDeploySchema = z.object({
     env: z.record(z.string()).optional().default({}),
 });
 
+const wsParamsSchema = z.object({
+    id: z.string().uuid({ message: 'Invalid deployment ID format' }),
+});
+
+const wsQuerySchema = z.object({
+    token: z.string().min(1, 'Token is required'),
+});
+
+const rollbackBodySchema = z.object({
+    historyId: z.string().uuid({ message: 'Invalid history ID format' }).optional(),
+});
+
 export default async function deployRoutes(fastify: FastifyInstance) {
     // 1. GitHub Deployment
-    fastify.post('/github', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.post('/github', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
         try {
             const { projectId, repositoryId, vpsId, branch, autoDeploy, domainName, env, mode } = githubDeploySchema.parse(request.body);
             const project = projectId
@@ -34,7 +54,13 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 : await projectFromRepository(request.user.id, repositoryId, branch);
 
             if (!project) {
-                return reply.status(404).send({ success: false, stage: 'pending', message: 'Project or repository not found', errorCode: 'PROJECT_NOT_FOUND' });
+                return reply.status(404).send({
+                    success: false,
+                    error: {
+                        code: 'NOT_FOUND',
+                        message: 'Project or repository not found'
+                    }
+                });
             }
 
             const deployment = await DeploymentService.deployProject(request.user.id, {
@@ -47,17 +73,26 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 env,
                 mode,
             });
-            return { success: true, data: deployment };
+            return { success: true, data: sanitizeDeployment(deployment) };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
         }
     });
 
-    fastify.post('/upload', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.post('/upload', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
         try {
             const upload = await readUploadMultipart(request);
             if (!upload) {
-                return reply.status(400).send({ success: false, stage: 'uploading', message: 'Upload file is required', errorCode: 'UPLOAD_FILE_REQUIRED' });
+                return reply.status(400).send({
+                    success: false,
+                    error: {
+                        code: 'BAD_REQUEST',
+                        message: 'Upload file is required'
+                    }
+                });
             }
 
             const { uploadPath, safeName, fields } = upload;
@@ -68,12 +103,34 @@ export default async function deployRoutes(fastify: FastifyInstance) {
             const env = parseEnvField(fields.env);
             const mode = fields.mode === 'sandbox' ? 'sandbox' : 'production';
 
-            if (!vpsId) {
-                return reply.status(400).send({ success: false, stage: 'uploading', message: 'vpsId is required', errorCode: 'VPS_REQUIRED' });
+            if (!vpsId || !z.string().uuid().safeParse(vpsId).success) {
+                return reply.status(400).send({
+                    success: false,
+                    error: {
+                        code: 'BAD_REQUEST',
+                        message: 'A valid vpsId (UUID) is required'
+                    }
+                });
+            }
+
+            if (projectId && !z.string().uuid().safeParse(projectId).success) {
+                return reply.status(400).send({
+                    success: false,
+                    error: {
+                        code: 'BAD_REQUEST',
+                        message: 'Invalid projectId format (UUID)'
+                    }
+                });
             }
 
             if (!/\.zip$/i.test(safeName) && !/\.tar\.gz$/i.test(safeName) && !/\.tgz$/i.test(safeName)) {
-                return reply.status(400).send({ success: false, stage: 'uploading', message: 'Only .zip, .tar.gz, and .tgz uploads are supported', errorCode: 'UNSUPPORTED_UPLOAD_TYPE' });
+                return reply.status(400).send({
+                    success: false,
+                    error: {
+                        code: 'BAD_REQUEST',
+                        message: 'Only .zip, .tar.gz, and .tgz uploads are supported'
+                    }
+                });
             }
 
             const project = projectId
@@ -88,7 +145,13 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 });
 
             if (!project) {
-                return reply.status(404).send({ success: false, stage: 'uploading', message: 'Project not found', errorCode: 'PROJECT_NOT_FOUND' });
+                return reply.status(404).send({
+                    success: false,
+                    error: {
+                        code: 'NOT_FOUND',
+                        message: 'Project not found'
+                    }
+                });
             }
 
             const deployment = await DeploymentService.deployProject(request.user.id, {
@@ -102,14 +165,17 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 mode,
             });
 
-            return { success: true, data: deployment };
+            return { success: true, data: sanitizeDeployment(deployment) };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
         }
     });
 
     // 2. List Deployments
-    fastify.get('/list', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.get('/list', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
         const deployments = await prisma.deployment.findMany({
             where: { userId: request.user.id },
             include: {
@@ -123,12 +189,15 @@ export default async function deployRoutes(fastify: FastifyInstance) {
             },
             orderBy: { createdAt: 'desc' },
         });
-        return { success: true, data: deployments };
+        return { success: true, data: deployments.map(sanitizeDeployment).filter(Boolean) };
     });
 
     // 3. Get Logs
-    fastify.get('/:id/logs', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { id } = request.params as { id: string };
+    fastify.get('/:id/logs', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = idParamsSchema.parse(request.params);
         const logs = await prisma.deploymentLog.findMany({
             where: { deploymentId: id, deployment: { userId: request.user.id } },
             orderBy: { createdAt: 'asc' },
@@ -136,13 +205,23 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         return { success: true, data: logs };
     });
 
+    // WebSocket logs stream
     fastify.get('/:id/logs/stream', { websocket: true }, async (connection, request) => {
-        const { id } = request.params as { id: string };
-        const { token } = request.query as { token?: string };
+        let id: string;
+        let token: string;
+        try {
+            const params = wsParamsSchema.parse(request.params);
+            const query = wsQuerySchema.parse(request.query);
+            id = params.id;
+            token = query.token;
+        } catch (err: any) {
+            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Invalid parameters or query' }));
+            connection.socket.close();
+            return;
+        }
 
         let userId = '';
         try {
-            if (!token) throw new Error('Missing token');
             const payload = tokenService.verifyToken(token);
             userId = payload.userId;
         } catch {
@@ -181,20 +260,26 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         connection.socket.on('close', () => clearInterval(interval));
     });
 
-    fastify.get('/status/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.get('/status/:id', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
         try {
-            const { id } = request.params as { id: string };
+            const { id } = idParamsSchema.parse(request.params);
             const deployment = await DeploymentService.getStatus(request.user.id, id);
-            return { success: true, data: deployment };
+            return { success: true, data: sanitizeDeployment(deployment) };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
         }
     });
 
-    fastify.post('/rollback/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.post('/rollback/:id', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
         try {
-            const { id } = request.params as { id: string };
-            const { historyId } = (request.body || {}) as { historyId?: string };
+            const { id } = idParamsSchema.parse(request.params);
+            const { historyId } = rollbackBodySchema.parse(request.body);
             const result = await RollbackService.rollback(request.user.id, id, historyId);
             return { success: true, data: result };
         } catch (err: any) {
@@ -203,21 +288,27 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     });
 
     // 4. Start/Stop
-    fastify.post('/:id/stop', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.post('/:id/stop', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
         try {
-            const { id } = request.params as { id: string };
+            const { id } = idParamsSchema.parse(request.params);
             await DeploymentService.stopDeployment(request.user.id, id);
-            return { success: true, message: 'Deployment stopped' };
+            return { success: true, data: { message: 'Deployment stopped' } };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
         }
     });
 
-    fastify.post('/:id/start', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.post('/:id/start', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+    }, async (request, reply) => {
         try {
-            const { id } = request.params as { id: string };
+            const { id } = idParamsSchema.parse(request.params);
             await DeploymentService.startDeployment(request.user.id, id);
-            return { success: true, message: 'Deployment started' };
+            return { success: true, data: { message: 'Deployment started' } };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
         }
@@ -265,9 +356,11 @@ function sendDeploymentError(reply: any, err: any) {
 
     return reply.status(status).send({
         success: false,
-        stage: err?.stage || 'request',
-        message: status >= 500 ? 'Internal Server Error' : err.message,
-        errorCode: err?.errorCode || (err?.name === 'ZodError' ? 'VALIDATION_ERROR' : 'DEPLOYMENT_ERROR'),
+        error: {
+            code: err?.errorCode || (err?.name === 'ZodError' ? 'VALIDATION_ERROR' : 'DEPLOYMENT_ERROR'),
+            message: status >= 500 ? 'Internal Server Error' : err.message,
+            stage: err?.stage || 'request',
+        }
     });
 }
 

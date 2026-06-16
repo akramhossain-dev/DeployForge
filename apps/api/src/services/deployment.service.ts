@@ -693,7 +693,6 @@ export class DeploymentService {
             await prisma.$transaction([
                 prisma.deploymentJob.deleteMany({ where: { deploymentId } }),
                 prisma.deploymentLog.deleteMany({ where: { deploymentId } }),
-                prisma.log.deleteMany({ where: { deploymentId } }),
                 prisma.deploymentSandbox.deleteMany({ where: { deploymentId } }),
                 prisma.deploymentHistory.deleteMany({ where: { deploymentId } }),
                 prisma.domain.deleteMany({ where: { deploymentId } }),

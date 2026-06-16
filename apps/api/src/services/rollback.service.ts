@@ -3,6 +3,7 @@ import { SSHService } from '@deployforge/vps';
 import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import { LoggingService } from './logging.service';
+import { verifyDeploymentOwnership } from '../utils/authz';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -15,11 +16,16 @@ export class RollbackService {
     }
 
     static async rollback(userId: string, deploymentId: string, historyId?: string) {
-        const deployment = await prisma.deployment.findUnique({
-            where: { id: deploymentId },
+        // Enforce ownership using helper
+        await verifyDeploymentOwnership(userId, deploymentId);
+
+        // Fetch deployment with relations
+        const deployment = await prisma.deployment.findFirst({
+            where: { id: deploymentId, userId },
             include: { vps: true, project: true },
         });
-        if (!deployment || deployment.userId !== userId) throw new Error('Deployment not found');
+        if (!deployment) throw new Error('Deployment not found');
+
         const sourceType = deployment.sourceType || (deployment.project.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
         if (sourceType !== 'github') {
             const error = new Error('Rollback is not supported for upload deployments. Restart the last successful container instead.') as Error & { errorCode?: string; stage?: string };
@@ -35,7 +41,12 @@ export class RollbackService {
         }
 
         const history = historyId
-            ? await prisma.deploymentHistory.findUnique({ where: { id: historyId } })
+            ? await prisma.deploymentHistory.findFirst({
+                where: {
+                    id: historyId,
+                    deploymentId: deploymentId
+                }
+            })
             : await prisma.deploymentHistory.findFirst({
                 where: { deploymentId, status: 'SUCCESS', imageTag: { not: null } },
                 orderBy: { createdAt: 'desc' },

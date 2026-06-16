@@ -17,12 +17,20 @@ function sanitizeText(value: string, options: { collapseWhitespace?: boolean } =
 }
 
 export default async function contactRoutes(fastify: FastifyInstance) {
-    async function submitContact(request: any, reply: any) {
+    fastify.post('/', {
+        config: {
+            rateLimit: {
+                max: 5,
+                timeWindow: '10 minutes',
+            },
+        },
+    }, async (request, reply) => {
+        const body = request.body as any;
         const parsed = contactSchema.parse({
-            name: sanitizeText(String(request.body?.name || ''), { collapseWhitespace: true }),
-            email: sanitizeText(String(request.body?.email || ''), { collapseWhitespace: true }).toLowerCase(),
-            subject: sanitizeText(String(request.body?.subject || ''), { collapseWhitespace: true }),
-            message: sanitizeText(String(request.body?.message || '')),
+            name: sanitizeText(String(body?.name || ''), { collapseWhitespace: true }),
+            email: sanitizeText(String(body?.email || ''), { collapseWhitespace: true }).toLowerCase(),
+            subject: sanitizeText(String(body?.subject || ''), { collapseWhitespace: true }),
+            message: sanitizeText(String(body?.message || '')),
         });
 
         const message = await prisma.contactMessage.create({
@@ -37,19 +45,9 @@ export default async function contactRoutes(fastify: FastifyInstance) {
 
         return reply.send({
             success: true,
-            message: 'Thanks for reaching out. The DeployForge team will review your message.',
+            data: {
+                message: 'Thanks for reaching out. The DeployForge team will review your message.',
+            }
         });
-    }
-
-    const routeOptions = {
-        config: {
-            rateLimit: {
-                max: 5,
-                timeWindow: '10 minutes',
-            },
-        },
-    };
-
-    fastify.post('/api/contact', routeOptions, submitContact);
-    fastify.post('/contact', routeOptions, submitContact);
+    });
 }

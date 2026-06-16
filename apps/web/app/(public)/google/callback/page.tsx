@@ -24,14 +24,11 @@ function GoogleCallbackContent() {
         const accessToken = searchParams.get('accessToken');
         const refreshToken = searchParams.get('refreshToken');
 
-        if (!accessToken || !refreshToken) {
-            setError('Google login did not return a valid DeployForge session.');
-            return;
-        }
-
         async function completeSession() {
             try {
-                setToken(accessToken, refreshToken);
+                if (accessToken) {
+                    setToken(accessToken, refreshToken);
+                }
                 const response = await api.get<{ user: any }>('/auth/me');
                 setUser(response.user);
                 router.replace('/dashboard');

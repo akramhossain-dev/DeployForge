@@ -89,12 +89,14 @@ export default async function googleRoutes(fastify: FastifyInstance) {
 
         try {
             const session = await GoogleService.authenticateOAuthUser(accessToken, request.headers['user-agent'], request.ip);
-            const params = new URLSearchParams({
-                accessToken: session.accessToken,
-                refreshToken: session.refreshToken,
-            });
+            
+            const isProd = config.app.env === 'production';
+            const accessCookie = `accessToken=${session.accessToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=900`;
+            const refreshCookie = `refreshToken=${session.refreshToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=604800`;
+            reply.header('Set-Cookie', [accessCookie, refreshCookie]);
+
             fastify.log.info({ userId: session.user.id }, 'Google OAuth login completed successfully');
-            return reply.redirect(`${config.app.appUrl}/google/callback?${params.toString()}`);
+            return reply.redirect(`${config.app.appUrl}/google/callback`);
         } catch (err: any) {
             fastify.log.error({ err }, 'Google OAuth login failed');
             return failOAuth(request, reply, 'login', err.errorCode || 'GOOGLE_AUTH_FAILED', err.message || 'Google login failed.');

@@ -4,6 +4,7 @@ import { MailService } from '@deployforge/mail';
 import { config } from '../config/env';
 import crypto from 'crypto';
 import { AccountService } from './account.service';
+import { CacheService } from './cache.service';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 const mailService = new MailService({
@@ -44,17 +45,6 @@ export class AuthService {
         const refreshToken = crypto.randomBytes(40).toString('hex');
         const hashedRefreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
-        await prisma.session.create({
-            data: {
-                userId: user.id,
-                refreshToken: hashedRefreshToken,
-                authProvider,
-                userAgent,
-                ipAddress,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            },
-        });
-
         // Parse user agent
         let browser = 'Unknown Browser';
         let device = 'Desktop';
@@ -77,11 +67,12 @@ export class AuthService {
             else if (/iphone|ipad|ipod/i.test(ua)) os = 'iOS';
         }
 
-        await prisma.userSession.create({
+        await prisma.session.create({
             data: {
                 id: sessionId,
                 userId: user.id,
                 refreshToken: hashedRefreshToken,
+                authProvider,
                 userAgent,
                 device,
                 browser,
@@ -135,7 +126,7 @@ export class AuthService {
      * - SMTP errors are caught and logged internally
      */
     static async sendOTP(email: string) {
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = crypto.randomInt(100000, 1000000).toString();
         const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -223,6 +214,16 @@ export class AuthService {
 
     static async refresh(refreshToken: string) {
         const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+        // Check if this token was previously rotated (replay attack detection)
+        const isRotated = await CacheService.get<string>(`rotated_token:${hashedToken}`);
+        if (isRotated) {
+            const userId = isRotated;
+            await prisma.session.deleteMany({ where: { userId } });
+            await AccountService.logAudit(userId, 'REFRESH_TOKEN_REPLAY', 'Replay attack detected on refresh token. Revoking all sessions.', undefined, undefined);
+            throw new Error('Refresh token has already been used. All sessions revoked.');
+        }
+
         const session = await prisma.session.findUnique({
             where: { refreshToken: hashedToken },
             include: { user: true },
@@ -231,23 +232,38 @@ export class AuthService {
         if (!session || new Date() > session.expiresAt) {
             if (session) {
                 await prisma.session.delete({ where: { id: session.id } });
-                await prisma.userSession.deleteMany({ where: { refreshToken: hashedToken } });
             }
             throw new Error('Invalid or expired refresh token');
         }
 
-        const userSession = await prisma.userSession.findUnique({
-            where: { refreshToken: hashedToken }
+        // Generate a new refresh token and extend the expiration date
+        const newRefreshToken = crypto.randomBytes(40).toString('hex');
+        const hashedNewRefreshToken = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+        const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+        await prisma.session.update({
+            where: { id: session.id },
+            data: {
+                refreshToken: hashedNewRefreshToken,
+                expiresAt: newExpiresAt,
+                lastActivity: new Date(),
+            },
         });
+
+        // Cache the old token as rotated for replay protection (expires in 1 hour)
+        await CacheService.set(`rotated_token:${hashedToken}`, session.userId, 3600);
 
         const accessToken = tokenService.generateAccessToken({
             userId: session.userId,
             role: session.user.role || 'USER',
             authProvider: session.authProvider === 'github' || session.authProvider === 'google' ? session.authProvider : 'local',
             tokenType: 'user',
-            sessionId: userSession?.id,
+            sessionId: session.id,
         });
-        return { accessToken };
+
+        await AccountService.logAudit(session.userId, 'REFRESH_TOKEN_ROTATION', 'Refresh token rotated successfully.', undefined, undefined);
+
+        return { accessToken, refreshToken: newRefreshToken };
     }
 
     static async logout(refreshToken: string, ip?: string, ua?: string) {
@@ -259,7 +275,6 @@ export class AuthService {
         if (session) {
             await AccountService.logAudit(session.userId, 'LOGOUT', 'User logged out successfully.', ip, ua);
             await prisma.session.deleteMany({ where: { refreshToken: hashedToken } });
-            await prisma.userSession.deleteMany({ where: { refreshToken: hashedToken } });
         }
     }
 }

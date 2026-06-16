@@ -4,14 +4,20 @@ import crypto from 'crypto';
 import prisma from '@deployforge/database';
 import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
+import { z } from 'zod';
+import { sanitizeGitHubAccount } from '../utils/sanitizers';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
+
+const createWebhookSchema = z.object({
+    repoFullName: z.string().min(1, 'Repository full name is required'),
+});
 
 export default async function githubRoutes(fastify: FastifyInstance) {
     // 0. Login/Register with GitHub (OAuth start)
     fastify.get('/', {
         config: {
-            rateLimit: { max: 20, timeWindow: '10 minutes' },
+            rateLimit: { max: 10, timeWindow: '1 minute' }, // OAuth rate limit: 10/min
         },
     }, async (_request, reply) => {
         try {
@@ -30,7 +36,12 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     });
 
     // 1. Connect GitHub (OAuth start)
-    fastify.get('/connect', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.get('/connect', {
+        preHandler: [(fastify as any).authGuard],
+        config: {
+            rateLimit: { max: 10, timeWindow: '1 minute' },
+        },
+    }, async (request, reply) => {
         try {
             fastify.log.info({ userId: request.user.id }, 'GitHub OAuth connection initiated (OAuth start)');
             const nonce = crypto.randomBytes(16).toString('hex');
@@ -41,17 +52,23 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             });
             const url = GitHubService.getAuthUrl(state);
             fastify.log.info({ userId: request.user.id, callbackUrl: config.oauth.github.callbackUrl }, 'GitHub OAuth connection URL generated successfully');
-            return { url };
+            return { success: true, data: { url } };
         } catch (err: any) {
             fastify.log.error({ err, userId: request.user?.id }, 'GitHub OAuth connection initiation failed');
-            return reply.status(400).send({ success: false, message: err.message });
+            return reply.status(400).send({
+                success: false,
+                error: {
+                    code: 'OAUTH_INITIATION_FAILED',
+                    message: err.message
+                }
+            });
         }
     });
 
     // 2. Callback (Callback received)
     fastify.get('/callback', {
         config: {
-            rateLimit: { max: 30, timeWindow: '10 minutes' },
+            rateLimit: { max: 10, timeWindow: '1 minute' },
         },
     }, async (request, reply) => {
         const { code, state, error, error_description } = request.query as {
@@ -63,7 +80,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
 
         fastify.log.info({ hasCode: !!code, hasState: !!state, error, error_description }, 'GitHub OAuth callback received');
 
-        // Handle OAuth errors redirected directly from GitHub
         if (error) {
             fastify.log.error({ error, error_description }, 'GitHub redirected back with an authorization error');
             let errorType = 'github_api_error';
@@ -84,7 +100,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             return reply.redirect(`${config.app.appUrl}/${target}?github=error&error_type=${errorType}&message=${encodeURIComponent(error_description || error)}`);
         }
 
-        // Validate state parameter presence
         if (!state) {
             fastify.log.warn('GitHub OAuth callback state parameter is missing');
             return reply.redirect(`${config.app.appUrl}/settings?github=error&error_type=missing_state&message=State+parameter+is+missing`);
@@ -92,7 +107,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
 
         let userId = '';
         let purpose = '';
-        // Validate state parameter signature/expiration (session validation)
         try {
             fastify.log.info({ state }, 'Validating state parameter');
             const payload = tokenService.verifyToken(state) as any;
@@ -112,7 +126,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             return reply.redirect(`${config.app.appUrl}/login?github=error&error_type=session_error&message=${encodeURIComponent(err.message || 'State validation expired or failed')}`);
         }
 
-        // Validate code presence
         if (!code) {
             fastify.log.warn({ userId }, 'GitHub OAuth callback code parameter is missing');
             const target = purpose === 'github_auth' ? 'login' : 'settings';
@@ -120,7 +133,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         }
 
         let accessToken = '';
-        // Exchange code for access token (Token exchange request)
         try {
             fastify.log.info({ userId }, 'Exchanging OAuth authorization code for access token');
             accessToken = await GitHubService.exchangeCodeForToken(code);
@@ -143,12 +155,14 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         if (purpose === 'github_auth') {
             try {
                 const session = await GitHubService.authenticateOAuthUser(accessToken, request.headers['user-agent'], request.ip);
-                const params = new URLSearchParams({
-                    accessToken: session.accessToken,
-                    refreshToken: session.refreshToken,
-                });
+                
+                const isProd = config.app.env === 'production';
+                const accessCookie = `accessToken=${session.accessToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=900`;
+                const refreshCookie = `refreshToken=${session.refreshToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=604800`;
+                reply.header('Set-Cookie', [accessCookie, refreshCookie]);
+
                 fastify.log.info({ userId: session.user.id }, 'GitHub OAuth login completed successfully');
-                return reply.redirect(`${config.app.appUrl}/github/callback?${params.toString()}`);
+                return reply.redirect(`${config.app.appUrl}/github/callback`);
             } catch (err: any) {
                 fastify.log.error({ err }, 'GitHub OAuth login failed');
                 return reply.redirect(`${config.app.appUrl}/login?github=error&error_type=${encodeURIComponent(err.errorCode || 'github_auth_failed')}&message=${encodeURIComponent(err.message || 'GitHub login failed')}`);
@@ -156,11 +170,10 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         }
 
         let account;
-        // Fetch profile, upsert GitHubAccount, and update User record (Profile fetch & DB save)
         try {
             fastify.log.info({ userId }, 'Fetching profile and creating/updating GitHubAccount in DB');
             account = await GitHubService.syncUser(userId, accessToken);
-            fastify.log.info({ userId, githubAccountId: account.id }, 'GitHubAccount and User session record updated successfully (DB save result & Session update result)');
+            fastify.log.info({ userId, githubAccountId: account.id }, 'GitHubAccount and User session record updated successfully');
         } catch (err: any) {
             fastify.log.error({ err, userId }, 'GitHub profile sync or database storage failed');
             const errMsg = err.message || 'Database storage failed';
@@ -176,7 +189,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             return reply.redirect(`${config.app.appUrl}/settings?github=error&error_type=${errorType}&message=${encodeURIComponent(cleanMsg)}`);
         }
 
-        // Sync user repositories immediately (Repository sync)
         try {
             fastify.log.info({ userId, githubAccountId: account.id }, 'Initiating immediate repository sync');
             const repos = await GitHubService.syncRepos(userId);
@@ -191,16 +203,22 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     });
 
     // 3. Profile
-    fastify.get('/profile', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.get('/profile', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
         const account = await prisma.gitHubAccount.findUnique({
             where: { userId: request.user.id }
         });
         fastify.log.info({ userId: request.user.id, connected: Boolean(account) }, 'GitHub profile fetched');
-        return { success: true, data: account };
+        return { success: true, data: sanitizeGitHubAccount(account) };
     });
 
     // 4. Repositories
-    fastify.get('/repos', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.get('/repos', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
         const account = await prisma.gitHubAccount.findUnique({
             where: { userId: request.user.id },
             include: { repositories: { orderBy: { updatedAt: 'desc' } } }
@@ -216,30 +234,39 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     });
 
     // 5. Sync Repositories
-    fastify.post('/repos/sync', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.post('/repos/sync', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+    }, async (request, reply) => {
         fastify.log.info({ userId: request.user.id }, 'Repository sync requested');
         const repositories = await GitHubService.syncRepos(request.user.id);
-        return { success: true, data: { count: repositories.length }, message: 'Repositories synced' };
+        return { success: true, data: { count: repositories.length } };
     });
 
     // 6. Create Webhook
-    fastify.post('/webhooks/create', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { repoFullName } = request.body as { repoFullName: string };
+    fastify.post('/webhooks/create', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+    }, async (request, reply) => {
+        const { repoFullName } = createWebhookSchema.parse(request.body);
         const result = await GitHubService.createWebhook(request.user.id, repoFullName);
         return { success: true, data: result };
     });
 
     // 7. Disconnect GitHub
-    fastify.delete('/disconnect', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.delete('/disconnect', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+    }, async (request, reply) => {
         const account = await prisma.gitHubAccount.findUnique({ where: { userId: request.user.id } });
         if (!account) {
             fastify.log.info({ userId: request.user.id }, 'GitHub disconnect skipped because no account exists');
-            return { success: true, message: 'GitHub already disconnected' };
+            return { success: true, data: { message: 'GitHub already disconnected' } };
         }
 
         await prisma.repository.deleteMany({ where: { githubAccountId: account.id } });
         await prisma.gitHubAccount.delete({ where: { userId: request.user.id } });
         fastify.log.info({ userId: request.user.id, githubAccountId: account.id }, 'GitHub account disconnected');
-        return { success: true, message: 'GitHub disconnected' };
+        return { success: true, data: { message: 'GitHub disconnected' } };
     });
 }

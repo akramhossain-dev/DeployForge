@@ -7,48 +7,166 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AuthProvider {
+  local
+  github
+  google
+}
+
+enum DeploymentStatus {
+  PENDING
+  BUILDING
+  DEPLOYING
+  CLONING
+  UPLOADING
+  EXTRACTING
+  RUNNING
+  PAUSED
+  SUCCESS
+  FAILED
+  STOPPED
+  DELETING
+  ROLLED_BACK
+  DELETED
+}
+
+enum DomainStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  DELETED
+}
+
+enum SSLStatus {
+  NONE
+  ISSUED
+  EXPIRED
+  FAILED
+}
+
+enum DeploymentType {
+  STATIC
+  SERVER
+  FULLSTACK
+}
+
+enum SourceType {
+  github
+  upload
+}
+
+enum TerminalSessionStatus {
+  ACTIVE
+  CLOSED
+  FAILED
+}
+
+enum WebhookStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum VPSStatus {
+  active
+  inactive
+  failed
+}
+
+enum VPSAuthType {
+  key
+  password
+  ssh_key
+}
+
+enum SandboxStatus {
+  approved
+  warning
+  rejected
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum NotificationType {
+  DEPLOYMENT_SUCCESS
+  DEPLOYMENT_FAILURE
+  BUILD_SUCCESS
+  BUILD_FAILURE
+  DOMAIN_ACTIVE
+  SSL_ISSUED
+  SSL_EXPIRED
+  SECURITY_ALERT
+}
+
+enum BackupStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum RollbackStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
 model User {
-  id            String    @id @default(uuid())
-  email         String?   @unique
-  username      String?   @unique
-  passwordHash  String?
-  name          String?
-  avatarUrl     String?
-  githubId      String?   @unique
-  githubUsername String?
-  githubAvatar String?
-  githubAccessToken String?
-  googleId      String?   @unique
-  googleEmail   String?
-  googleAvatar  String?
-  isVerified    Boolean   @default(false)
-  role          String    @default("USER") // legacy user role; admin auth uses AdminUser
-  status        String    @default("ACTIVE") // ACTIVE | SUSPENDED
-  provider      String    @default("email") // "email" | "github" | "google"
-  authProvider  String    @default("local") // "local" | "github" | "google"
-  sessions      Session[]
-  userSessions  UserSession[]
-  passwordResetTokens PasswordResetToken[]
+  id                      String                   @id @default(uuid())
+  email                   String?                  @unique
+  username                String?                  @unique
+  passwordHash            String?
+  name                    String?
+  avatarUrl               String?
+  githubId                String?                  @unique
+  githubUsername          String?
+  githubAvatar            String?
+  googleId                String?                  @unique
+  googleEmail             String?
+  googleAvatar            String?
+  isVerified              Boolean                  @default(false)
+  role                    Role                     @default(USER)
+  status                  UserStatus               @default(ACTIVE)
+  provider                String                   @default("email")
+  authProvider            AuthProvider             @default(local)
+  sessions                Session[]
+  passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
   notificationPreferences NotificationPreference?
-  auditLogs     AuditLog[]
-  vps           VPS[]
-  projects      Project[]
-  githubAccount GitHubAccount?
-  terminalSessions TerminalSession[]
-  deployments   Deployment[]
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  auditLogs               AuditLog[]
+  vps                     VPS[]
+  projects                Project[]
+  githubAccount           GitHubAccount?
+  terminalSessions        TerminalSession[]
+  deployments             Deployment[]
+  lastLoginAt             DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 }
 
 model AdminUser {
   id            String          @id @default(uuid())
   email         String          @unique
   passwordHash  String
-  role          String          // SUPER_ADMIN | ADMIN | MODERATOR
+  role          Role
   createdById   String?
-  createdBy     AdminUser?      @relation("AdminCreatedUsers", fields: [createdById], references: [id])
+  createdBy     AdminUser?      @relation("AdminCreatedUsers", fields: [createdById], references: [id], onDelete: Cascade, onUpdate: Cascade)
   createdAdmins AdminUser[]     @relation("AdminCreatedUsers")
   sessions      AdminSession[]
   activities    AdminActivity[]
@@ -58,12 +176,14 @@ model AdminUser {
 
   @@index([role])
   @@index([createdById])
+  @@index([createdAt])
+  @@index([updatedAt])
 }
 
 model AdminSession {
   id           String    @id @default(uuid())
   adminId      String
-  admin        AdminUser @relation(fields: [adminId], references: [id])
+  admin        AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   tokenHash    String    @unique
   userAgent    String?
   ipAddress    String?
@@ -73,12 +193,13 @@ model AdminSession {
 
   @@index([adminId])
   @@index([expiresAt])
+  @@index([createdAt])
 }
 
 model AdminActivity {
   id           String    @id @default(uuid())
   adminId      String
-  admin        AdminUser @relation(fields: [adminId], references: [id])
+  admin        AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   action       String
   targetUserId String?
   targetRole   String?
@@ -91,128 +212,156 @@ model AdminActivity {
   @@index([adminId])
   @@index([targetUserId])
   @@index([timestamp])
+  @@index([createdAt])
 }
 
 model Session {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
-  refreshToken String   @unique // Hashed
-  authProvider  String   @default("local") // "local" | "github" | "google"
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  refreshToken String       @unique
+  authProvider AuthProvider @default(local)
   userAgent    String?
+  device       String?
+  browser      String?
+  os           String?
   ipAddress    String?
+  lastActivity DateTime     @default(now())
   expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  createdAt    DateTime     @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
 
 model VerificationToken {
   id        String   @id @default(cuid())
   email     String
-  token     String   // Hashed OTP
+  token     String
   expiresAt DateTime
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
 
   @@unique([email])
+  @@index([email])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
 
 model GitHubAccount {
-  id           String       @id @default(uuid())
-  userId       String       @unique
-  user         User         @relation(fields: [userId], references: [id])
-  githubId     String       @unique
-  accessToken  String       // Encrypted
-  username     String
-  email        String?
-  avatarUrl    String?
+  id          String       @id @default(uuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  githubId    String       @unique
+  accessToken String
+  username    String
+  email       String?
+  avatarUrl   String?
   repositories Repository[]
-  connectedAt  DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  connectedAt DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([githubId])
 }
 
 model Repository {
-  id              String       @id @default(uuid())
+  id              String        @id @default(uuid())
   githubAccountId String
-  githubAccount   GitHubAccount @relation(fields: [githubAccountId], references: [id])
-  repoId          String       @unique // GitHub's internal ID
+  githubAccount   GitHubAccount @relation(fields: [githubAccountId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  repoId          String        @unique
   name            String
   fullName        String
   description     String?
-  private         Boolean      @default(false)
-  defaultBranch   String       @default("main")
-  cloneUrl        String?      // Optional encrypted
+  private         Boolean       @default(false)
+  defaultBranch   String        @default("main")
+  cloneUrl        String?
   webhookId       String?
-  updatedAt       DateTime     @updatedAt
-  createdAt       DateTime     @default(now())
+  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime      @default(now())
+
+  @@index([githubAccountId])
+  @@index([repoId])
+  @@index([createdAt])
 }
 
 model TerminalSession {
-  id           String     @id @default(uuid())
-  userId       String
-  user         User       @relation(fields: [userId], references: [id])
-  vpsId        String
-  vps          VPS        @relation(fields: [vpsId], references: [id])
-  sessionId    String     @unique
-  status       String     @default("ACTIVE") // ACTIVE, CLOSED, FAILED
-  logs         TerminalCommandLog[]
-  startedAt    DateTime   @default(now())
-  endedAt      DateTime?
+  id        String                @id @default(uuid())
+  userId    String
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  vpsId     String
+  vps       VPS                   @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  sessionId String                @unique
+  status    TerminalSessionStatus @default(ACTIVE)
+  logs      TerminalCommandLog[]
+  startedAt DateTime              @default(now())
+  endedAt   DateTime?
 
   @@index([userId])
   @@index([vpsId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([startedAt])
 }
 
 model TerminalCommandLog {
-  id           String          @id @default(uuid())
-  sessionId    String
-  session      TerminalSession @relation(fields: [sessionId], references: [id])
-  command      String?
-  output       String?
-  timestamp    DateTime        @default(now())
+  id        String          @id @default(uuid())
+  sessionId String
+  session   TerminalSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  command   String?
+  output    String?
+  timestamp DateTime        @default(now())
 
   @@index([sessionId])
+  @@index([timestamp])
 }
 
 model WebhookEvent {
-  id           String   @id @default(uuid())
-  repoId       String
-  event        String   // e.g., "push"
-  payload      String   // JSON string
-  status       String   @default("PENDING") // PENDING, PROCESSED, FAILED
-  error        String?
-  createdAt    DateTime @default(now())
+  id        String        @id @default(uuid())
+  repoId    String
+  event     String
+  payload   String
+  status    WebhookStatus @default(PENDING)
+  error     String?
+  createdAt DateTime      @default(now())
 
   @@index([repoId])
+  @@index([event])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model VPS {
-  id                   String       @id @default(uuid())
-  userId               String
-  user                 User         @relation(fields: [userId], references: [id])
-  name                 String
-  ipAddress            String
-  port                 Int          @default(22)
-  username             String       @default("root")
-  authType             String       @default("key") // "key" | "password"
-  encryptedPrivateKey  String?      // Encrypted AES-256-GCM
-  encryptedPassword    String?      // Encrypted AES-256-GCM
-  status               String       @default("inactive") // "active" | "inactive" | "failed"
-  lastCheckedAt        DateTime?
-  deployments          Deployment[]
-  healthRecords        VPSHealth[]
-  terminalSessions     TerminalSession[]
-  domains              Domain[]
-  systemMetrics        SystemMetrics[]
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  id                  String            @id @default(uuid())
+  userId              String
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name                String
+  ipAddress           String
+  port                Int               @default(22)
+  username            String            @default("root")
+  authType            VPSAuthType       @default(key)
+  encryptedPrivateKey String?
+  encryptedPassword   String?
+  status              VPSStatus         @default(inactive)
+  lastCheckedAt       DateTime?
+  deployments         Deployment[]
+  healthRecords       VPSHealth[]
+  terminalSessions    TerminalSession[]
+  domains             Domain[]
+  systemMetrics       SystemMetrics[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model VPSHealth {
   id              String   @id @default(cuid())
   vpsId           String
-  vps             VPS      @relation(fields: [vpsId], references: [id])
+  vps             VPS      @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   cpuUsage        Float
   memoryUsage     Float
   diskUsage       Float
@@ -222,12 +371,13 @@ model VPSHealth {
   checkedAt       DateTime @default(now())
 
   @@index([vpsId])
+  @@index([checkedAt])
 }
 
 model Project {
   id            String       @id @default(cuid())
   userId        String
-  user          User         @relation(fields: [userId], references: [id])
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   name          String
   repositoryUrl String
   branch        String       @default("main")
@@ -237,43 +387,43 @@ model Project {
   updatedAt     DateTime     @updatedAt
 
   @@index([userId])
+  @@index([createdAt])
 }
 
 model Deployment {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id])
-  projectId     String
-  project       Project  @relation(fields: [projectId], references: [id])
-  vpsId         String
-  vps           VPS      @relation(fields: [vpsId], references: [id])
-  name          String?  // Deployment name/label
-  status        String   @default("PENDING") // PENDING, BUILDING, RUNNING, FAILED, STOPPED
-  framework     String?
-  type          String   @default("SERVER") // STATIC | SERVER | FULLSTACK
-  port          Int?
-  buildCommand  String?
-  startCommand  String?
-  env           String?  // Encrypted JSON
-  containerId   String?
-  sourceType    String   @default("github") // github | upload
-  repoUrl       String?
-  branch        String?
-  uploadPath    String?
-  commitHash    String?
-  commitMessage String?
+  id                String              @id @default(uuid())
+  userId            String
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  projectId         String
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  vpsId             String
+  vps               VPS                 @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name              String?
+  status            DeploymentStatus    @default(PENDING)
+  framework         String?
+  type              DeploymentType      @default(SERVER)
+  port              Int?
+  buildCommand      String?
+  startCommand      String?
+  env               String?
+  containerId       String?
+  sourceType        SourceType          @default(github)
+  repoUrl           String?
+  branch            String?
+  uploadPath        String?
+  commitHash        String?
+  commitMessage     String?
   lastStableVersion String?
-  domain        String?
-  hostType      String   @default("ip") // ip | domain
-  mode          String   @default("production") // production | sandbox
-  logs          Log[]
-  deploymentLogs DeploymentLog[]
-  history       DeploymentHistory[]
-  sandbox       DeploymentSandbox?
-  domains       Domain[]
-  jobs          DeploymentJob[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  domain            String?
+  hostType          String              @default("ip")
+  mode              String              @default("production")
+  deploymentLogs    DeploymentLog[]
+  history           DeploymentHistory[]
+  sandbox           DeploymentSandbox?
+  domains           Domain[]
+  jobs              DeploymentJob[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   @@index([userId])
   @@index([projectId])
@@ -283,69 +433,83 @@ model Deployment {
   @@index([domain])
   @@index([hostType])
   @@index([mode])
+  @@index([status])
+  @@index([createdAt])
+  @@index([updatedAt])
 }
 
 model DeploymentJob {
   id           String     @id @default(uuid())
   deploymentId String
-  deployment   Deployment @relation(fields: [deploymentId], references: [id])
-  status       String     @default("QUEUED") // QUEUED, RUNNING, SUCCESS, FAILED
+  deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  status       JobStatus  @default(QUEUED)
   retryCount   Int        @default(0)
   lastError    String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([deploymentId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Domain {
-  id               String     @id @default(uuid())
-  deploymentId     String
-  deployment       Deployment @relation(fields: [deploymentId], references: [id])
-  vpsId            String
-  vps              VPS        @relation(fields: [vpsId], references: [id])
-  domainName       String     @unique
-  status           String     @default("PENDING") // pending | active | failed
-  sslStatus        String     @default("NONE")    // NONE | ISSUED | EXPIRED | FAILED
-  nginxConfigPath  String?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id              String       @id @default(uuid())
+  deploymentId    String
+  deployment      Deployment   @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  vpsId           String
+  vps             VPS          @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  domainName      String       @unique
+  status          DomainStatus @default(PENDING)
+  sslStatus       SSLStatus    @default(NONE)
+  nginxConfigPath String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@index([deploymentId])
   @@index([vpsId])
+  @@index([status])
+  @@index([sslStatus])
+  @@index([createdAt])
 }
 
 model DeploymentSandbox {
-  id            String     @id @default(uuid())
-  deploymentId  String     @unique
-  deployment    Deployment @relation(fields: [deploymentId], references: [id])
+  id            String        @id @default(uuid())
+  deploymentId  String        @unique
+  deployment    Deployment    @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   score         Int
-  status        String     // approved | warning | rejected
-  issues        String[]   // Array of strings
+  status        SandboxStatus
+  issues        String[]
   estimatedCPU  Float
   estimatedRAM  Float
   estimatedDisk Float
-  createdAt     DateTime   @default(now())
+  createdAt     DateTime      @default(now())
+
+  @@index([deploymentId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model DeploymentHistory {
-  id            String     @id @default(uuid())
-  deploymentId  String
-  deployment    Deployment @relation(fields: [deploymentId], references: [id])
-  version       String     // Commit hash or timestamp
-  containerId   String?
-  imageTag      String?
-  status        String
-  env           String?    // Encrypted JSON snapshot
-  createdAt     DateTime   @default(now())
+  id           String           @id @default(uuid())
+  deploymentId String
+  deployment   Deployment       @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  version      String
+  containerId  String?
+  imageTag     String?
+  status       DeploymentStatus
+  env          String?
+  createdAt    DateTime         @default(now())
 
   @@index([deploymentId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model SystemMetrics {
   id               String   @id @default(uuid())
   vpsId            String
-  vps              VPS      @relation(fields: [vpsId], references: [id])
+  vps              VPS      @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   cpuUsage         Float
   memoryUsage      Float
   diskUsage        Float
@@ -353,27 +517,22 @@ model SystemMetrics {
   timestamp        DateTime @default(now())
 
   @@index([vpsId])
+  @@index([timestamp])
 }
 
 model DeploymentLog {
   id           String     @id @default(uuid())
   deploymentId String
-  deployment   Deployment @relation(fields: [deploymentId], references: [id])
-  type         String     // build | runtime | error | system
-  level        String     @default("info") // info | warn | error
+  deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  type         String
+  level        String     @default("info")
   message      String
   createdAt    DateTime   @default(now())
 
   @@index([deploymentId])
-}
-
-model Log {
-  id           String     @id @default(cuid())
-  deploymentId String
-  deployment   Deployment @relation(fields: [deploymentId], references: [id])
-  content      String
-  type         String     @default("INFO") // INFO, ERROR, DEBUG
-  createdAt    DateTime   @default(now())
+  @@index([type])
+  @@index([level])
+  @@index([createdAt])
 }
 
 model ContactMessage {
@@ -382,7 +541,7 @@ model ContactMessage {
   email     String
   subject   String
   message   String
-  status    String   @default("new") // new | read | resolved
+  status    String   @default("new")
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
@@ -392,51 +551,38 @@ model ContactMessage {
   @@index([createdAt])
 }
 
-model UserSession {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshToken String   @unique // Hashed
-  userAgent    String?
-  device       String?
-  browser      String?
-  os           String?
-  ipAddress    String?
-  lastActivity DateTime @default(now())
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-
-  @@index([userId])
-}
-
 model PasswordResetToken {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique // Hashed
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  token     String   @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
 
 model EmailVerificationToken {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique // Hashed
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  token     String   @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
 
 model NotificationPreference {
   id                  String   @id @default(cuid())
   userId              String   @unique
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   deployNotifications Boolean  @default(true)
   buildNotifications  Boolean  @default(true)
   domainNotifications Boolean  @default(true)
@@ -445,20 +591,22 @@ model NotificationPreference {
   productUpdates      Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  action    String   // Event Type: LOGIN_SUCCESS, LOGIN_FAILURE, etc.
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  action    String
   details   String
   ipAddress String?
   device    String?
   browser   String?
   os        String?
   userAgent String?
-  metadata  String?  // JSON string
+  metadata  String?
   createdAt DateTime @default(now())
 
   @@index([userId])

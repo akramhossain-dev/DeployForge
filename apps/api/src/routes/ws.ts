@@ -2,8 +2,17 @@ import { FastifyInstance } from 'fastify';
 import prisma from '@deployforge/database';
 import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
+import { z } from 'zod';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
+
+const wsParamsSchema = z.object({
+    id: z.string().uuid({ message: 'Invalid ID format' }),
+});
+
+const wsQuerySchema = z.object({
+    token: z.string().min(1, 'Token is required'),
+});
 
 export default async function wsRoutes(fastify: FastifyInstance) {
     fastify.get('/deployments/:id/logs', { websocket: true }, async (connection, request) => {
@@ -59,10 +68,9 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 }
 
 async function authorizeDeploymentSocket(request: any, connection: any) {
-    const { id } = request.params as { id: string };
-    const { token } = request.query as { token?: string };
     try {
-        if (!token) throw new Error('Missing token');
+        const { id } = wsParamsSchema.parse(request.params);
+        const { token } = wsQuerySchema.parse(request.query);
         const payload = tokenService.verifyToken(token);
         const deployment = await prisma.deployment.findFirst({
             where: { id, userId: payload.userId },

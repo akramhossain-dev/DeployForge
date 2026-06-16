@@ -4,6 +4,7 @@ import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import dns from 'dns';
 import { promisify } from 'util';
+import { verifyDomainOwnership } from '../utils/authz';
 
 const resolveA = promisify(dns.resolve4);
 const encryptionService = new EncryptionService(config.encryption.key);
@@ -100,11 +101,22 @@ export class DomainService {
     }
 
     static async issueSSL(userId: string, domainId: string) {
-        const domain = await prisma.domain.findUnique({
-            where: { id: domainId },
+        // Ownership validation through relations
+        const domain = await prisma.domain.findFirst({
+            where: {
+                id: domainId,
+                deployment: {
+                    userId: userId
+                }
+            },
             include: { vps: true },
         });
-        if (!domain) throw new Error('Domain not found');
+
+        if (!domain) {
+            // Verify via helper to throw correct 403 / 404
+            await verifyDomainOwnership(userId, domainId);
+            throw new Error('Domain not found');
+        }
 
         const vps = domain.vps;
         const ssh = new SSHService();

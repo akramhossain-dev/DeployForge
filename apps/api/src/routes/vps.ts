@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import prisma from '@deployforge/database';
 import { VPSConnectionFailure, VPSService } from '../services/vps.service';
+import { sanitizeVps } from '../utils/sanitizers';
 
 const hostnamePattern = /^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$/;
 
@@ -60,6 +61,10 @@ const testConnectionSchema = z.union([
     connectionSchema,
 ]);
 
+const vpsParamsSchema = z.object({
+    id: z.string().uuid({ message: 'Invalid VPS ID format' }),
+});
+
 const sshAttemptRateLimit = {
     max: 8,
     timeWindow: '10 minutes',
@@ -73,7 +78,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
         try {
             const data = addVPSSchema.parse(request.body);
             const vps = await VPSService.validateAndAdd(request.user!.id, data);
-            return { success: true, data: vps };
+            return { success: true, data: sanitizeVps(vps) };
         } catch (error) {
             return sendVpsError(reply, error);
         }
@@ -89,22 +94,42 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
                 ? await VPSService.testStoredConnection(request.user!.id, data.id)
                 : await VPSService.testConnection(data);
 
-            return result.success ? { success: true, data: result } : reply.status(400).send(result);
+            return result.success ? { success: true, data: result } : reply.status(400).send({
+                success: false,
+                error: {
+                    code: 'CONNECTION_FAILED',
+                    message: result.message || 'Connection failed'
+                }
+            });
         } catch (error) {
             return sendVpsError(reply, error);
         }
     });
 
-    fastify.get('/list', { preHandler: [(fastify as any).authGuard] }, async (request) => {
+    fastify.get('/list', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request) => {
         const vpsList = await VPSService.list(request.user!.id);
-        return { success: true, data: vpsList };
+        return { success: true, data: vpsList.map(sanitizeVps).filter(Boolean) };
     });
 
-    fastify.get('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
-        const { id } = request.params as { id: string };
+    fastify.get('/:id', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = vpsParamsSchema.parse(request.params);
         const vps = await VPSService.get(request.user!.id, id);
-        if (!vps) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
-        return { success: true, data: vps };
+        if (!vps) {
+            return reply.status(404).send({
+                success: false,
+                error: {
+                    code: 'VPS_NOT_FOUND',
+                    message: 'VPS not found'
+                }
+            });
+        }
+        return { success: true, data: sanitizeVps(vps) };
     });
 
     fastify.patch('/:id', {
@@ -112,29 +137,51 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
         config: { rateLimit: sshAttemptRateLimit },
     }, async (request, reply) => {
         try {
-            const { id } = request.params as { id: string };
+            const { id } = vpsParamsSchema.parse(request.params);
             const data = updateVPSSchema.parse(request.body);
             const vps = await VPSService.update(request.user!.id, id, data);
-            if (!vps) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
-            return { success: true, data: vps };
+            if (!vps) {
+                return reply.status(404).send({
+                    success: false,
+                    error: {
+                        code: 'VPS_NOT_FOUND',
+                        message: 'VPS not found'
+                    }
+                });
+            }
+            return { success: true, data: sanitizeVps(vps) };
         } catch (error) {
             return sendVpsError(reply, error);
         }
     });
 
-    fastify.delete('/:id', { preHandler: [(fastify as any).authGuard] }, async (request, reply) => {
+    fastify.delete('/:id', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+    }, async (request, reply) => {
         try {
-            const { id } = request.params as { id: string };
+            const { id } = vpsParamsSchema.parse(request.params);
             const deleted = await VPSService.delete(request.user!.id, id);
-            if (!deleted) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
-            return { success: true, message: 'VPS deleted' };
+            if (!deleted) {
+                return reply.status(404).send({
+                    success: false,
+                    error: {
+                        code: 'VPS_NOT_FOUND',
+                        message: 'VPS not found'
+                    }
+                });
+            }
+            return { success: true, data: { message: 'VPS deleted' } };
         } catch (error) {
             return sendVpsError(reply, error);
         }
     });
 
-    fastify.get('/:id/health', { preHandler: [(fastify as any).authGuard] }, async (request) => {
-        const { id } = request.params as { id: string };
+    fastify.get('/:id/health', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request) => {
+        const { id } = vpsParamsSchema.parse(request.params);
         const health = await prisma.vPSHealth.findMany({
             where: { vpsId: id, vps: { userId: request.user!.id } },
             take: 20,
@@ -148,9 +195,17 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
         config: { rateLimit: sshAttemptRateLimit },
     }, async (request, reply) => {
         try {
-            const { id } = request.params as { id: string };
+            const { id } = vpsParamsSchema.parse(request.params);
             const vps = await VPSService.get(request.user!.id, id);
-            if (!vps) return reply.status(404).send({ success: false, message: 'VPS not found', errorCode: 'VPS_NOT_FOUND' });
+            if (!vps) {
+                return reply.status(404).send({
+                    success: false,
+                    error: {
+                        code: 'VPS_NOT_FOUND',
+                        message: 'VPS not found'
+                    }
+                });
+            }
             const health = await VPSService.performHealthCheck(id);
             return { success: true, data: health };
         } catch (error) {
@@ -163,14 +218,28 @@ function sendVpsError(reply: FastifyReply, error: unknown) {
     if (error instanceof z.ZodError) {
         return reply.status(400).send({
             success: false,
-            message: error.errors[0]?.message || 'Invalid VPS request',
-            errorCode: 'VALIDATION_ERROR',
+            error: {
+                code: 'VALIDATION_ERROR',
+                message: error.errors[0]?.message || 'Invalid VPS request'
+            }
         });
     }
     if (error instanceof VPSConnectionFailure) {
         const status = error.errorCode === 'VPS_NOT_FOUND' ? 404 : 400;
-        return reply.status(status).send({ success: false, message: error.message, errorCode: error.errorCode });
+        return reply.status(status).send({
+            success: false,
+            error: {
+                code: error.errorCode,
+                message: error.message
+            }
+        });
     }
     const message = error instanceof Error ? error.message : 'VPS request failed';
-    return reply.status(500).send({ success: false, message, errorCode: 'VPS_ERROR' });
+    return reply.status(500).send({
+        success: false,
+        error: {
+            code: 'VPS_ERROR',
+            message
+        }
+    });
 }

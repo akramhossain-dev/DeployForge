@@ -61,6 +61,8 @@ const rawEnvSchema = z.object({
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
     RATE_LIMIT_WINDOW: z.string().trim().min(1).default('1 minute'),
+    ADMIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+    ADMIN_LOCKOUT_TIME: z.coerce.number().int().positive().default(900),
 });
 
 function formatEnvErrors(error: z.ZodError) {
@@ -164,6 +166,8 @@ export const emailConfig = {
 export const securityConfig = {
     rateLimitMax: env.RATE_LIMIT_MAX,
     rateLimitWindow: env.RATE_LIMIT_WINDOW,
+    adminMaxAttempts: env.ADMIN_MAX_ATTEMPTS,
+    adminLockoutTime: env.ADMIN_LOCKOUT_TIME,
 } as const;
 
 export const config = {
@@ -205,6 +209,8 @@ export const config = {
     SMTP_FROM: emailConfig.fromEmail,
     RATE_LIMIT_MAX: securityConfig.rateLimitMax,
     RATE_LIMIT_WINDOW: securityConfig.rateLimitWindow,
+    ADMIN_MAX_ATTEMPTS: securityConfig.adminMaxAttempts,
+    ADMIN_LOCKOUT_TIME: securityConfig.adminLockoutTime,
 } as const;
 
 export function validateOAuthConfig(logger: Pick<Console, 'info' | 'warn'> = console) {

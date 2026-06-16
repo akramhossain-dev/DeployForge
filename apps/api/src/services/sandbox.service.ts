@@ -2,16 +2,29 @@ import prisma from '@deployforge/database';
 import { SSHService } from '@deployforge/vps';
 import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
+import { verifyDeploymentOwnership, verifyVpsOwnership } from '../utils/authz';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
 export class SandboxService {
-    static async analyze(deploymentId: string) {
-        const deployment = await prisma.deployment.findUnique({
-            where: { id: deploymentId },
+    static async analyze(userId: string, deploymentId: string) {
+        // Ownership validation through relations
+        const deployment = await prisma.deployment.findFirst({
+            where: {
+                id: deploymentId,
+                userId: userId
+            },
             include: { project: true, vps: true },
         });
-        if (!deployment) throw new Error('Deployment not found');
+
+        if (!deployment) {
+            // Verify using helper to trigger correct 403 / 404
+            await verifyDeploymentOwnership(userId, deploymentId);
+            throw new Error('Deployment not found');
+        }
+
+        // Verify VPS ownership
+        await verifyVpsOwnership(userId, deployment.vpsId);
 
         const ssh = new SSHService();
         const issues: string[] = [];
