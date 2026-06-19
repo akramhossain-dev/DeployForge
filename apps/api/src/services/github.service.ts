@@ -3,6 +3,7 @@ import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import crypto from 'crypto';
 import { AuthService } from './auth.service';
+import { logger } from '../utils/logger';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -42,7 +43,7 @@ export class GitHubService {
     }
 
     static async exchangeCodeForToken(code: string) {
-        console.info('[github:oauth] exchanging OAuth code for access token');
+        logger.info({ audit: true, event: 'github_oauth_code_exchange_started' }, 'Exchanging GitHub OAuth code');
         const response = await fetch('https://github.com/login/oauth/access_token', {
             method: 'POST',
             headers: {
@@ -62,20 +63,20 @@ export class GitHubService {
         try {
             data = JSON.parse(text);
         } catch (err: any) {
-            console.error('[github:oauth] response is not valid JSON', { text });
+            logger.error({ status: response.status }, 'GitHub OAuth token response was not valid JSON');
             throw new Error(`GitHub returned non-JSON response: ${text || 'empty response'}`);
         }
 
         if (!response.ok || data.error || !data.access_token) {
             const errorMsg = data.error_description || data.error || `HTTP ${response.status}`;
-            console.error('[github:oauth] token exchange failed', {
+            logger.error({
                 status: response.status,
                 error: data.error,
                 description: data.error_description,
-            });
+            }, 'GitHub OAuth token exchange failed');
             throw new Error(errorMsg);
         }
-        console.info('[github:oauth] access token received from GitHub');
+        logger.info({ audit: true, event: 'github_oauth_code_exchange_completed' }, 'GitHub OAuth code exchange completed');
         return data.access_token as string;
     }
 
@@ -97,10 +98,10 @@ export class GitHubService {
             } catch {
                 detail = text;
             }
-            console.error('[github:profile] GitHub profile fetch failed', {
+            logger.error({
                 status: response.status,
                 message: detail,
-            });
+            }, 'GitHub profile fetch failed');
             throw new Error(detail || `GitHub profile fetch failed (HTTP ${response.status})`);
         }
 
@@ -206,27 +207,29 @@ export class GitHubService {
             },
         });
 
-        console.info('[github:auth] GitHub OAuth user authenticated', {
+        logger.info({
+            audit: true,
+            event: 'github_oauth_user_authenticated',
             userId: user.id,
             githubId,
             email,
-        });
+        }, 'GitHub OAuth user authenticated');
 
         return AuthService.issueSession(user, 'github', userAgent, ipAddress);
     }
 
     static async syncUser(userId: string, accessToken: string) {
-        console.info('[github:sync-user] syncing GitHub account', { userId });
+        logger.info({ userId }, 'Syncing GitHub account');
         
         let profile;
         try {
             profile = await this.getProfile(accessToken);
-            console.info('[github:sync-user] GitHub profile fetched successfully', {
+            logger.info({
                 userId,
                 githubId: profile.id,
                 login: profile.login,
                 email: profile.email,
-            });
+            }, 'GitHub profile fetched successfully');
         } catch (fetchErr: any) {
             throw new Error(`GitHub API Error: ${fetchErr.message}`);
         }
@@ -253,11 +256,11 @@ export class GitHubService {
                 },
             });
 
-            console.info('[github:sync-user] GitHub account persisted in database', {
+            logger.info({
                 userId,
                 githubAccountId: githubAccount.id,
                 username: githubAccount.username,
-            });
+            }, 'GitHub account persisted');
 
             // Update the user record to link GitHub ID and sync avatar (updates user session)
             await prisma.user.update({
@@ -271,10 +274,10 @@ export class GitHubService {
                 },
             });
 
-            console.info('[github:sync-user] User record/session updated successfully with GitHub link', {
+            logger.info({
                 userId,
                 githubId: profile.id,
-            });
+            }, 'User GitHub link updated');
         } catch (dbErr: any) {
             throw new Error(`Database Storage Error: ${dbErr.message}`);
         }
@@ -304,16 +307,16 @@ export class GitHubService {
             const data = await response.json() as any;
 
             if (!response.ok) {
-                console.error('[github:repos] GitHub repository fetch failed', {
+                logger.error({
                     status: response.status,
                     message: data.message,
                     page,
-                });
+                }, 'GitHub repository fetch failed');
                 throw new Error(data.message || 'Unable to fetch GitHub repositories');
             }
 
             repos.push(...data);
-            console.info('[github:repos] fetched repository page', { page, count: data.length });
+            logger.info({ page, count: data.length }, 'Fetched GitHub repository page');
 
             if (!Array.isArray(data) || data.length < 100) break;
             page += 1;
@@ -330,11 +333,11 @@ export class GitHubService {
         const accessToken = encryptionService.decrypt({ iv, tag, content });
 
         const githubRepos = await this.fetchRepos(accessToken);
-        console.info('[github:sync-repos] syncing repositories', {
+        logger.info({
             userId,
             githubAccountId: account.id,
             count: githubRepos.length,
-        });
+        }, 'Syncing GitHub repositories');
 
         const syncPromises = githubRepos.map(async (repo) => {
             return prisma.repository.upsert({
@@ -362,10 +365,10 @@ export class GitHubService {
         });
 
         const synced = await Promise.all(syncPromises);
-        console.info('[github:sync-repos] repositories persisted', {
+        logger.info({
             userId,
             count: synced.length,
-        });
+        }, 'GitHub repositories persisted');
         return synced;
     }
 
@@ -403,11 +406,11 @@ export class GitHubService {
                 ? data.errors.map((item: any) => [item.resource, item.field, item.code, item.message].filter(Boolean).join(' ')).filter(Boolean).join('; ')
                 : '';
             const message = [data.message, details].filter(Boolean).join(': ');
-            console.error('[github:webhook] webhook creation failed', {
+            logger.error({
                 repoFullName,
                 status: response.status,
                 message,
-            });
+            }, 'GitHub webhook creation failed');
             throw new Error(message || 'Unable to create GitHub webhook');
         }
         if (data.id) {

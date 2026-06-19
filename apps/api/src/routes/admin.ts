@@ -8,7 +8,7 @@ import { DeploymentService } from '../services/deployment.service';
 import { GitHubService } from '../services/github.service';
 import { CacheService } from '../services/cache.service';
 import { AdminService } from '../services/admin.service';
-import { apiError } from '../utils/http';
+import { apiError, cookie } from '../utils/http';
 
 const adminTokenService = new TokenService(config.auth.adminJwtSecret);
 
@@ -59,9 +59,7 @@ function error(reply: any, statusCode: number, message: string, errorCode: strin
 }
 
 function adminAccessCookie(token: string, maxAge: number) {
-    const isProd = config.app.env === 'production';
-    const sameSite = isProd ? 'None' : 'Lax';
-    return `adminAccessToken=${token}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=${sameSite}; Max-Age=${maxAge}`;
+    return cookie('adminAccessToken', token, maxAge, { httpOnly: true });
 }
 
 function canManagePlatform(role: string) {

@@ -9,6 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createReadStream } from 'node:fs';
+import { logger } from '../utils/logger';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -869,7 +870,7 @@ export class DeploymentService {
                 await LoggingService.log(deploymentId, message, 'system', 'warn');
                 return;
             }
-            console.warn('[deploy:webhook]', message);
+            logger.warn({ message }, 'Deployment webhook registration skipped');
         }
     }
 

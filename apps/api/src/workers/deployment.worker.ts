@@ -2,6 +2,7 @@ import { Worker } from 'bullmq';
 import { redisConnection } from '../utils/queue';
 import { DeploymentService } from '../services/deployment.service';
 import prisma from '@deployforge/database';
+import { logger } from '../utils/logger';
 
 export const deploymentWorker = new Worker(
     'deployment-queue',
@@ -55,5 +56,5 @@ export const deploymentWorker = new Worker(
 );
 
 deploymentWorker.on('failed', (job, err) => {
-    console.error(`Deployment job ${job?.id} failed: ${err.message}`);
+    logger.error({ err, jobId: job?.id }, 'Deployment job failed');
 });

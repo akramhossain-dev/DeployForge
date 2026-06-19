@@ -8,7 +8,7 @@ async function start() {
 
     try {
         const address = await app.listen({ port: config.app.port, host: '0.0.0.0' });
-        console.log(`🚀 Server listening at ${address}`);
+        app.log.info({ address }, 'Server listening');
 
         // Run database data retention cleanup once on startup and then every 24 hours
         void HardeningService.runDataRetentionCleanup();

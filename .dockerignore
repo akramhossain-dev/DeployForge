@@ -1,0 +1,14 @@
+.git
+**/.next
+**/.turbo
+**/dist
+**/node_modules
+coverage
+*.log
+.env
+.env.*
+!.env.example
+Dockerfile
+docker-compose*.yml
+Deployforge audit report.md
+docs

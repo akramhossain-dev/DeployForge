@@ -2,6 +2,7 @@ import prisma from '@deployforge/database';
 import { SSHService } from '@deployforge/vps';
 import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
+import { logger } from '../utils/logger';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -46,7 +47,7 @@ export class MonitoringService {
             });
 
         } catch (err) {
-            console.error(`Failed to collect metrics for VPS ${vpsId}:`, err);
+            logger.error({ err, vpsId }, 'Failed to collect VPS metrics');
             throw err;
         } finally {
             ssh.disconnect();

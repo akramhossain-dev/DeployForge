@@ -28,11 +28,12 @@ export function parseCookies(cookieHeader: string | undefined): Record<string, s
     return cookies;
 }
 
-export function cookie(name: string, value: string, maxAge: number, options: { httpOnly?: boolean } = {}) {
+export function cookie(name: string, value: string, maxAge: number, options: { httpOnly?: boolean; sameSite?: 'Lax' | 'Strict' | 'None' } = {}) {
     const isProd = config.app.env === 'production';
-    const sameSite = isProd ? 'None' : 'Lax';
+    const sameSite = options.sameSite || (isProd ? 'None' : 'Lax');
     const encodedValue = encodeURIComponent(value);
-    return `${name}=${encodedValue}; Path=/; ${options.httpOnly ? 'HttpOnly; ' : ''}${isProd ? 'Secure; ' : ''}SameSite=${sameSite}; Max-Age=${maxAge}`;
+    const expires = maxAge === 0 ? '; Expires=Thu, 01 Jan 1970 00:00:00 GMT' : '';
+    return `${name}=${encodedValue}; Path=/; ${options.httpOnly ? 'HttpOnly; ' : ''}${isProd ? 'Secure; ' : ''}SameSite=${sameSite}; Max-Age=${maxAge}${expires}`;
 }
 
 export function apiError(reply: FastifyReply, statusCode: number, code: ApiErrorCode | string, message: string) {

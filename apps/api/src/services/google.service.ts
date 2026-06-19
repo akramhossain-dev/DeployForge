@@ -1,6 +1,7 @@
 import prisma from '@deployforge/database';
 import { config } from '../config/env';
 import { AuthService } from './auth.service';
+import { logger } from '../utils/logger';
 
 type GoogleTokenResponse = {
     access_token?: string;
@@ -160,11 +161,13 @@ export class GoogleService {
             });
         }
 
-        console.info('[google:auth] Google OAuth user authenticated', {
+        logger.info({
+            audit: true,
+            event: 'google_oauth_user_authenticated',
             userId: user.id,
             googleId,
             email,
-        });
+        }, 'Google OAuth user authenticated');
 
         return AuthService.issueSession(user, 'google', userAgent, ipAddress);
     }

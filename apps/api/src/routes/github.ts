@@ -115,7 +115,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         let userId = '';
         let purpose = '';
         try {
-            fastify.log.info({ state }, 'Validating state parameter');
+            fastify.log.info({ hasState: Boolean(state) }, 'Validating GitHub OAuth state parameter');
             const payload = tokenService.verifyToken(state) as any;
             if (!['github_oauth', 'github_auth'].includes(payload.purpose)) {
                 fastify.log.warn({ payload }, 'Invalid state purpose or missing user ID in state payload');
@@ -129,7 +129,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             userId = payload.userId;
             fastify.log.info({ userId, purpose }, 'State parameter verified successfully');
         } catch (err: any) {
-            fastify.log.error({ err, state }, 'State verification failed');
+            fastify.log.error({ err }, 'GitHub OAuth state verification failed');
             return reply.redirect(`${config.app.appUrl}/login?github=error&error_type=session_error&message=${encodeURIComponent(err.message || 'State validation expired or failed')}`);
         }
 

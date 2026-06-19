@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { AccountService } from './account.service';
 import { sha256, timingSafeEqualString } from '../utils/http';
 import { parseUserAgent } from '../utils/user-agent';
+import { logger } from '../utils/logger';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 const mailService = new MailService({
@@ -136,7 +137,7 @@ export class AuthService {
         try {
             await mailService.sendOTP(email, otp);
         } catch (error: any) {
-            console.error('[auth] Failed to send OTP email', { email, error });
+            logger.error({ err: error, email, audit: true, event: 'otp_email_failed' }, 'Failed to send OTP email');
             throw emailServiceUnavailableError();
         }
 

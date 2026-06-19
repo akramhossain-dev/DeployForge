@@ -2,6 +2,7 @@ import prisma from '@deployforge/database';
 import { EncryptionService } from '@deployforge/security';
 import { SSHConnectionError, SSHService } from '@deployforge/vps';
 import { config } from '../config/env';
+import { logger } from '../utils/logger';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -75,7 +76,7 @@ export class VPSService {
         });
 
         await this.performHealthCheck(vps.id).catch((error) => {
-            console.warn('[vps] initial health check failed', { vpsId: vps.id, message: error.message });
+            logger.warn({ vpsId: vps.id, err: error }, 'Initial VPS health check failed');
         });
 
         return this.sanitize(vps);

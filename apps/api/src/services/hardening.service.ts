@@ -1,4 +1,5 @@
 import prisma from '@deployforge/database';
+import { logger } from '../utils/logger';
 
 export class HardeningService {
     /**
@@ -8,7 +9,7 @@ export class HardeningService {
     static limitWebhookPayload(payload: string): string {
         const maxBytes = 50 * 1024; // 50KB
         if (payload.length > maxBytes) {
-            console.warn(`[Hardening] Webhook payload exceeded size limit: truncating from ${payload.length} to ${maxBytes} bytes`);
+            logger.warn({ originalBytes: payload.length, maxBytes }, 'Webhook payload exceeded storage limit; truncating');
             return payload.slice(0, maxBytes) + '\n...[TRUNCATED BY WEBHOOK STORAGE POLICY]...';
         }
         return payload;
@@ -21,7 +22,7 @@ export class HardeningService {
     static limitTerminalOutput(output: string): string {
         const maxBytes = 50 * 1024; // 50KB
         if (output.length > maxBytes) {
-            console.warn(`[Hardening] Terminal output exceeded size limit: truncating from ${output.length} to ${maxBytes} bytes`);
+            logger.warn({ originalBytes: output.length, maxBytes }, 'Terminal output exceeded storage limit; truncating');
             return output.slice(0, maxBytes) + '\n...[TRUNCATED BY TERMINAL LOG POLICY]...';
         }
         return output;
@@ -42,7 +43,7 @@ export class HardeningService {
                 },
             });
         } catch (err) {
-            console.error('[Hardening] Failed to log terminal command:', err);
+            logger.error({ err, sessionId }, 'Failed to write terminal command audit log');
         }
     }
 
@@ -63,7 +64,7 @@ export class HardeningService {
         const verifyTokenCutoff = getPastDate(14);  // Password Reset & Email verification tokens: 14 days
 
         try {
-            console.log('[Hardening] Starting database retention cleanup job...');
+            logger.info({ audit: true, event: 'retention_cleanup_started' }, 'Database retention cleanup job started');
 
             const auditDeleted = await prisma.auditLog.deleteMany({
                 where: { createdAt: { lt: auditCutoff } },
@@ -101,7 +102,9 @@ export class HardeningService {
                 where: { createdAt: { lt: verifyTokenCutoff } },
             });
 
-            console.log('[Hardening] Database retention cleanup job finished successfully.', {
+            logger.info({
+                audit: true,
+                event: 'retention_cleanup_completed',
                 auditDeleted: auditDeleted.count,
                 deployLogsDeleted: deployLogsDeleted.count,
                 termLogsDeleted: termLogsDeleted.count,
@@ -111,9 +114,9 @@ export class HardeningService {
                 healthRecordsDeleted: healthRecordsDeleted.count,
                 resetTokensDeleted: resetTokensDeleted.count,
                 verifyTokensDeleted: verifyTokensDeleted.count,
-            });
+            }, 'Database retention cleanup job completed');
         } catch (err) {
-            console.error('[Hardening] Data retention cleanup job failed:', err);
+            logger.error({ err, audit: true, event: 'retention_cleanup_failed' }, 'Database retention cleanup job failed');
         }
     }
 

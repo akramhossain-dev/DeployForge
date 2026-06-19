@@ -5,6 +5,7 @@ import { config } from '../config/env';
 import crypto from 'crypto';
 import { paginationMeta, parsePagination, sha256 } from '../utils/http';
 import { parseUserAgent } from '../utils/user-agent';
+import { logger } from '../utils/logger';
 
 const mailService = new MailService({
     host: config.email.smtp.host,
@@ -151,7 +152,7 @@ export class AccountService {
         try {
             await mailService.sendPasswordReset(email, resetLink);
         } catch (error: any) {
-            console.error('[auth] Failed to send password reset email', { email, error });
+            logger.error({ err: error, email, audit: true, event: 'password_reset_email_failed' }, 'Failed to send password reset email');
             throw emailServiceUnavailableError();
         }
     }
@@ -214,7 +215,7 @@ export class AccountService {
         try {
             await mailService.sendEmailVerification(user.email, verificationLink);
         } catch (error: any) {
-            console.error('[auth] Failed to send verification email', { email: user.email, error });
+            logger.error({ err: error, email: user.email, audit: true, event: 'verification_email_failed' }, 'Failed to send verification email');
             throw emailServiceUnavailableError();
         }
     }

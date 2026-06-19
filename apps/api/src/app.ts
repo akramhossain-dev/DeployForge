@@ -5,15 +5,21 @@ import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
 import { config, validateOAuthConfig } from './config/env';
+import { redactionPaths } from './utils/logger';
 
 const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
+const probePaths = new Set(['/health', '/live', '/liveness', '/ready', '/readiness']);
 
 const app = Fastify({
     bodyLimit: 1024 * 1024, // API-5: Global body limit of 1MB for JSON/Form requests
     trustProxy: true,
     logger: {
         level: config.app.logLevel,
+        redact: {
+            paths: redactionPaths,
+            censor: '[REDACTED]',
+        },
         transport: config.app.env === 'development'
             ? { target: 'pino-pretty' }
             : undefined,
@@ -36,9 +42,25 @@ export async function buildApp() {
     // API-1: URL Rewriter Hook to map legacy requests to /api/ prefixes transparently
     app.addHook('onRequest', async (request, reply) => {
         const url = request.raw.url || '';
-        if (url !== '/health' && !url.startsWith('/api/') && !url.startsWith('/api?')) {
+        const path = url.split('?')[0];
+
+        reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
+
+        if (!probePaths.has(path) && !url.startsWith('/api/') && !url.startsWith('/api?')) {
             request.raw.url = `/api${url}`;
         }
+    });
+
+    app.addHook('onResponse', async (request, reply) => {
+        request.log.info({
+            audit: false,
+            event: 'request_completed',
+            method: request.method,
+            path: request.url,
+            statusCode: reply.statusCode,
+            responseTimeMs: Math.round(reply.elapsedTime),
+            ip: request.ip,
+        }, 'HTTP request completed');
     });
 
     app.addHook('preValidation', async (request, reply) => {
@@ -65,7 +87,35 @@ export async function buildApp() {
     });
 
     // Security Plugins
-    await app.register(helmet, { contentSecurityPolicy: false });
+    await app.register(helmet, {
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'none'"],
+                baseUri: ["'none'"],
+                connectSrc: ["'self'"],
+                frameAncestors: ["'none'"],
+                formAction: ["'none'"],
+                imgSrc: ["'self'", 'data:'],
+                scriptSrc: ["'none'"],
+                styleSrc: ["'none'"],
+                objectSrc: ["'none'"],
+                upgradeInsecureRequests: config.app.env === 'production' ? [] : null,
+            },
+        },
+        strictTransportSecurity: {
+            maxAge: 31536000,
+            includeSubDomains: true,
+            preload: true,
+        },
+        xFrameOptions: { action: 'deny' },
+        xContentTypeOptions: true,
+        referrerPolicy: { policy: 'no-referrer' },
+        xPoweredBy: false,
+        xDnsPrefetchControl: { allow: false },
+        xDownloadOptions: true,
+        xPermittedCrossDomainPolicies: { permittedPolicies: 'none' },
+        xXssProtection: false,
+    } as any);
     await app.register(cors, {
         origin: (origin, callback) => {
             if (!origin) {
@@ -169,9 +219,7 @@ export async function buildApp() {
     await app.register(import('./routes/domain'), { prefix: '/api/domain' });
     await app.register(import('./routes/monitoring'), { prefix: '/api/monitor' });
     await app.register(import('./routes/terminal'), { prefix: '/api/terminal' });
-
-    // Health Check
-    app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+    await app.register(import('./routes/health'));
 
     return app;
 }
