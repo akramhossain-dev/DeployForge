@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
+import { ZodError } from 'zod';
 import { config, validateOAuthConfig } from './config/env';
 
 const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
@@ -10,6 +11,7 @@ const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
 
 const app = Fastify({
     bodyLimit: 1024 * 1024, // API-5: Global body limit of 1MB for JSON/Form requests
+    trustProxy: true,
     logger: {
         level: config.app.logLevel,
         transport: config.app.env === 'development'
@@ -39,6 +41,29 @@ export async function buildApp() {
         }
     });
 
+    app.addHook('preValidation', async (request, reply) => {
+        const unsafeKeys = new Set(['__proto__', 'prototype', 'constructor']);
+        const checkPayload = (value: unknown, depth = 0): boolean => {
+            if (!value || typeof value !== 'object') return true;
+            if (depth > 20) return false;
+            for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+                if (unsafeKeys.has(key)) return false;
+                if (!checkPayload(child, depth + 1)) return false;
+            }
+            return true;
+        };
+
+        if (!checkPayload(request.body) || !checkPayload(request.query) || !checkPayload(request.params)) {
+            return reply.status(400).send({
+                success: false,
+                error: {
+                    code: 'BAD_REQUEST',
+                    message: 'Malformed request payload',
+                },
+            });
+        }
+    });
+
     // Security Plugins
     await app.register(helmet, { contentSecurityPolicy: false });
     await app.register(cors, {
@@ -61,6 +86,7 @@ export async function buildApp() {
         max: config.security.rateLimitMax,
         timeWindow: config.security.rateLimitWindow,
         errorResponseBuilder: (request, context) => ({
+            statusCode: 429,
             success: false,
             error: {
                 code: 'RATE_LIMIT_EXCEEDED',
@@ -81,25 +107,33 @@ export async function buildApp() {
 
     // Custom Plugins
     await app.register(import('./plugins/auth'));
+    await app.register(import('./plugins/csrf'));
 
     // Global Error Handler conforming to API Standardization format
     app.setErrorHandler((error, request, reply) => {
-        const statusCode = error.statusCode || 500;
-        const message = statusCode >= 500 && !(error as any).expose
-            ? 'Internal Server Error'
-            : error.message;
+        const isValidationError = error instanceof ZodError;
+        const rawStatusCode = isValidationError ? 400 : error.statusCode || 500;
+        const statusCode = rawStatusCode >= 400 && rawStatusCode < 600 ? rawStatusCode : 500;
 
         let code = (error as any).errorCode || 'INTERNAL_ERROR';
-        if (statusCode === 400) code = 'BAD_REQUEST';
-        if (statusCode === 401) code = 'UNAUTHORIZED';
-        if (statusCode === 403) code = 'FORBIDDEN';
-        if (statusCode === 404) code = 'NOT_FOUND';
-        if (statusCode === 409) code = 'CONFLICT';
-        if (statusCode === 429) code = 'RATE_LIMITED';
+        if (isValidationError) code = 'VALIDATION_ERROR';
+        else if (statusCode === 400) code = 'BAD_REQUEST';
+        else if (statusCode === 401) code = 'UNAUTHORIZED';
+        else if (statusCode === 403) code = 'FORBIDDEN';
+        else if (statusCode === 404) code = 'NOT_FOUND';
+        else if (statusCode === 409) code = 'CONFLICT';
+        else if (statusCode === 429) code = 'RATE_LIMITED';
+
+        const exposesSensitiveInternals = /prisma|sql|database|jwt|secret|environment|env|stack/i.test(error.message || '');
+        const message = isValidationError
+            ? error.errors[0]?.message || 'Invalid request payload'
+            : statusCode >= 500 || exposesSensitiveInternals
+                ? 'Internal Server Error'
+                : error.message || 'Request failed';
 
         // Log suspicious requests, malformed payloads and validation failures
         if (statusCode === 400) {
-            app.log.warn({ ip: request.ip, path: request.url, err: error.message }, 'Bad Request / Validation Failure');
+            app.log.warn({ ip: request.ip, path: request.url, err: error }, 'Bad Request / Validation Failure');
         } else if (statusCode === 401 || statusCode === 403) {
             app.log.warn({ ip: request.ip, path: request.url }, 'Suspicious unauthorized request');
         } else if (statusCode === 429) {
@@ -112,8 +146,7 @@ export async function buildApp() {
             success: false,
             error: {
                 code,
-                message,
-                ...(config.app.env === 'development' && { stack: error.stack })
+                message
             }
         });
     });

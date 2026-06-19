@@ -6,6 +6,7 @@ import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
 import { z } from 'zod';
 import { sanitizeGitHubAccount } from '../utils/sanitizers';
+import { cookie } from '../utils/http';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
@@ -13,10 +14,15 @@ const createWebhookSchema = z.object({
     repoFullName: z.string().min(1, 'Repository full name is required'),
 });
 
+const oauthCallbackQuerySchema = z.object({
+    code: z.string().min(1).max(2048).optional(),
+    state: z.string().min(1).max(4096).optional(),
+    error: z.string().min(1).max(128).optional(),
+    error_description: z.string().min(1).max(1024).optional(),
+});
+
 function sessionCookie(name: 'accessToken' | 'refreshToken', value: string, maxAge: number) {
-    const isProd = config.app.env === 'production';
-    const sameSite = isProd ? 'None' : 'Lax';
-    return `${name}=${value}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=${sameSite}; Max-Age=${maxAge}`;
+    return cookie(name, value, maxAge, { httpOnly: true });
 }
 
 export default async function githubRoutes(fastify: FastifyInstance) {
@@ -77,12 +83,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             rateLimit: { max: 10, timeWindow: '1 minute' },
         },
     }, async (request, reply) => {
-        const { code, state, error, error_description } = request.query as {
-            code?: string;
-            state?: string;
-            error?: string;
-            error_description?: string;
-        };
+        const { code, state, error, error_description } = oauthCallbackQuerySchema.parse(request.query);
 
         fastify.log.info({ hasCode: !!code, hasState: !!state, error, error_description }, 'GitHub OAuth callback received');
 

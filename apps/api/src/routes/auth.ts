@@ -1,15 +1,21 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import prisma from '@deployforge/database';
-import crypto from 'crypto';
+import { PasswordService } from '@deployforge/security';
 import { AuthService } from '../services/auth.service';
 import { AccountService } from '../services/account.service';
-import { config } from '../config/env';
+import { apiError, cookie, parseCookies, sha256 } from '../utils/http';
+
+const strongPasswordSchema = z.string()
+    .min(12)
+    .refine((password) => PasswordService.validate(password).valid, {
+        message: 'Password does not meet security requirements',
+    });
 
 const registerSchema = z.object({
     email: z.string().email(),
-    password: z.string().min(8),
-    name: z.string().optional(),
+    password: strongPasswordSchema,
+    name: z.string().trim().min(1).max(120).optional(),
     termsAccepted: z.literal(true, {
         errorMap: () => ({ message: 'You must accept Privacy Policy and Terms' }),
     }),
@@ -22,7 +28,7 @@ const verifyOtpSchema = z.object({
 
 const loginSchema = z.object({
     email: z.string().email(),
-    password: z.string(),
+    password: z.string().min(1),
 });
 
 // API-2: Strict validation for refresh token format, type, and length
@@ -41,25 +47,18 @@ const logoutSchema = z.object({
     logoutMode: z.enum(['current', 'all', 'others']).optional().default('current'),
 });
 
-function parseCookies(cookieHeader: string | undefined): Record<string, string> {
-    const cookies: Record<string, string> = {};
-    if (!cookieHeader) return cookies;
-    cookieHeader.split(';').forEach(cookie => {
-        const parts = cookie.split('=');
-        if (parts.length === 2) {
-            cookies[parts[0].trim()] = parts[1].trim();
-        }
-    });
-    return cookies;
-}
-
 function sessionCookie(name: 'accessToken' | 'refreshToken', value: string, maxAge: number) {
-    const isProd = config.app.env === 'production';
-    const sameSite = isProd ? 'None' : 'Lax';
-    return `${name}=${value}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=${sameSite}; Max-Age=${maxAge}`;
+    return cookie(name, value, maxAge, { httpOnly: true });
 }
 
 export default async function authRoutes(fastify: FastifyInstance) {
+    fastify.get('/csrf', {
+        config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    }, async (_request, reply) => {
+        const token = fastify.issueCsrfToken(reply);
+        return { success: true, data: { csrfToken: token } };
+    });
+
     fastify.post('/register', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -109,13 +108,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         if (hasBody) {
             const result = refreshSchema.safeParse(request.body);
             if (!result.success) {
-                return reply.status(400).send({
-                    success: false,
-                    error: {
-                        code: 'BAD_REQUEST',
-                        message: result.error.errors[0].message
-                    }
-                });
+                return apiError(reply, 400, 'BAD_REQUEST', result.error.errors[0].message);
             }
             refreshToken = result.data.refreshToken;
         } else {
@@ -123,13 +116,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
             const cookieToken = cookies['refreshToken'] || '';
             const result = refreshSchema.safeParse({ refreshToken: cookieToken });
             if (!result.success) {
-                return reply.status(400).send({
-                    success: false,
-                    error: {
-                        code: 'BAD_REQUEST',
-                        message: 'Invalid refresh token format'
-                    }
-                });
+                return apiError(reply, 400, 'BAD_REQUEST', 'Invalid refresh token format');
             }
             refreshToken = result.data.refreshToken;
         }
@@ -143,13 +130,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
             return { success: true, data: { message: 'Session refreshed' } };
         } catch (err: any) {
-            return reply.status(401).send({
-                success: false,
-                error: {
-                    code: 'UNAUTHORIZED',
-                    message: err.message
-                }
-            });
+            return apiError(reply, 401, 'UNAUTHORIZED', 'Invalid refresh token');
         }
     });
 
@@ -163,13 +144,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         if (hasBody) {
             const result = logoutSchema.safeParse(request.body);
             if (!result.success) {
-                return reply.status(400).send({
-                    success: false,
-                    error: {
-                        code: 'BAD_REQUEST',
-                        message: result.error.errors[0].message
-                    }
-                });
+                return apiError(reply, 400, 'BAD_REQUEST', result.error.errors[0].message);
             }
             refreshToken = result.data.refreshToken;
             logoutMode = result.data.logoutMode || 'current';
@@ -178,27 +153,21 @@ export default async function authRoutes(fastify: FastifyInstance) {
             const cookieToken = cookies['refreshToken'] || '';
             const result = logoutSchema.safeParse({ refreshToken: cookieToken, logoutMode: 'current' });
             if (!result.success) {
-                return reply.status(400).send({
-                    success: false,
-                    error: {
-                        code: 'BAD_REQUEST',
-                        message: 'Invalid refresh token format'
-                    }
-                });
+                return apiError(reply, 400, 'BAD_REQUEST', 'Invalid refresh token format');
             }
             refreshToken = result.data.refreshToken;
         }
 
         if (logoutMode === 'all') {
             const session = await prisma.session.findUnique({
-                where: { refreshToken: crypto.createHash('sha256').update(refreshToken).digest('hex') }
+                where: { refreshToken: sha256(refreshToken) }
             });
             if (session) {
                 await AccountService.revokeAllSessions(session.userId, request.ip, request.headers['user-agent']);
             }
         } else if (logoutMode === 'others') {
             const session = await prisma.session.findUnique({
-                where: { refreshToken: crypto.createHash('sha256').update(refreshToken).digest('hex') }
+                where: { refreshToken: sha256(refreshToken) }
             });
             if (session) {
                 await AccountService.revokeOtherSessions(session.userId, session.id, request.ip, request.headers['user-agent']);
@@ -234,7 +203,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }, async (request) => {
         const { token, password } = z.object({
             token: z.string().min(1),
-            password: z.string().min(8),
+            password: strongPasswordSchema,
         }).parse(request.body);
         await AccountService.resetPassword(token, password, request.ip, request.headers['user-agent']);
         return { success: true, data: { message: 'Password has been reset successfully' } };

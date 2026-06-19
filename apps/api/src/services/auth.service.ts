@@ -4,7 +4,7 @@ import { MailService } from '@deployforge/mail';
 import { config } from '../config/env';
 import crypto from 'crypto';
 import { AccountService } from './account.service';
-import { CacheService } from './cache.service';
+import { sha256, timingSafeEqualString } from '../utils/http';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 const mailService = new MailService({
@@ -32,6 +32,14 @@ function publicError(message: string, statusCode: number) {
     });
 }
 
+function genericAuthError() {
+    return publicError('Invalid email or password', 401);
+}
+
+function refreshTokenHash(refreshToken: string) {
+    return sha256(refreshToken);
+}
+
 export class AuthService {
     static async issueSession(user: any, authProvider: 'local' | 'github' | 'google', userAgent?: string, ipAddress?: string) {
         const sessionId = crypto.randomUUID();
@@ -43,7 +51,7 @@ export class AuthService {
             sessionId,
         });
         const refreshToken = crypto.randomBytes(40).toString('hex');
-        const hashedRefreshToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        const hashedRefreshToken = refreshTokenHash(refreshToken);
 
         // Parse user agent
         let browser = 'Unknown Browser';
@@ -86,6 +94,7 @@ export class AuthService {
     }
 
     static async register(email: string, password: string, name?: string) {
+        PasswordService.assertStrong(password);
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             throw new Error('User already exists');
@@ -127,7 +136,7 @@ export class AuthService {
      */
     static async sendOTP(email: string) {
         const otp = crypto.randomInt(100000, 1000000).toString();
-        const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
+        const hashedOTP = sha256(otp);
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
         await prisma.verificationToken.upsert({
@@ -162,8 +171,8 @@ export class AuthService {
         if (new Date() > record.expiresAt) throw publicError('OTP expired. Please request a new one.', 400);
         if (record.attempts >= 5) throw publicError('Too many attempts. Please request a new code.', 429);
 
-        const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex');
-        if (hashedOTP !== record.token) {
+        const hashedOTP = sha256(otp);
+        if (!timingSafeEqualString(hashedOTP, record.token)) {
             await prisma.verificationToken.update({
                 where: { email },
                 data: { attempts: { increment: 1 } },
@@ -183,22 +192,23 @@ export class AuthService {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.passwordHash) {
             await AccountService.logAudit(null, 'LOGIN_FAILURE', `Login failed: Invalid email or password for ${email}`, ipAddress, userAgent, { email });
-            throw new Error('Invalid credentials');
+            await PasswordService.verifyAgainstDummy(password);
+            throw genericAuthError();
         }
 
         if (user.status === 'SUSPENDED') {
             await AccountService.logAudit(user.id, 'LOGIN_FAILURE', 'Login failed: Account suspended', ipAddress, userAgent, { email });
-            throw new Error('Account suspended');
+            throw genericAuthError();
         }
         if (!user.isVerified) {
             await AccountService.logAudit(user.id, 'LOGIN_FAILURE', 'Login failed: Email not verified', ipAddress, userAgent, { email });
-            throw new Error('Please verify your email first');
+            throw genericAuthError();
         }
 
         const isValid = await PasswordService.verify(user.passwordHash, password);
         if (!isValid) {
             await AccountService.logAudit(user.id, 'LOGIN_FAILURE', 'Login failed: Incorrect password', ipAddress, userAgent, { email });
-            throw new Error('Invalid credentials');
+            throw genericAuthError();
         }
 
         await prisma.user.update({
@@ -213,15 +223,15 @@ export class AuthService {
     }
 
     static async refresh(refreshToken: string) {
-        const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        const hashedToken = refreshTokenHash(refreshToken);
 
         // Check if this token was previously rotated (replay attack detection)
-        const isRotated = await CacheService.get<string>(`rotated_token:${hashedToken}`);
-        if (isRotated) {
-            const userId = isRotated;
+        const replayedToken = await prisma.refreshTokenReplay.findUnique({ where: { tokenHash: hashedToken } });
+        if (replayedToken && new Date() <= replayedToken.expiresAt) {
+            const userId = replayedToken.userId;
             await prisma.session.deleteMany({ where: { userId } });
             await AccountService.logAudit(userId, 'REFRESH_TOKEN_REPLAY', 'Replay attack detected on refresh token. Revoking all sessions.', undefined, undefined);
-            throw new Error('Refresh token has already been used. All sessions revoked.');
+            throw publicError('Invalid refresh token', 401);
         }
 
         const session = await prisma.session.findUnique({
@@ -233,25 +243,34 @@ export class AuthService {
             if (session) {
                 await prisma.session.delete({ where: { id: session.id } });
             }
-            throw new Error('Invalid or expired refresh token');
+            throw publicError('Invalid refresh token', 401);
         }
 
         // Generate a new refresh token and extend the expiration date
         const newRefreshToken = crypto.randomBytes(40).toString('hex');
-        const hashedNewRefreshToken = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+        const hashedNewRefreshToken = refreshTokenHash(newRefreshToken);
         const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-        await prisma.session.update({
-            where: { id: session.id },
-            data: {
-                refreshToken: hashedNewRefreshToken,
-                expiresAt: newExpiresAt,
-                lastActivity: new Date(),
-            },
-        });
+        await prisma.$transaction([
+            prisma.session.update({
+                where: { id: session.id },
+                data: {
+                    refreshToken: hashedNewRefreshToken,
+                    expiresAt: newExpiresAt,
+                    lastActivity: new Date(),
+                },
+            }),
+            prisma.refreshTokenReplay.create({
+                data: {
+                    tokenHash: hashedToken,
+                    userId: session.userId,
+                    sessionId: session.id,
+                    expiresAt: session.expiresAt,
+                },
+            }),
+        ]);
 
-        // Cache the old token as rotated for replay protection (expires in 1 hour)
-        await CacheService.set(`rotated_token:${hashedToken}`, session.userId, 3600);
+        await prisma.refreshTokenReplay.deleteMany({ where: { expiresAt: { lt: new Date() } } });
 
         const accessToken = tokenService.generateAccessToken({
             userId: session.userId,
@@ -267,7 +286,7 @@ export class AuthService {
     }
 
     static async logout(refreshToken: string, ip?: string, ua?: string) {
-        const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        const hashedToken = refreshTokenHash(refreshToken);
         const session = await prisma.session.findUnique({
             where: { refreshToken: hashedToken },
             select: { userId: true }

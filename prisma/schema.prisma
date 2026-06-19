@@ -235,6 +235,20 @@ model Session {
   @@index([createdAt])
 }
 
+model RefreshTokenReplay {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  sessionId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
 model VerificationToken {
   id        String   @id @default(cuid())
   email     String

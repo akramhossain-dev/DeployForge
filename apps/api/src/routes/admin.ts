@@ -18,7 +18,7 @@ const adminLoginSchema = z.object({
 const createAdminSchema = z.object({
     adminSecret: z.string().min(1),
     email: z.string().email(),
-    password: z.string().min(8),
+    password: z.string().min(12),
     role: z.enum(['ADMIN', 'MODERATOR']),
 });
 
@@ -255,6 +255,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             return error(reply, 403, 'Invalid admin secret', 'INVALID_ADMIN_SECRET');
         }
 
+        PasswordService.assertStrong(data.password);
         const passwordHash = await PasswordService.hash(data.password);
         const admin = await prisma.adminUser.create({
             data: {

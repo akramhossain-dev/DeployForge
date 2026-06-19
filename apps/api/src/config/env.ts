@@ -5,7 +5,11 @@ import { z } from 'zod';
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
 const url = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`).url(`${name} must be a valid URL`);
-const secret = (name: string, min = 32) => z.string({ required_error: `${name} is required` }).trim().min(min, `${name} must be at least ${min} characters`);
+const placeholderPattern = /^(replace_with_|your_|changeme|change_me|secret|password|admin|test)/i;
+const secret = (name: string, min = 32) => z.string({ required_error: `${name} is required` })
+    .trim()
+    .min(min, `${name} must be at least ${min} characters`)
+    .refine((value) => !placeholderPattern.test(value), `${name} must not use a placeholder value`);
 const required = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
 const optional = () => z.string().trim().optional().default('');
 const envBoolean = (defaultValue: boolean) => z.preprocess((value) => {
@@ -25,8 +29,15 @@ const rawEnvSchema = z.object({
 
     NEXT_PUBLIC_API_URL: url('NEXT_PUBLIC_API_URL').optional(),
 
-    DATABASE_URL: required('DATABASE_URL'),
-    REDIS_URL: url('REDIS_URL'),
+    DATABASE_URL: required('DATABASE_URL').refine((value) => {
+        try {
+            return ['postgresql:', 'postgres:'].includes(new URL(value).protocol);
+        } catch {
+            return false;
+        }
+    }, 'DATABASE_URL must be a valid PostgreSQL connection URL'),
+    REDIS_ENABLED: envBoolean(true),
+    REDIS_URL: url('REDIS_URL').refine((value) => ['redis:', 'rediss:'].includes(new URL(value).protocol), 'REDIS_URL must use redis:// or rediss://').optional(),
 
     JWT_SECRET: secret('JWT_SECRET'),
     ADMIN_SECRET: secret('ADMIN_SECRET', 24),
@@ -90,6 +101,7 @@ const isLocalUrl = (value: string) => localHostnames.has(new URL(value).hostname
 
 const finalChecks: string[] = [];
 if (!githubCallbackUrl) finalChecks.push('GITHUB_CALLBACK_URL is required');
+if (env.REDIS_ENABLED && !env.REDIS_URL) finalChecks.push('REDIS_URL is required when REDIS_ENABLED=true');
 if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_ID) finalChecks.push('GOOGLE_CLIENT_ID is required when GOOGLE_OAUTH_ENABLED=true');
 if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_SECRET) finalChecks.push('GOOGLE_CLIENT_SECRET is required when GOOGLE_OAUTH_ENABLED=true');
 if (env.GOOGLE_OAUTH_ENABLED && !googleCallbackUrl) finalChecks.push('GOOGLE_CALLBACK_URL is required when GOOGLE_OAUTH_ENABLED=true');
@@ -100,6 +112,8 @@ if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_ID.endsWith('.apps.googleuser
 if (env.NODE_ENV === 'production') {
     if (isLocalUrl(env.APP_URL)) finalChecks.push('APP_URL must not point to localhost in production');
     if (isLocalUrl(env.API_URL)) finalChecks.push('API_URL must not point to localhost in production');
+    if (!env.APP_URL.startsWith('https://')) finalChecks.push('APP_URL must use HTTPS in production');
+    if (!env.API_URL.startsWith('https://')) finalChecks.push('API_URL must use HTTPS in production');
 }
 
 if (finalChecks.length > 0) {
@@ -127,7 +141,8 @@ export const databaseConfig = {
 } as const;
 
 export const redisConfig = {
-    url: env.REDIS_URL,
+    enabled: env.REDIS_ENABLED,
+    url: env.REDIS_URL || '',
 } as const;
 
 export const authConfig = {
@@ -193,6 +208,7 @@ export const config = {
     API_URL: appConfig.apiUrl,
     DATABASE_URL: databaseConfig.url,
     REDIS_URL: redisConfig.url,
+    REDIS_ENABLED: redisConfig.enabled,
     JWT_SECRET: authConfig.jwtSecret,
     ADMIN_SECRET: authConfig.adminSecret,
     ADMIN_JWT_SECRET: authConfig.adminJwtSecret,

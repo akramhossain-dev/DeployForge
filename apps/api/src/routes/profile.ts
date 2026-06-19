@@ -1,6 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { PasswordService } from '@deployforge/security';
 import { AccountService } from '../services/account.service';
+
+const strongPasswordSchema = z.string()
+    .min(12)
+    .refine((password) => PasswordService.validate(password).valid, {
+        message: 'Password does not meet security requirements',
+    });
 
 const updateProfileSchema = z.object({
     name: z.string().min(1, 'Name cannot be empty').optional(),
@@ -8,7 +15,7 @@ const updateProfileSchema = z.object({
 
 const changePasswordSchema = z.object({
     currentPassword: z.string().optional(),
-    newPassword: z.string().min(8, 'New password must be at least 8 characters long'),
+    newPassword: strongPasswordSchema,
 });
 
 const updatePreferencesSchema = z.object({

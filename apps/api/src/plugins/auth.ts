@@ -4,6 +4,7 @@ import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
 import prisma from '@deployforge/database';
 import crypto from 'crypto';
+import { apiError, parseCookies } from '../utils/http';
 
 declare module 'fastify' {
     interface FastifyRequest {
@@ -27,18 +28,6 @@ function tokenHash(token: string) {
     return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function parseCookies(cookieHeader: string | undefined): Record<string, string> {
-    const cookies: Record<string, string> = {};
-    if (!cookieHeader) return cookies;
-    cookieHeader.split(';').forEach(cookie => {
-        const parts = cookie.split('=');
-        if (parts.length === 2) {
-            cookies[parts[0].trim()] = parts[1].trim();
-        }
-    });
-    return cookies;
-}
-
 const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
     fastify.decorateRequest('user', null);
 
@@ -54,12 +43,12 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
             }
 
             if (!token) {
-                return reply.status(401).send({ success: false, message: 'Unauthorized' });
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
             const payload = tokenService.verifyToken(token);
             if (payload.tokenType && payload.tokenType !== 'user') {
-                return reply.status(401).send({ success: false, message: 'Unauthorized', errorCode: 'UNAUTHORIZED_USER_ACCESS' });
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
             if (payload.sessionId) {
@@ -67,7 +56,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                     where: { id: payload.sessionId },
                 });
                 if (!activeSession || new Date() > activeSession.expiresAt) {
-                    return reply.status(401).send({ success: false, message: 'Session revoked or expired', errorCode: 'SESSION_REVOKED' });
+                    return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
                 }
             }
 
@@ -96,8 +85,8 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 },
             });
 
-            if (!user) return reply.status(401).send({ success: false, message: 'Unauthorized' });
-            if (user.status === 'SUSPENDED') return reply.status(403).send({ success: false, message: 'Account suspended' });
+            if (!user) return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+            if (user.status === 'SUSPENDED') return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
 
             const { passwordHash, ...safeUser } = user;
             request.user = {
@@ -110,7 +99,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 },
             };
         } catch (err) {
-            return reply.status(401).send({ success: false, message: 'Unauthorized' });
+            return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
         }
     });
 
@@ -123,12 +112,12 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 : cookies['adminAccessToken'] || '';
 
             if (!token) {
-                return reply.status(401).send({ success: false, message: 'Admin token required', errorCode: 'UNAUTHORIZED_ADMIN_ACCESS' });
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
             const payload = adminTokenService.verifyToken(token);
             if (payload.tokenType !== 'admin' || !payload.adminId || !payload.sessionId) {
-                return reply.status(401).send({ success: false, message: 'Invalid admin token', errorCode: 'UNAUTHORIZED_ADMIN_ACCESS' });
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
             const session = await prisma.adminSession.findUnique({
@@ -137,11 +126,11 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
             });
 
             if (!session || session.revokedAt || session.tokenHash !== tokenHash(token) || new Date() > session.expiresAt) {
-                return reply.status(401).send({ success: false, message: 'Admin session expired', errorCode: 'UNAUTHORIZED_ADMIN_ACCESS' });
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
             if (!adminRoles.has(session.admin.role)) {
-                return reply.status(403).send({ success: false, message: 'Admin access required', errorCode: 'UNAUTHORIZED_ADMIN_ACCESS' });
+                return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
             }
 
             request.admin = {
@@ -153,7 +142,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
             };
             request.adminSessionId = session.id;
         } catch (err) {
-            return reply.status(401).send({ success: false, message: 'Invalid admin token', errorCode: 'UNAUTHORIZED_ADMIN_ACCESS' });
+            return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
         }
     });
 
@@ -161,7 +150,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
         await (fastify as any).requireAdmin(request, reply);
         if (reply.sent) return;
         if (request.admin?.role !== 'SUPER_ADMIN') {
-            return reply.status(403).send({ success: false, message: 'Super admin access required', errorCode: 'INSUFFICIENT_ROLE' });
+            return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
         }
     });
 

@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { TokenService } from '@deployforge/security';
+import { z } from 'zod';
 import { config } from '../config/env';
 import { GoogleService } from '../services/google.service';
+import { cookie } from '../utils/http';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
@@ -19,10 +21,15 @@ function failOAuth(request: any, reply: any, target: 'login' | 'settings', error
 }
 
 function sessionCookie(name: 'accessToken' | 'refreshToken', value: string, maxAge: number) {
-    const isProd = config.app.env === 'production';
-    const sameSite = isProd ? 'None' : 'Lax';
-    return `${name}=${value}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=${sameSite}; Max-Age=${maxAge}`;
+    return cookie(name, value, maxAge, { httpOnly: true });
 }
+
+const oauthCallbackQuerySchema = z.object({
+    code: z.string().min(1).max(2048).optional(),
+    state: z.string().min(1).max(4096).optional(),
+    error: z.string().min(1).max(128).optional(),
+    error_description: z.string().min(1).max(1024).optional(),
+});
 
 export default async function googleRoutes(fastify: FastifyInstance) {
     fastify.get('/', {
@@ -50,12 +57,7 @@ export default async function googleRoutes(fastify: FastifyInstance) {
             rateLimit: { max: 30, timeWindow: '10 minutes' },
         },
     }, async (request, reply) => {
-        const { code, state, error, error_description } = request.query as {
-            code?: string;
-            state?: string;
-            error?: string;
-            error_description?: string;
-        };
+        const { code, state, error, error_description } = oauthCallbackQuerySchema.parse(request.query);
 
         fastify.log.info({ hasCode: Boolean(code), hasState: Boolean(state), error }, 'Google OAuth callback received');
 

@@ -30,6 +30,8 @@ export type ApiResponse<T> = {
 } & T;
 
 const API_URL = webConfig.apiUrl;
+const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+let csrfToken: string | null = null;
 
 function handleUnauthorized(path: string) {
     if (typeof window === 'undefined') return;
@@ -56,13 +58,48 @@ async function parseResponse(response: Response) {
     return response.json();
 }
 
+function readCookie(name: string) {
+    if (typeof document === 'undefined') return null;
+    return document.cookie
+        .split(';')
+        .map((cookie) => cookie.trim())
+        .find((cookie) => cookie.startsWith(`${name}=`))
+        ?.slice(name.length + 1) || null;
+}
+
+async function ensureCsrfToken() {
+    if (typeof window === 'undefined') return null;
+    csrfToken = csrfToken || readCookie('csrfToken');
+    if (csrfToken) return csrfToken;
+
+    const response = await fetch(`${API_URL}/auth/csrf`, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include',
+    });
+    const payload = await parseResponse(response).catch(() => null);
+    if (!response.ok) return null;
+
+    csrfToken = payload?.data?.csrfToken || readCookie('csrfToken');
+    return csrfToken;
+}
+
+function apiErrorCode(payload: any) {
+    return payload?.error?.code || payload?.errorCode || null;
+}
+
 async function request<T>(path: string, init: RequestInit = {}, hasRetried = false): Promise<T> {
     const headers = new Headers(init.headers);
-    const method = init.method || 'GET';
+    const method = (init.method || 'GET').toUpperCase();
     const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
 
     if (!headers.has('Content-Type') && init.body && !isFormData) {
         headers.set('Content-Type', 'application/json');
+    }
+
+    if (unsafeMethods.has(method)) {
+        const token = await ensureCsrfToken();
+        if (token) headers.set('X-CSRF-Token', token);
     }
 
     if (typeof window !== 'undefined') {
@@ -91,11 +128,17 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
             return request<T>(path, init, true);
         }
 
+        if (response.status === 403 && apiErrorCode(payload) === 'CSRF_TOKEN_INVALID' && !hasRetried) {
+            csrfToken = null;
+            await ensureCsrfToken();
+            return request<T>(path, init, true);
+        }
+
         const apiError: ApiErrorShape = {
             success: false,
-            message: payload?.message || 'Something went wrong. Please try again.',
+            message: payload?.error?.message || payload?.message || 'Something went wrong. Please try again.',
             context: payload?.context,
-            errorCode: payload?.errorCode,
+            errorCode: payload?.error?.code || payload?.errorCode,
         };
 
         if (typeof window !== 'undefined') {

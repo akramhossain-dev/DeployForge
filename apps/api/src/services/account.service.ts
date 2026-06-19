@@ -3,6 +3,7 @@ import { PasswordService } from '@deployforge/security';
 import { MailService } from '@deployforge/mail';
 import { config } from '../config/env';
 import crypto from 'crypto';
+import { sha256 } from '../utils/http';
 
 const mailService = new MailService({
     host: config.email.smtp.host,
@@ -114,15 +115,14 @@ export class AccountService {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new Error('User not found');
 
-        if (!data.newPassword || data.newPassword.length < 8) {
-            throw new Error('New password must be at least 8 characters long');
-        }
+        if (!data.newPassword) throw publicError('New password is required', 400);
+        PasswordService.assertStrong(data.newPassword);
 
         // Local accounts check
         if (user.passwordHash) {
-            if (!data.currentPassword) throw new Error('Current password is required');
+            if (!data.currentPassword) throw publicError('Unable to change password', 400);
             const match = await PasswordService.verify(user.passwordHash, data.currentPassword);
-            if (!match) throw new Error('Current password is incorrect');
+            if (!match) throw publicError('Unable to change password', 400);
         }
 
         const newHash = await PasswordService.hash(data.newPassword);
@@ -147,11 +147,12 @@ export class AccountService {
     static async forgotPassword(email: string, ip?: string, ua?: string) {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
-            throw publicError('User not found', 404);
+            await PasswordService.verifyAgainstDummy(email);
+            return;
         }
 
         const rawToken = crypto.randomBytes(32).toString('hex');
-        const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+        const hashedToken = sha256(rawToken);
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
         await prisma.passwordResetToken.create({
@@ -175,18 +176,16 @@ export class AccountService {
     }
 
     static async resetPassword(token: string, newPassword: string, ip?: string, ua?: string) {
-        if (!newPassword || newPassword.length < 8) {
-            throw new Error('New password must be at least 8 characters long');
-        }
+        PasswordService.assertStrong(newPassword);
 
-        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+        const hashedToken = sha256(token);
         const resetTokenRecord = await prisma.passwordResetToken.findUnique({
             where: { token: hashedToken },
             include: { user: true },
         });
 
         if (!resetTokenRecord || resetTokenRecord.usedAt || new Date() > resetTokenRecord.expiresAt) {
-            throw new Error('Invalid or expired password reset token');
+            throw publicError('Invalid or expired password reset token', 400);
         }
 
         const newHash = await PasswordService.hash(newPassword);
@@ -218,7 +217,7 @@ export class AccountService {
         if (user.isVerified) throw new Error('User email is already verified');
 
         const rawToken = crypto.randomBytes(32).toString('hex');
-        const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+        const hashedToken = sha256(rawToken);
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
         await prisma.emailVerificationToken.create({
@@ -240,7 +239,7 @@ export class AccountService {
     }
 
     static async verifyEmail(token: string, ip?: string, ua?: string) {
-        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+        const hashedToken = sha256(token);
         const verificationRecord = await prisma.emailVerificationToken.findUnique({
             where: { token: hashedToken },
         });
@@ -340,7 +339,7 @@ export class AccountService {
             const match = await PasswordService.verify(user.passwordHash, passwordConfirm);
             if (!match) {
                 await this.logAudit(userId, 'ACCOUNT_DELETION_ATTEMPT', 'Account deletion attempt failed: Incorrect password.', ip, ua);
-                throw new Error('Incorrect password');
+                throw publicError('Unable to delete account', 400);
             }
         }
 
