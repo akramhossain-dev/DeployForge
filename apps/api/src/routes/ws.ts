@@ -1,10 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import prisma from '@deployforge/database';
-import { TokenService } from '@deployforge/security';
-import { config } from '../config/env';
 import { z } from 'zod';
-
-const tokenService = new TokenService(config.auth.jwtSecret);
+import { socketToken, verifyDeploymentSocketAccess } from '../utils/socket-auth';
 
 const wsParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid ID format' }),
@@ -13,16 +10,6 @@ const wsParamsSchema = z.object({
 const wsQuerySchema = z.object({
     token: z.string().min(1, 'Token is required').optional(),
 });
-
-function parseCookies(cookieHeader: string | undefined): Record<string, string> {
-    const cookies: Record<string, string> = {};
-    if (!cookieHeader) return cookies;
-    cookieHeader.split(';').forEach((cookie) => {
-        const parts = cookie.split('=');
-        if (parts.length === 2) cookies[parts[0].trim()] = parts[1].trim();
-    });
-    return cookies;
-}
 
 export default async function wsRoutes(fastify: FastifyInstance) {
     fastify.get('/deployments/:id/logs', { websocket: true }, async (connection, request) => {
@@ -81,15 +68,9 @@ async function authorizeDeploymentSocket(request: any, connection: any) {
     try {
         const { id } = wsParamsSchema.parse(request.params);
         const { token: queryToken } = wsQuerySchema.parse(request.query);
-        const token = queryToken || parseCookies(request.headers.cookie).accessToken || '';
-        if (!token) throw new Error('Unauthorized');
-        const payload = tokenService.verifyToken(token);
-        const deployment = await prisma.deployment.findFirst({
-            where: { id, userId: payload.userId },
-            select: { id: true },
-        });
-        if (!deployment) throw new Error('Deployment not found');
-        return { userId: payload.userId, deploymentId: id };
+        const session = await verifyDeploymentSocketAccess(id, socketToken(request, queryToken));
+        if (!session) throw new Error('Unauthorized');
+        return session;
     } catch (err: any) {
         connection.socket.send(JSON.stringify({ event: 'deployment:error', message: err.message || 'Unauthorized' }));
         connection.socket.close();

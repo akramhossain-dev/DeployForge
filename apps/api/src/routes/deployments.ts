@@ -3,7 +3,8 @@ import { z } from 'zod';
 import prisma from '@deployforge/database';
 import { DeploymentService } from '../services/deployment.service';
 import { RollbackService } from '../services/rollback.service';
-import { sanitizeDeployment } from '../utils/sanitizers';
+import { formatDeploymentResponse } from '../utils/sanitizers';
+import { apiError, apiMessage, apiSuccess } from '../utils/http';
 
 const deploymentParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid deployment ID format' }),
@@ -12,36 +13,6 @@ const deploymentParamsSchema = z.object({
 const rollbackBodySchema = z.object({
     historyId: z.string().uuid({ message: 'Invalid history ID format' }),
 });
-
-function maskDeployment(deployment: any) {
-    const sanitized = sanitizeDeployment(deployment);
-    if (!sanitized) return null;
-    
-    const activeDomain = sanitized.domains?.find((domain: any) => domain.status === 'ACTIVE') || sanitized.domains?.[0];
-    const hostType = sanitized.hostType || (activeDomain ? 'domain' : 'ip');
-    const sourceType = sanitized.sourceType || (sanitized.project?.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
-    const domainName = sanitized.domain || activeDomain?.domainName || null;
-    const url = hostType === 'domain' && domainName
-        ? `http://${domainName}`
-        : sanitized.vps?.ipAddress && sanitized.type === 'STATIC'
-          ? sanitized.port
-            ? `http://${sanitized.vps.ipAddress}:${sanitized.port}/site/${sanitized.id}/`
-            : `http://${sanitized.vps.ipAddress}/site/${sanitized.id}/`
-        : sanitized.vps?.ipAddress && sanitized.port
-          ? `http://${sanitized.vps.ipAddress}:${sanitized.port}`
-          : null;
-
-    return {
-        ...sanitized,
-        hostType,
-        sourceType,
-        repoUrl: sanitized.repoUrl || (sourceType === 'github' ? sanitized.project?.repositoryUrl : null),
-        branch: sanitized.branch || (sourceType === 'github' ? sanitized.project?.branch : null),
-        uploadPath: sanitized.uploadPath || (sourceType === 'upload' ? sanitized.project?.repositoryUrl : null),
-        url,
-        domain: domainName,
-    };
-}
 
 export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
@@ -60,7 +31,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
             },
             orderBy: { createdAt: 'desc' },
         });
-        return { success: true, data: deployments.map(maskDeployment).filter(Boolean) };
+        return apiSuccess(deployments.map(formatDeploymentResponse).filter(Boolean));
     });
 
     fastify.get('/:id', {
@@ -69,15 +40,9 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { id } = deploymentParamsSchema.parse(request.params);
         const deployment = await DeploymentService.getStatus(request.user.id, id);
         if (!deployment) {
-            return reply.status(404).send({
-                success: false,
-                error: {
-                    code: 'NOT_FOUND',
-                    message: 'Deployment not found'
-                }
-            });
+            return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
         }
-        return { success: true, data: maskDeployment(deployment) };
+        return apiSuccess(formatDeploymentResponse(deployment));
     });
 
     fastify.post('/:id/rollback', {
@@ -87,16 +52,10 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { historyId } = rollbackBodySchema.parse(request.body);
         try {
             const result = await RollbackService.rollback(request.user.id, id, historyId);
-            return { success: true, data: result };
+            return apiSuccess(result);
         } catch (err: any) {
             const status = err.statusCode || (['ROLLBACK_NOT_SUPPORTED', 'STATIC_ROLLBACK_NOT_SUPPORTED'].includes(err.errorCode) ? 409 : err.message === 'Deployment not found' ? 404 : 500);
-            return reply.status(status).send({
-                success: false,
-                error: {
-                    code: err.errorCode || 'ROLLBACK_FAILED',
-                    message: err.message || 'Rollback failed'
-                }
-            });
+            return apiError(reply, status, err.errorCode || 'ROLLBACK_FAILED', err.message || 'Rollback failed');
         }
     });
 
@@ -106,16 +65,10 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
             await DeploymentService.restartDeployment(request.user.id, id);
-            return { success: true, data: { message: 'Deployment restarted' } };
+            return apiMessage('Deployment restarted');
         } catch (err: any) {
             const status = err.statusCode || (['NO_CONTAINER', 'DEPLOYMENT_NOT_RUNNING', 'CONTAINER_NOT_FOUND'].includes(err.errorCode) ? 409 : err.errorCode === 'DEPLOYMENT_NOT_FOUND' ? 404 : 500);
-            return reply.status(status).send({
-                success: false,
-                error: {
-                    code: err.errorCode || 'RESTART_FAILED',
-                    message: err.message || 'Restart failed'
-                }
-            });
+            return apiError(reply, status, err.errorCode || 'RESTART_FAILED', err.message || 'Restart failed');
         }
     });
 
@@ -125,7 +78,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
             const result = await DeploymentService.startDeployment(request.user.id, id);
-            return { success: true, data: result };
+            return apiSuccess(result);
         } catch (err: any) {
             return sendLifecycleError(reply, err, 'START_FAILED');
         }
@@ -137,7 +90,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
             await DeploymentService.stopDeployment(request.user.id, id);
-            return { success: true, data: { message: 'Deployment stopped' } };
+            return apiMessage('Deployment stopped');
         } catch (err: any) {
             return sendLifecycleError(reply, err, 'STOP_FAILED');
         }
@@ -149,7 +102,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
             await DeploymentService.pauseDeployment(request.user.id, id);
-            return { success: true, data: { message: 'Deployment paused' } };
+            return apiMessage('Deployment paused');
         } catch (err: any) {
             return sendLifecycleError(reply, err, 'PAUSE_FAILED');
         }
@@ -161,7 +114,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
             const result = await DeploymentService.resumeDeployment(request.user.id, id);
-            return { success: true, data: result };
+            return apiSuccess(result);
         } catch (err: any) {
             return sendLifecycleError(reply, err, 'RESUME_FAILED');
         }
@@ -173,7 +126,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
             const result = await DeploymentService.deleteDeployment(request.user.id, id);
-            return { success: true, data: result };
+            return apiSuccess(result);
         } catch (err: any) {
             return sendLifecycleError(reply, err, 'DELETE_FAILED');
         }
@@ -184,11 +137,5 @@ function sendLifecycleError(reply: any, err: any, fallbackCode: string) {
     const status = err.statusCode || (err.errorCode === 'DEPLOYMENT_NOT_FOUND' ? 404
         : ['INVALID_STATE_TRANSITION', 'NO_CONTAINER', 'NO_RUNNING_CONTAINER', 'CONTAINER_NOT_FOUND'].includes(err.errorCode) ? 409
           : 500);
-    return reply.status(status).send({
-        success: false,
-        error: {
-            code: err.errorCode || fallbackCode,
-            message: err.message || 'Lifecycle action failed'
-        }
-    });
+    return apiError(reply, status, err.errorCode || fallbackCode, err.message || 'Lifecycle action failed');
 }

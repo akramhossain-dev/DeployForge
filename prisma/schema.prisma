@@ -104,29 +104,6 @@ enum JobStatus {
   FAILED
 }
 
-enum NotificationType {
-  DEPLOYMENT_SUCCESS
-  DEPLOYMENT_FAILURE
-  BUILD_SUCCESS
-  BUILD_FAILURE
-  DOMAIN_ACTIVE
-  SSL_ISSUED
-  SSL_EXPIRED
-  SECURITY_ALERT
-}
-
-enum BackupStatus {
-  PENDING
-  SUCCESS
-  FAILED
-}
-
-enum RollbackStatus {
-  PENDING
-  SUCCESS
-  FAILED
-}
-
 model User {
   id                      String                   @id @default(uuid())
   email                   String?                  @unique
@@ -146,6 +123,7 @@ model User {
   provider                String                   @default("email")
   authProvider            AuthProvider             @default(local)
   sessions                Session[]
+  refreshTokenReplays     RefreshTokenReplay[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
   notificationPreferences NotificationPreference?
@@ -158,6 +136,14 @@ model User {
   lastLoginAt             DateTime?
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
+
+  @@index([role])
+  @@index([status])
+  @@index([provider])
+  @@index([authProvider])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([lastLoginAt])
 }
 
 model AdminUser {
@@ -181,15 +167,15 @@ model AdminUser {
 }
 
 model AdminSession {
-  id           String    @id @default(uuid())
-  adminId      String
-  admin        AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  tokenHash    String    @unique
-  userAgent    String?
-  ipAddress    String?
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  createdAt    DateTime  @default(now())
+  id        String    @id @default(uuid())
+  adminId   String
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tokenHash String    @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([adminId])
   @@index([expiresAt])
@@ -216,21 +202,24 @@ model AdminActivity {
 }
 
 model Session {
-  id           String       @id @default(cuid())
+  id           String               @id @default(cuid())
   userId       String
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  refreshToken String       @unique
-  authProvider AuthProvider @default(local)
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  refreshToken String               @unique
+  authProvider AuthProvider         @default(local)
   userAgent    String?
   device       String?
   browser      String?
   os           String?
   ipAddress    String?
-  lastActivity DateTime     @default(now())
+  lastActivity DateTime             @default(now())
   expiresAt    DateTime
-  createdAt    DateTime     @default(now())
+  createdAt    DateTime             @default(now())
+  replayTokens RefreshTokenReplay[]
 
   @@index([userId])
+  @@index([userId, lastActivity])
+  @@index([userId, expiresAt])
   @@index([expiresAt])
   @@index([createdAt])
 }
@@ -239,12 +228,16 @@ model RefreshTokenReplay {
   id        String   @id @default(cuid())
   tokenHash String   @unique
   userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([userId, expiresAt])
   @@index([sessionId])
+  @@index([sessionId, expiresAt])
   @@index([expiresAt])
   @@index([createdAt])
 }
@@ -264,20 +257,22 @@ model VerificationToken {
 }
 
 model GitHubAccount {
-  id          String       @id @default(uuid())
-  userId      String       @unique
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  githubId    String       @unique
-  accessToken String
-  username    String
-  email       String?
-  avatarUrl   String?
+  id           String       @id @default(uuid())
+  userId       String       @unique
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  githubId     String       @unique
+  accessToken  String
+  username     String
+  email        String?
+  avatarUrl    String?
   repositories Repository[]
-  connectedAt DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  connectedAt  DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   @@index([userId])
   @@index([githubId])
+  @@index([connectedAt])
+  @@index([updatedAt])
 }
 
 model Repository {
@@ -296,8 +291,10 @@ model Repository {
   createdAt       DateTime      @default(now())
 
   @@index([githubAccountId])
+  @@index([githubAccountId, fullName])
   @@index([repoId])
   @@index([createdAt])
+  @@index([updatedAt])
 }
 
 model TerminalSession {
@@ -341,9 +338,11 @@ model WebhookEvent {
   createdAt DateTime      @default(now())
 
   @@index([repoId])
+  @@index([repoId, event])
   @@index([event])
   @@index([status])
   @@index([createdAt])
+  @@index([status, createdAt])
 }
 
 model VPS {
@@ -368,8 +367,10 @@ model VPS {
   updatedAt           DateTime          @updatedAt
 
   @@index([userId])
+  @@index([userId, status])
   @@index([status])
   @@index([createdAt])
+  @@index([updatedAt])
 }
 
 model VPSHealth {
@@ -401,7 +402,9 @@ model Project {
   updatedAt     DateTime     @updatedAt
 
   @@index([userId])
+  @@index([userId, repositoryUrl])
   @@index([createdAt])
+  @@index([updatedAt])
 }
 
 model Deployment {
@@ -440,8 +443,12 @@ model Deployment {
   updatedAt         DateTime            @updatedAt
 
   @@index([userId])
+  @@index([userId, status])
+  @@index([userId, status, createdAt])
   @@index([projectId])
+  @@index([projectId, status])
   @@index([vpsId])
+  @@index([vpsId, status])
   @@index([sourceType])
   @@index([type])
   @@index([domain])
@@ -463,8 +470,10 @@ model DeploymentJob {
   updatedAt    DateTime   @updatedAt
 
   @@index([deploymentId])
+  @@index([deploymentId, status])
   @@index([status])
   @@index([createdAt])
+  @@index([updatedAt])
 }
 
 model Domain {
@@ -481,7 +490,9 @@ model Domain {
   updatedAt       DateTime     @updatedAt
 
   @@index([deploymentId])
+  @@index([deploymentId, status])
   @@index([vpsId])
+  @@index([vpsId, status])
   @@index([status])
   @@index([sslStatus])
   @@index([createdAt])
@@ -500,6 +511,7 @@ model DeploymentSandbox {
   createdAt     DateTime      @default(now())
 
   @@index([deploymentId])
+  @@index([deploymentId, status])
   @@index([status])
   @@index([createdAt])
 }
@@ -516,6 +528,7 @@ model DeploymentHistory {
   createdAt    DateTime         @default(now())
 
   @@index([deploymentId])
+  @@index([deploymentId, status])
   @@index([status])
   @@index([createdAt])
 }
@@ -544,9 +557,11 @@ model DeploymentLog {
   createdAt    DateTime   @default(now())
 
   @@index([deploymentId])
+  @@index([deploymentId, createdAt])
   @@index([type])
   @@index([level])
   @@index([createdAt])
+  @@index([level, createdAt])
 }
 
 model ContactMessage {
@@ -566,29 +581,31 @@ model ContactMessage {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  token     String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([userId, expiresAt])
   @@index([expiresAt])
   @@index([createdAt])
 }
 
 model EmailVerificationToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  token     String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([userId, expiresAt])
   @@index([expiresAt])
   @@index([createdAt])
 }
@@ -624,5 +641,7 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([action])
+  @@index([action, createdAt])
   @@index([createdAt])
 }

@@ -152,11 +152,11 @@ importers:
   packages/database:
     dependencies:
       '@prisma/client':
-        specifier: ^5.10.2
+        specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
     devDependencies:
       prisma:
-        specifier: ^5.10.2
+        specifier: ^5.22.0
         version: 5.22.0
       typescript:
         specifier: ^5.3.3

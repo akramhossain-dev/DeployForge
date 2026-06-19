@@ -69,3 +69,33 @@ export function sanitizeDeployment(deployment: any) {
     
     return sanitized;
 }
+
+export function formatDeploymentResponse(deployment: any) {
+    const sanitized = sanitizeDeployment(deployment);
+    if (!sanitized) return null;
+
+    const activeDomain = sanitized.domains?.find((domain: any) => domain.status === 'ACTIVE') || sanitized.domains?.[0];
+    const hostType = sanitized.hostType || (activeDomain ? 'domain' : 'ip');
+    const sourceType = sanitized.sourceType || (sanitized.project?.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
+    const domainName = sanitized.domain || activeDomain?.domainName || null;
+    const url = hostType === 'domain' && domainName
+        ? `http://${domainName}`
+        : sanitized.vps?.ipAddress && sanitized.type === 'STATIC'
+          ? sanitized.port
+            ? `http://${sanitized.vps.ipAddress}:${sanitized.port}/site/${sanitized.id}/`
+            : `http://${sanitized.vps.ipAddress}/site/${sanitized.id}/`
+        : sanitized.vps?.ipAddress && sanitized.port
+          ? `http://${sanitized.vps.ipAddress}:${sanitized.port}`
+          : null;
+
+    return {
+        ...sanitized,
+        hostType,
+        sourceType,
+        repoUrl: sanitized.repoUrl || (sourceType === 'github' ? sanitized.project?.repositoryUrl : null),
+        branch: sanitized.branch || (sourceType === 'github' ? sanitized.project?.branch : null),
+        uploadPath: sanitized.uploadPath || (sourceType === 'upload' ? sanitized.project?.repositoryUrl : null),
+        url,
+        domain: domainName,
+    };
+}

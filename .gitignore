@@ -16,6 +16,8 @@ build/
 .next/
 .next-build/
 out/
+*.tsbuildinfo
+packages/*/src/*.js
 
 # Logs
 logs/

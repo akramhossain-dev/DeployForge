@@ -5,6 +5,7 @@ import { config } from '../config/env';
 import crypto from 'crypto';
 import { AccountService } from './account.service';
 import { sha256, timingSafeEqualString } from '../utils/http';
+import { parseUserAgent } from '../utils/user-agent';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 const mailService = new MailService({
@@ -53,27 +54,7 @@ export class AuthService {
         const refreshToken = crypto.randomBytes(40).toString('hex');
         const hashedRefreshToken = refreshTokenHash(refreshToken);
 
-        // Parse user agent
-        let browser = 'Unknown Browser';
-        let device = 'Desktop';
-        let os = 'Unknown OS';
-        if (userAgent) {
-            const ua = userAgent.toLowerCase();
-            if (/mobile|android|iphone|ipad|phone/i.test(ua)) device = 'Mobile';
-            else if (/tablet|ipad/i.test(ua)) device = 'Tablet';
-            
-            if (/chrome|crios/i.test(ua) && !/edge|edg|opr/i.test(ua)) browser = 'Chrome';
-            else if (/safari/i.test(ua) && !/chrome|crios/i.test(ua)) browser = 'Safari';
-            else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
-            else if (/edge|edg/i.test(ua)) browser = 'Edge';
-            else if (/opr/i.test(ua)) browser = 'Opera';
-
-            if (/windows|win32/i.test(ua)) os = 'Windows';
-            else if (/macintosh|mac os x/i.test(ua)) os = 'macOS';
-            else if (/linux/i.test(ua)) os = 'Linux';
-            else if (/android/i.test(ua)) os = 'Android';
-            else if (/iphone|ipad|ipod/i.test(ua)) os = 'iOS';
-        }
+        const { browser, device, os } = parseUserAgent(userAgent);
 
         await prisma.session.create({
             data: {
@@ -120,7 +101,6 @@ export class AuthService {
             throw error;
         }
 
-        // Return only user info.
         return { user: { id: user.id, email: user.email, name: user.name } };
     }
 
@@ -160,7 +140,6 @@ export class AuthService {
             throw emailServiceUnavailableError();
         }
 
-        // Return nothing — OTP must never leak into the response
         return {};
     }
 

@@ -3,7 +3,8 @@ import { PasswordService } from '@deployforge/security';
 import { MailService } from '@deployforge/mail';
 import { config } from '../config/env';
 import crypto from 'crypto';
-import { sha256 } from '../utils/http';
+import { paginationMeta, parsePagination, sha256 } from '../utils/http';
+import { parseUserAgent } from '../utils/user-agent';
 
 const mailService = new MailService({
     host: config.email.smtp.host,
@@ -29,27 +30,7 @@ function emailServiceUnavailableError() {
 
 export class AccountService {
     static async logAudit(userId: string | null, action: string, details: string, ip?: string, ua?: string, metadata?: any) {
-        // Parse user agent
-        let browser = 'Unknown Browser';
-        let device = 'Desktop';
-        let os = 'Unknown OS';
-        if (ua) {
-            const uaLower = ua.toLowerCase();
-            if (/mobile|android|iphone|ipad|phone/i.test(uaLower)) device = 'Mobile';
-            else if (/tablet|ipad/i.test(uaLower)) device = 'Tablet';
-            
-            if (/chrome|crios/i.test(uaLower) && !/edge|edg|opr/i.test(uaLower)) browser = 'Chrome';
-            else if (/safari/i.test(uaLower) && !/chrome|crios/i.test(uaLower)) browser = 'Safari';
-            else if (/firefox|fxios/i.test(uaLower)) browser = 'Firefox';
-            else if (/edge|edg/i.test(uaLower)) browser = 'Edge';
-            else if (/opr/i.test(uaLower)) browser = 'Opera';
-
-            if (/windows|win32/i.test(uaLower)) os = 'Windows';
-            else if (/macintosh|mac os x/i.test(uaLower)) os = 'macOS';
-            else if (/linux/i.test(uaLower)) os = 'Linux';
-            else if (/android/i.test(uaLower)) os = 'Android';
-            else if (/iphone|ipad|ipod/i.test(uaLower)) os = 'iOS';
-        }
+        const { browser, device, os } = parseUserAgent(ua);
 
         await prisma.auditLog.create({
             data: {
@@ -359,9 +340,7 @@ export class AccountService {
             category?: string;
         }
     ) {
-        const page = Math.max(1, Number(params.page) || 1);
-        const limit = Math.max(1, Math.min(100, Number(params.limit) || 20));
-        const skip = (page - 1) * limit;
+        const { page, limit, skip } = parsePagination(params);
 
         const where: any = { userId };
 
@@ -407,12 +386,7 @@ export class AccountService {
 
         return {
             logs,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit),
-            },
+            pagination: paginationMeta(total, page, limit),
         };
     }
 }

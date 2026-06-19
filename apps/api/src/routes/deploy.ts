@@ -9,7 +9,7 @@ import { pipeline } from 'node:stream/promises';
 import { RollbackService } from '../services/rollback.service';
 import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
-import { sanitizeDeployment } from '../utils/sanitizers';
+import { formatDeploymentResponse, sanitizeDeployment } from '../utils/sanitizers';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
@@ -189,7 +189,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
             },
             orderBy: { createdAt: 'desc' },
         });
-        return { success: true, data: deployments.map(sanitizeDeployment).filter(Boolean) };
+        return { success: true, data: deployments.map(formatDeploymentResponse).filter(Boolean) };
     });
 
     // 3. Get Logs
@@ -267,7 +267,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         try {
             const { id } = idParamsSchema.parse(request.params);
             const deployment = await DeploymentService.getStatus(request.user.id, id);
-            return { success: true, data: sanitizeDeployment(deployment) };
+            return { success: true, data: formatDeploymentResponse(deployment) };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
         }

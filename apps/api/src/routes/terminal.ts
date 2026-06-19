@@ -1,11 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { TerminalService } from '../services/terminal.service';
-import { TokenService } from '@deployforge/security';
-import { config } from '../config/env';
-import prisma from '@deployforge/database';
 import { z } from 'zod';
-
-const tokenService = new TokenService(config.auth.jwtSecret);
+import { socketToken, verifySocketUser } from '../utils/socket-auth';
 
 const terminalParamsSchema = z.object({
     vpsId: z.string().uuid({ message: 'Invalid VPS ID format' }),
@@ -16,16 +12,6 @@ const terminalQuerySchema = z.object({
     cols: z.preprocess((val) => val ? parseInt(val as string) : undefined, z.number().int().positive().optional()),
     rows: z.preprocess((val) => val ? parseInt(val as string) : undefined, z.number().int().positive().optional()),
 });
-
-function parseCookies(cookieHeader: string | undefined): Record<string, string> {
-    const cookies: Record<string, string> = {};
-    if (!cookieHeader) return cookies;
-    cookieHeader.split(';').forEach((cookie) => {
-        const parts = cookie.split('=');
-        if (parts.length === 2) cookies[parts[0].trim()] = parts[1].trim();
-    });
-    return cookies;
-}
 
 export default async function terminalRoutes(fastify: FastifyInstance) {
     fastify.get('/:vpsId', { websocket: true }, async (connection, request) => {
@@ -38,7 +24,7 @@ export default async function terminalRoutes(fastify: FastifyInstance) {
             const params = terminalParamsSchema.parse(request.params);
             const query = terminalQuerySchema.parse(request.query);
             vpsId = params.vpsId;
-            token = query.token || parseCookies(request.headers.cookie).accessToken || '';
+            token = socketToken(request, query.token);
             cols = query.cols;
             rows = query.rows;
             if (!token) throw new Error('Missing token');
@@ -50,12 +36,7 @@ export default async function terminalRoutes(fastify: FastifyInstance) {
 
         let userId: string | undefined;
         try {
-            const payload = tokenService.verifyToken(token);
-            const user = await prisma.user.findUnique({
-                where: { id: payload.userId },
-                select: { id: true },
-            });
-            userId = user?.id;
+            userId = (await verifySocketUser(token))?.userId;
         } catch (err) {
             userId = undefined;
         }

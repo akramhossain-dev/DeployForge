@@ -7,6 +7,8 @@ import { config } from '../config/env';
 import { DeploymentService } from '../services/deployment.service';
 import { GitHubService } from '../services/github.service';
 import { CacheService } from '../services/cache.service';
+import { AdminService } from '../services/admin.service';
+import { apiError } from '../utils/http';
 
 const adminTokenService = new TokenService(config.auth.adminJwtSecret);
 
@@ -53,13 +55,7 @@ function hashToken(token: string) {
 }
 
 function error(reply: any, statusCode: number, message: string, errorCode: string) {
-    return reply.status(statusCode).send({
-        success: false,
-        error: {
-            code: errorCode,
-            message
-        }
-    });
+    return apiError(reply, statusCode, errorCode as any, message);
 }
 
 function adminAccessCookie(token: string, maxAge: number) {
@@ -101,50 +97,6 @@ async function auditAdminLoginEvent(admin: { id: string; role: string } | null, 
             ipAddress,
         },
     });
-}
-
-async function deleteDeploymentCascade(deploymentId: string) {
-    await prisma.deploymentLog.deleteMany({ where: { deploymentId } });
-    await prisma.deploymentJob.deleteMany({ where: { deploymentId } });
-    await prisma.deploymentHistory.deleteMany({ where: { deploymentId } });
-    await prisma.deploymentSandbox.deleteMany({ where: { deploymentId } });
-    await prisma.domain.deleteMany({ where: { deploymentId } });
-    await prisma.deployment.delete({ where: { id: deploymentId } });
-}
-
-async function deleteVpsCascade(vpsId: string) {
-    const deployments = await prisma.deployment.findMany({ where: { vpsId }, select: { id: true } });
-    for (const deployment of deployments) await deleteDeploymentCascade(deployment.id);
-    const sessions = await prisma.terminalSession.findMany({ where: { vpsId }, select: { id: true } });
-    await prisma.terminalCommandLog.deleteMany({ where: { sessionId: { in: sessions.map((session) => session.id) } } });
-    await prisma.terminalSession.deleteMany({ where: { vpsId } });
-    await prisma.vPSHealth.deleteMany({ where: { vpsId } });
-    await prisma.systemMetrics.deleteMany({ where: { vpsId } });
-    await prisma.domain.deleteMany({ where: { vpsId } });
-    await prisma.vPS.delete({ where: { id: vpsId } });
-}
-
-async function deleteUserCascade(userId: string) {
-    const deployments = await prisma.deployment.findMany({ where: { userId }, select: { id: true } });
-    for (const deployment of deployments) await deleteDeploymentCascade(deployment.id);
-
-    const servers = await prisma.vPS.findMany({ where: { userId }, select: { id: true } });
-    for (const server of servers) await deleteVpsCascade(server.id);
-
-    const githubAccount = await prisma.gitHubAccount.findUnique({ where: { userId }, select: { id: true } });
-    if (githubAccount) {
-        await prisma.repository.deleteMany({ where: { githubAccountId: githubAccount.id } });
-        await prisma.gitHubAccount.delete({ where: { userId } });
-    }
-
-    const terminalSessions = await prisma.terminalSession.findMany({ where: { userId }, select: { id: true } });
-    await prisma.terminalCommandLog.deleteMany({ where: { sessionId: { in: terminalSessions.map((session) => session.id) } } });
-    await prisma.terminalSession.deleteMany({ where: { userId } });
-    await prisma.session.deleteMany({ where: { userId } });
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    if (user && user.email) await prisma.verificationToken.deleteMany({ where: { email: user.email } });
-    await prisma.project.deleteMany({ where: { userId } });
-    await prisma.user.delete({ where: { id: userId } });
 }
 
 export default async function adminRoutes(fastify: FastifyInstance) {
@@ -367,7 +319,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     fastify.delete('/platform-users/:id', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request) => {
         const { id } = idParamsSchema.parse(request.params);
-        await deleteUserCascade(id);
+        await AdminService.deleteUserCascade(id);
         await audit(request, 'DELETE_PLATFORM_USER', { targetUserId: id, targetType: 'USER', targetId: id });
         return { success: true, data: { message: 'User deleted' } };
     });
@@ -417,7 +369,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     fastify.delete('/deployments/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
         if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
-        await deleteDeploymentCascade(id);
+        await AdminService.deleteDeploymentCascade(id);
         await audit(request, 'DELETE_DEPLOYMENT', { targetType: 'DEPLOYMENT', targetId: id });
         return { success: true, data: { message: 'Deployment deleted' } };
     });
@@ -433,7 +385,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     fastify.delete('/vps/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
         if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
-        await deleteVpsCascade(id);
+        await AdminService.deleteVpsCascade(id);
         await audit(request, 'DELETE_VPS', { targetType: 'VPS', targetId: id });
         return { success: true, data: { message: 'VPS removed' } };
     });

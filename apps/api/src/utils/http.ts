@@ -1,17 +1,17 @@
 import crypto from 'crypto';
 import { FastifyReply } from 'fastify';
+import {
+    ApiErrorCode,
+    PaginationInput,
+    createApiError,
+    createApiMessage,
+    createApiSuccess,
+    paginationMeta as sharedPaginationMeta,
+    parsePagination as sharedParsePagination,
+} from '@deployforge/shared';
 import { config } from '../config/env';
 
-export type ApiErrorCode =
-    | 'BAD_REQUEST'
-    | 'UNAUTHORIZED'
-    | 'FORBIDDEN'
-    | 'NOT_FOUND'
-    | 'CONFLICT'
-    | 'RATE_LIMITED'
-    | 'CSRF_TOKEN_INVALID'
-    | 'VALIDATION_ERROR'
-    | 'INTERNAL_ERROR';
+export type { ApiErrorCode, PaginationInput };
 
 export function parseCookies(cookieHeader: string | undefined): Record<string, string> {
     const cookies: Record<string, string> = {};
@@ -35,15 +35,20 @@ export function cookie(name: string, value: string, maxAge: number, options: { h
     return `${name}=${encodedValue}; Path=/; ${options.httpOnly ? 'HttpOnly; ' : ''}${isProd ? 'Secure; ' : ''}SameSite=${sameSite}; Max-Age=${maxAge}`;
 }
 
-export function apiError(reply: FastifyReply, statusCode: number, code: ApiErrorCode, message: string) {
-    return reply.status(statusCode).send({
-        success: false,
-        error: {
-            code,
-            message,
-        },
-    });
+export function apiError(reply: FastifyReply, statusCode: number, code: ApiErrorCode | string, message: string) {
+    return reply.status(statusCode).send(createApiError(code, message));
 }
+
+export function apiSuccess<T>(data: T) {
+    return createApiSuccess(data);
+}
+
+export function apiMessage(message: string) {
+    return createApiMessage(message);
+}
+
+export const parsePagination = sharedParsePagination;
+export const paginationMeta = sharedPaginationMeta;
 
 export function sha256(value: string) {
     return crypto.createHash('sha256').update(value).digest('hex');
