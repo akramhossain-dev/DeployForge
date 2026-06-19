@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useMe } from '@/hooks/useDeployForgeData';
 import { Button, SkeletonBlock } from '@/components/ui';
+import api from '@/lib/api/client';
 
 interface DashboardLayoutProps {
     children: ReactNode;
@@ -36,15 +37,15 @@ const navItems = [
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const pathname = usePathname();
     const router = useRouter();
-    const { user, token, hasHydrated, setUser, logout } = useAuthStore();
-    const me = useMe(hasHydrated && !!token);
+    const { user, hasHydrated, setUser, logout } = useAuthStore();
+    const me = useMe(hasHydrated);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const activeItem = useMemo(() => navItems.find((item) => item.href === pathname) || navItems[0], [pathname]);
 
     React.useEffect(() => {
         if (!hasHydrated) return;
-        if (!token) router.replace('/');
-    }, [hasHydrated, router, token]);
+        if (me.isError) router.replace('/');
+    }, [hasHydrated, me.isError, router]);
 
     React.useEffect(() => {
         if (me.data) setUser(me.data);
@@ -54,7 +55,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         setSidebarOpen(false);
     }, [pathname]);
 
-    if (!hasHydrated || (hasHydrated && !token)) {
+    if (!hasHydrated || me.isLoading) {
         return (
             <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-200">
                 <AuroraField />
@@ -67,7 +68,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         );
     }
 
-    function signOut() {
+    async function signOut() {
+        await api.post('/auth/logout').catch(() => null);
         logout();
         router.replace('/');
     }

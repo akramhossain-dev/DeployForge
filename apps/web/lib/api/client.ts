@@ -31,14 +31,6 @@ export type ApiResponse<T> = {
 
 const API_URL = webConfig.apiUrl;
 
-function getToken(path: string) {
-    if (typeof window === 'undefined') return null;
-    if (path.startsWith('/admin') && path !== '/admin/login') {
-        return useAdminAuthStore.getState().adminToken || localStorage.getItem('df_admin_token');
-    }
-    return useAuthStore.getState().token || localStorage.getItem('df_token');
-}
-
 function handleUnauthorized(path: string) {
     if (typeof window === 'undefined') return;
 
@@ -64,8 +56,7 @@ async function parseResponse(response: Response) {
     return response.json();
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const token = getToken(path);
+async function request<T>(path: string, init: RequestInit = {}, hasRetried = false): Promise<T> {
     const headers = new Headers(init.headers);
     const method = init.method || 'GET';
     const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
@@ -73,23 +64,33 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!headers.has('Content-Type') && init.body && !isFormData) {
         headers.set('Content-Type', 'application/json');
     }
-    if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-    }
 
     if (typeof window !== 'undefined') {
-        console.debug('[api:request]', { method, path, authenticated: Boolean(token) });
+        console.debug('[api:request]', { method, path });
     }
 
     const response = await fetch(`${API_URL}${path}`, {
         ...init,
         headers,
         cache: 'no-store',
+        credentials: 'include',
     });
 
     const payload = await parseResponse(response).catch(() => null);
 
     if (!response.ok) {
+        const canRefresh = response.status === 401
+            && !hasRetried
+            && !path.startsWith('/auth/login')
+            && !path.startsWith('/auth/refresh')
+            && !path.startsWith('/auth/logout')
+            && !path.startsWith('/admin');
+
+        if (canRefresh) {
+            await request('/auth/refresh', { method: 'POST' }, true);
+            return request<T>(path, init, true);
+        }
+
         const apiError: ApiErrorShape = {
             success: false,
             message: payload?.message || 'Something went wrong. Please try again.',

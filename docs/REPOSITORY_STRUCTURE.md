@@ -1,6 +1,6 @@
 # 📂 REPOSITORY_STRUCTURE.md
 
-DeployForge is managed as a monorepo utilizing **Turborepo** and **pnpm** workspaces. The workspace configuration divides the project into applications (`apps/*`) and shared packages (`packages/*`).
+DeployForge is managed as a monorepo utilizing **Turborepo** and **pnpm** workspaces. The workspace configuration divides the project into applications (`apps/*`) and active shared packages.
 
 ---
 
@@ -16,11 +16,7 @@ DeployForge/
 │   ├── mail/               # Active - Nodemailer SMTP mail transporter
 │   ├── security/           # Active - AES-256-GCM & JWT encryption utility services
 │   ├── shared/             # Active - Shared typescript helpers and types
-│   ├── vps/                # Active - ssh2 client wrapper (SSHService)
-│   ├── auth/               # Legacy Placeholder (Inactive - logic in apps/api)
-│   ├── deployment/         # Legacy Placeholder (Inactive - logic in apps/api)
-│   ├── github/             # Legacy Placeholder (Inactive - logic in apps/api)
-│   └── monitoring/         # Legacy Placeholder (Inactive - logic in apps/api)
+│   └── vps/                # Active - ssh2 client wrapper (SSHService)
 ├── prisma/                 # Database Schema & migrations (PostgreSQL)
 ├── docker/                 # Production & local docker templates
 ├── docs/                   # Documentation system (markdown)
@@ -65,4 +61,3 @@ The web app is a Next.js 14 client application:
 *   **`packages/vps`:** Implements the `SSHService` wrapper class, which connects to remote targets, streams commands stdout/stderr, and supports SFTP file transfers.
 *   **`packages/mail`:** Configuration for Nodemailer transport setup.
 *   **`packages/shared`:** Shared Typescript interfaces and general common constants.
-*   **Placeholder Packages (`auth`, `deployment`, `github`, `monitoring`):** Inactive folders preserved to maintain package naming spaces. Actual core logic lives inside the `apps/api/src/services/` directory.

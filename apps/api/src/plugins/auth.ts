@@ -117,11 +117,15 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
     fastify.decorate('requireAdmin', async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const authHeader = request.headers.authorization;
-            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            const cookies = parseCookies(request.headers.cookie);
+            const token = authHeader && authHeader.startsWith('Bearer ')
+                ? authHeader.split(' ')[1]
+                : cookies['adminAccessToken'] || '';
+
+            if (!token) {
                 return reply.status(401).send({ success: false, message: 'Admin token required', errorCode: 'UNAUTHORIZED_ADMIN_ACCESS' });
             }
 
-            const token = authHeader.split(' ')[1];
             const payload = adminTokenService.verifyToken(token);
             if (payload.tokenType !== 'admin' || !payload.adminId || !payload.sessionId) {
                 return reply.status(401).send({ success: false, message: 'Invalid admin token', errorCode: 'UNAUTHORIZED_ADMIN_ACCESS' });

@@ -32,9 +32,9 @@ const sections: LegalSection[] = [
         title: 'Cookies Policy',
         body: 'DeployForge uses local browser storage and session-related mechanisms to keep authenticated workflows available.',
         points: [
-            'Authentication tokens may be stored locally by the web app to maintain dashboard and admin sessions.',
+            'Authentication sessions are maintained with HttpOnly cookies rather than browser-readable token storage.',
             'DeployForge does not require marketing cookies for the core deployment console.',
-            'Clearing browser storage or signing out removes locally stored DeployForge session tokens.',
+            'Signing out clears DeployForge session cookies.',
         ],
     },
     {

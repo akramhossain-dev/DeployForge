@@ -700,9 +700,10 @@ export class DeploymentService {
             ]);
             return { success: true, deleted: true };
         } catch (err: any) {
+            const previousStatus = deployment.status as string;
             await prisma.deployment.update({
                 where: { id: deploymentId },
-                data: { status: deployment.status === 'DELETING' ? 'FAILED' : deployment.status },
+                data: { status: previousStatus === 'DELETING' ? 'FAILED' : deployment.status },
             }).catch(() => undefined);
             await LoggingService.log(deploymentId, `Delete failed: ${err.message}`, 'error', 'error').catch(() => undefined);
             if (err instanceof DeploymentError) throw err;

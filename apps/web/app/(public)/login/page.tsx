@@ -30,7 +30,7 @@ export default function LoginPage() {
         setError(null);
 
         try {
-            const response = await api.post<{ user: any; accessToken: string; refreshToken?: string }>('/auth/login', { email, password });
+            const response = await api.post<{ user: any }>('/auth/login', { email, password });
             setSession(response);
             router.push('/dashboard');
         } catch (err: any) {

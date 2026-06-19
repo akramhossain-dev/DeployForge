@@ -53,6 +53,12 @@ function parseCookies(cookieHeader: string | undefined): Record<string, string> 
     return cookies;
 }
 
+function sessionCookie(name: 'accessToken' | 'refreshToken', value: string, maxAge: number) {
+    const isProd = config.app.env === 'production';
+    const sameSite = isProd ? 'None' : 'Lax';
+    return `${name}=${value}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=${sameSite}; Max-Age=${maxAge}`;
+}
+
 export default async function authRoutes(fastify: FastifyInstance) {
     fastify.post('/register', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
@@ -87,12 +93,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
             request.ip
         );
         
-        const isProd = config.app.env === 'production';
-        const accessCookie = `accessToken=${result.accessToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=900`;
-        const refreshCookie = `refreshToken=${result.refreshToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=604800`;
+        const accessCookie = sessionCookie('accessToken', result.accessToken, 900);
+        const refreshCookie = sessionCookie('refreshToken', result.refreshToken, 604800);
         reply.header('Set-Cookie', [accessCookie, refreshCookie]);
 
-        return { success: true, data: result };
+        return { success: true, data: { user: result.user } };
     });
 
     fastify.post('/refresh', {
@@ -132,12 +137,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
         try {
             const result = await AuthService.refresh(refreshToken);
             
-            const isProd = config.app.env === 'production';
-            const accessCookie = `accessToken=${result.accessToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=900`;
-            const refreshCookie = `refreshToken=${result.refreshToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=604800`;
+            const accessCookie = sessionCookie('accessToken', result.accessToken, 900);
+            const refreshCookie = sessionCookie('refreshToken', result.refreshToken, 604800);
             reply.header('Set-Cookie', [accessCookie, refreshCookie]);
 
-            return { success: true, data: result };
+            return { success: true, data: { message: 'Session refreshed' } };
         } catch (err: any) {
             return reply.status(401).send({
                 success: false,
@@ -203,8 +207,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
             await AuthService.logout(refreshToken, request.ip, request.headers['user-agent']);
         }
 
-        const accessCookie = `accessToken=; Path=/; HttpOnly; Max-Age=0`;
-        const refreshCookie = `refreshToken=; Path=/; HttpOnly; Max-Age=0`;
+        const accessCookie = sessionCookie('accessToken', '', 0);
+        const refreshCookie = sessionCookie('refreshToken', '', 0);
         reply.header('Set-Cookie', [accessCookie, refreshCookie]);
 
         return { success: true, data: { message: 'Logged out successfully' } };

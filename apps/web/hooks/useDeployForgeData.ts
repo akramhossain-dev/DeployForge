@@ -96,8 +96,8 @@ export function useMe(enabled = true) {
 }
 
 export function useAuthSession() {
-    const { hasHydrated, token, setUser, logout } = useAuthStore();
-    const me = useMe(hasHydrated && !!token);
+    const { hasHydrated, setUser, logout } = useAuthStore();
+    const me = useMe(hasHydrated);
 
     useEffect(() => {
         if (me.data) setUser(me.data);
@@ -111,7 +111,7 @@ export function useAuthSession() {
     return {
         user: me.data ?? null,
         isAuthenticated: Boolean(me.data),
-        isLoading: !hasHydrated || (Boolean(token) && me.isLoading),
+        isLoading: !hasHydrated || me.isLoading,
         isFetching: me.isFetching,
         isError: me.isError,
         refetch: me.refetch,
@@ -329,19 +329,18 @@ export function useRollbackDeployment() {
     });
 }
 
-function wsUrl(path: string, token: string) {
+function wsUrl(path: string) {
     const base = webConfig.apiUrl.replace(/^http/, 'ws').replace(/\/$/, '');
-    return `${base}${path}?token=${encodeURIComponent(token)}`;
+    return `${base}${path}`;
 }
 
 export function useDeploymentLogStream(deploymentId?: string, enabled = true) {
-    const token = useAuthStore((state) => state.token);
     const [logs, setLogs] = useState<DeploymentLog[]>([]);
     const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
-        if (!deploymentId || !token || !enabled) return;
-        const socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/logs`, token));
+        if (!deploymentId || !enabled) return;
+        const socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/logs`));
         socket.onopen = () => setIsConnected(true);
         socket.onclose = () => setIsConnected(false);
         socket.onmessage = (event) => {
@@ -351,25 +350,24 @@ export function useDeploymentLogStream(deploymentId?: string, enabled = true) {
             }
         };
         return () => socket.close();
-    }, [deploymentId, enabled, token]);
+    }, [deploymentId, enabled]);
 
     useEffect(() => setLogs([]), [deploymentId]);
     return { logs, isConnected };
 }
 
 export function useDeploymentStatusStream(deploymentId?: string) {
-    const token = useAuthStore((state) => state.token);
     const [status, setStatus] = useState<Partial<Deployment> | null>(null);
 
     useEffect(() => {
-        if (!deploymentId || !token) return;
-        const socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/status`, token));
+        if (!deploymentId) return;
+        const socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/status`));
         socket.onmessage = (event) => {
             const payload = JSON.parse(event.data);
             if (payload.event === 'deployment:status') setStatus(payload.data);
         };
         return () => socket.close();
-    }, [deploymentId, token]);
+    }, [deploymentId]);
 
     return useMemo(() => status, [status]);
 }

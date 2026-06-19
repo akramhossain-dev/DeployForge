@@ -13,6 +13,12 @@ const createWebhookSchema = z.object({
     repoFullName: z.string().min(1, 'Repository full name is required'),
 });
 
+function sessionCookie(name: 'accessToken' | 'refreshToken', value: string, maxAge: number) {
+    const isProd = config.app.env === 'production';
+    const sameSite = isProd ? 'None' : 'Lax';
+    return `${name}=${value}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=${sameSite}; Max-Age=${maxAge}`;
+}
+
 export default async function githubRoutes(fastify: FastifyInstance) {
     // 0. Login/Register with GitHub (OAuth start)
     fastify.get('/', {
@@ -156,9 +162,8 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             try {
                 const session = await GitHubService.authenticateOAuthUser(accessToken, request.headers['user-agent'], request.ip);
                 
-                const isProd = config.app.env === 'production';
-                const accessCookie = `accessToken=${session.accessToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=900`;
-                const refreshCookie = `refreshToken=${session.refreshToken}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=Lax; Max-Age=604800`;
+                const accessCookie = sessionCookie('accessToken', session.accessToken, 900);
+                const refreshCookie = sessionCookie('refreshToken', session.refreshToken, 604800);
                 reply.header('Set-Cookie', [accessCookie, refreshCookie]);
 
                 fastify.log.info({ userId: session.user.id }, 'GitHub OAuth login completed successfully');

@@ -5,6 +5,7 @@
     "types": "./dist/index.d.ts",
     "scripts": {
         "build": "tsc",
+        "typecheck": "tsc --noEmit",
         "generate": "prisma generate --schema ../../prisma/schema.prisma"
     },
     "dependencies": {

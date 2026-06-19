@@ -21,7 +21,7 @@ export default function AdminLoginPage() {
         setError(null);
         setLoading(true);
         try {
-            const result = await api.post<{ admin: any; adminAccessToken: string }>('/admin/login', { email, password });
+            const result = await api.post<{ admin: any }>('/admin/login', { email, password });
             setAdminSession(result);
             router.replace('/admin');
         } catch (err: any) {

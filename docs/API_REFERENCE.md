@@ -1,6 +1,6 @@
 # 🔌 API_REFERENCE.md
 
-DeployForge backend routes support both base routes and `/api/*` prefixes (e.g. `/auth/login` and `/api/auth/login`). All authenticated requests must provide a signed JWT Bearer Token in the `Authorization` header.
+DeployForge backend routes support both base routes and `/api/*` prefixes (e.g. `/auth/login` and `/api/auth/login`). Browser clients authenticate with HttpOnly cookies and must send credentials with authenticated requests.
 
 ---
 
@@ -16,14 +16,16 @@ DeployForge backend routes support both base routes and `/api/*` prefixes (e.g. 
 
 ### `POST /login`
 - **Body:** `{ email, password }`
-- **Response:** `200` `{ user, accessToken, refreshToken }`
+- **Response:** `200` `{ user }`
+- **Cookies:** Sets HttpOnly `accessToken` and `refreshToken`
 
 ### `POST /refresh`
-- **Body:** `{ refreshToken }`
-- **Response:** `200` `{ accessToken, refreshToken }`
+- **Auth:** Uses HttpOnly `refreshToken` cookie
+- **Response:** `200` `{ message: 'Session refreshed' }`
+- **Cookies:** Rotates HttpOnly `accessToken` and `refreshToken`
 
 ### `POST /logout`
-- **Body:** `{ refreshToken }`
+- **Auth:** Uses HttpOnly `refreshToken` cookie
 - **Response:** `200` `{ message: 'Logged out successfully' }`
 
 ### `GET /me`

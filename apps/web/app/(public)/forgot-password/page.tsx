@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
                     </div>
                     <h1 className="mt-6 text-4xl font-black tracking-tight sm:text-5xl">Reset your credentials.</h1>
                     <p className="mt-5 text-base leading-7 text-slate-400">
-                        Enter your email address and we'll send you a secure link to reset your password. You will be back in the DeployForge console in no time.
+                        Enter your email address and we&apos;ll send you a secure link to reset your password. You will be back in the DeployForge console in no time.
                     </p>
                 </div>
 

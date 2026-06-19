@@ -1,3 +1,7 @@
 packages:
   - 'apps/*'
-  - 'packages/*'
+  - 'packages/database'
+  - 'packages/mail'
+  - 'packages/security'
+  - 'packages/shared'
+  - 'packages/vps'

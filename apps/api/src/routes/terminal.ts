@@ -12,10 +12,20 @@ const terminalParamsSchema = z.object({
 });
 
 const terminalQuerySchema = z.object({
-    token: z.string().min(1, 'Token is required'),
+    token: z.string().min(1, 'Token is required').optional(),
     cols: z.preprocess((val) => val ? parseInt(val as string) : undefined, z.number().int().positive().optional()),
     rows: z.preprocess((val) => val ? parseInt(val as string) : undefined, z.number().int().positive().optional()),
 });
+
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+    const cookies: Record<string, string> = {};
+    if (!cookieHeader) return cookies;
+    cookieHeader.split(';').forEach((cookie) => {
+        const parts = cookie.split('=');
+        if (parts.length === 2) cookies[parts[0].trim()] = parts[1].trim();
+    });
+    return cookies;
+}
 
 export default async function terminalRoutes(fastify: FastifyInstance) {
     fastify.get('/:vpsId', { websocket: true }, async (connection, request) => {
@@ -28,9 +38,10 @@ export default async function terminalRoutes(fastify: FastifyInstance) {
             const params = terminalParamsSchema.parse(request.params);
             const query = terminalQuerySchema.parse(request.query);
             vpsId = params.vpsId;
-            token = query.token;
+            token = query.token || parseCookies(request.headers.cookie).accessToken || '';
             cols = query.cols;
             rows = query.rows;
+            if (!token) throw new Error('Missing token');
         } catch (err: any) {
             connection.socket.send(JSON.stringify({ event: 'terminal:error', message: 'Invalid parameters or query' }));
             connection.socket.close();

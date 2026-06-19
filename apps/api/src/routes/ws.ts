@@ -11,8 +11,18 @@ const wsParamsSchema = z.object({
 });
 
 const wsQuerySchema = z.object({
-    token: z.string().min(1, 'Token is required'),
+    token: z.string().min(1, 'Token is required').optional(),
 });
+
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+    const cookies: Record<string, string> = {};
+    if (!cookieHeader) return cookies;
+    cookieHeader.split(';').forEach((cookie) => {
+        const parts = cookie.split('=');
+        if (parts.length === 2) cookies[parts[0].trim()] = parts[1].trim();
+    });
+    return cookies;
+}
 
 export default async function wsRoutes(fastify: FastifyInstance) {
     fastify.get('/deployments/:id/logs', { websocket: true }, async (connection, request) => {
@@ -70,7 +80,9 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 async function authorizeDeploymentSocket(request: any, connection: any) {
     try {
         const { id } = wsParamsSchema.parse(request.params);
-        const { token } = wsQuerySchema.parse(request.query);
+        const { token: queryToken } = wsQuerySchema.parse(request.query);
+        const token = queryToken || parseCookies(request.headers.cookie).accessToken || '';
+        if (!token) throw new Error('Unauthorized');
         const payload = tokenService.verifyToken(token);
         const deployment = await prisma.deployment.findFirst({
             where: { id, userId: payload.userId },

@@ -85,6 +85,8 @@ if (!parsed.success) {
 const env = parsed.data;
 const githubCallbackUrl = env.GITHUB_CALLBACK_URL || env.GITHUB_REDIRECT_URI;
 const googleCallbackUrl = env.GOOGLE_CALLBACK_URL || env.GOOGLE_REDIRECT_URI;
+const localHostnames = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
+const isLocalUrl = (value: string) => localHostnames.has(new URL(value).hostname);
 
 const finalChecks: string[] = [];
 if (!githubCallbackUrl) finalChecks.push('GITHUB_CALLBACK_URL is required');
@@ -94,6 +96,10 @@ if (env.GOOGLE_OAUTH_ENABLED && !googleCallbackUrl) finalChecks.push('GOOGLE_CAL
 if (env.MASTER_KEY && env.MASTER_KEY !== env.ENCRYPTION_KEY) finalChecks.push('MASTER_KEY and ENCRYPTION_KEY must match while both are configured');
 if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
     finalChecks.push('GOOGLE_CLIENT_ID must be a Google OAuth client ID ending in .apps.googleusercontent.com');
+}
+if (env.NODE_ENV === 'production') {
+    if (isLocalUrl(env.APP_URL)) finalChecks.push('APP_URL must not point to localhost in production');
+    if (isLocalUrl(env.API_URL)) finalChecks.push('API_URL must not point to localhost in production');
 }
 
 if (finalChecks.length > 0) {

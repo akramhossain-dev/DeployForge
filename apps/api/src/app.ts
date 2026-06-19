@@ -5,6 +5,9 @@ import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { config, validateOAuthConfig } from './config/env';
 
+const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
+const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
+
 const app = Fastify({
     bodyLimit: 1024 * 1024, // API-5: Global body limit of 1MB for JSON/Form requests
     logger: {
@@ -39,7 +42,18 @@ export async function buildApp() {
     // Security Plugins
     await app.register(helmet, { contentSecurityPolicy: false });
     await app.register(cors, {
-        origin: config.app.env === 'development' ? true : /localhost/,
+        origin: (origin, callback) => {
+            if (!origin) {
+                callback(null, true);
+                return;
+            }
+
+            const allowed = config.app.env === 'development'
+                ? developmentOriginPattern.test(origin)
+                : productionOrigins.has(origin);
+
+            callback(null, allowed);
+        },
         credentials: true,
     });
     

@@ -332,7 +332,7 @@ export default function SecurityPage() {
                 </div>
 
                 <p className="text-xs text-slate-400 mb-4">
-                    Preview of your account's recent security logs. Visit the Security Activity tab for full logs, filtering, and search.
+                    Preview of your account&apos;s recent security logs. Visit the Security Activity tab for full logs, filtering, and search.
                 </p>
 
                 {isLoadingLogs ? (

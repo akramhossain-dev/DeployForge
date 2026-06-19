@@ -62,6 +62,12 @@ function error(reply: any, statusCode: number, message: string, errorCode: strin
     });
 }
 
+function adminAccessCookie(token: string, maxAge: number) {
+    const isProd = config.app.env === 'production';
+    const sameSite = isProd ? 'None' : 'Lax';
+    return `adminAccessToken=${token}; Path=/; HttpOnly; ${isProd ? 'Secure;' : ''} SameSite=${sameSite}; Max-Age=${maxAge}`;
+}
+
 function canManagePlatform(role: string) {
     return role === 'SUPER_ADMIN' || role === 'ADMIN';
 }
@@ -77,6 +83,22 @@ async function audit(request: FastifyRequest, action: string, data: { targetUser
             targetType: data.targetType,
             targetId: data.targetId,
             ipAddress: request.ip,
+        },
+    });
+}
+
+async function auditAdminLoginEvent(admin: { id: string; role: string } | null, action: string, ipAddress?: string) {
+    if (!admin) return;
+
+    await prisma.adminActivity.create({
+        data: {
+            adminId: admin.id,
+            action,
+            targetUserId: admin.id,
+            targetRole: admin.role,
+            targetType: 'ADMIN_USER',
+            targetId: admin.id,
+            ipAddress,
         },
     });
 }
@@ -135,18 +157,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         const isLocked = await CacheService.get<boolean>(lockoutKey);
         if (isLocked) {
             const admin = await prisma.adminUser.findUnique({ where: { email } });
-            const adminId = admin ? admin.id : null;
-            await prisma.adminActivity.create({
-                data: {
-                    adminId: adminId || 'SYSTEM',
-                    action: 'ADMIN_LOCKOUT_ATTEMPT',
-                    targetUserId: adminId || undefined,
-                    targetRole: admin?.role || undefined,
-                    targetType: 'ADMIN_USER',
-                    targetId: adminId || undefined,
-                    ipAddress: request.ip,
-                },
-            });
+            await auditAdminLoginEvent(admin, 'ADMIN_LOCKOUT_ATTEMPT', request.ip);
             return error(reply, 429, 'Too many login attempts. Account is temporarily locked.', 'LOCKOUT_ACTIVE');
         }
 
@@ -157,34 +168,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             const currentFailures = (await CacheService.get<number>(failKey)) || 0;
             const nextFailures = currentFailures + 1;
 
-            const adminId = admin ? admin.id : null;
-            await prisma.adminActivity.create({
-                data: {
-                    adminId: adminId || 'SYSTEM',
-                    action: 'ADMIN_LOGIN_FAILURE',
-                    targetUserId: adminId || undefined,
-                    targetRole: admin?.role || undefined,
-                    targetType: 'ADMIN_USER',
-                    targetId: adminId || undefined,
-                    ipAddress: request.ip,
-                },
-            });
+            await auditAdminLoginEvent(admin, 'ADMIN_LOGIN_FAILURE', request.ip);
 
             if (nextFailures >= config.security.adminMaxAttempts) {
                 await CacheService.set(lockoutKey, true, config.security.adminLockoutTime);
                 await CacheService.del(failKey);
-
-                await prisma.adminActivity.create({
-                    data: {
-                        adminId: adminId || 'SYSTEM',
-                        action: 'ADMIN_LOCKOUT',
-                        targetUserId: adminId || undefined,
-                        targetRole: admin?.role || undefined,
-                        targetType: 'ADMIN_USER',
-                        targetId: adminId || undefined,
-                        ipAddress: request.ip,
-                    },
-                });
+                await auditAdminLoginEvent(admin, 'ADMIN_LOCKOUT', request.ip);
             } else {
                 await CacheService.set(failKey, nextFailures, 900);
             }
@@ -237,21 +226,22 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 ipAddress: request.ip,
             },
         });
+        reply.header('Set-Cookie', adminAccessCookie(adminAccessToken, 8 * 60 * 60));
 
         return {
             success: true,
             data: {
                 admin: { id: admin.id, email: admin.email, role: admin.role },
-                adminAccessToken,
             },
         };
     });
 
-    fastify.post('/logout', { preHandler: [(fastify as any).requireAdmin] }, async (request) => {
+    fastify.post('/logout', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
         if (request.adminSessionId) {
             await prisma.adminSession.update({ where: { id: request.adminSessionId }, data: { revokedAt: new Date() } });
         }
         await audit(request, 'ADMIN_LOGOUT', { targetUserId: request.admin?.id, targetRole: request.admin?.role, targetType: 'ADMIN_USER', targetId: request.admin?.id });
+        reply.header('Set-Cookie', adminAccessCookie('', 0));
         return { success: true, data: { message: 'Admin logged out' } };
     });
 

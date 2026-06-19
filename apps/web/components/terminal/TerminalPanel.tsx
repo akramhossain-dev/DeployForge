@@ -5,7 +5,6 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import type { IDisposable } from '@xterm/xterm';
 import { Button, Panel } from '@/components/ui';
-import { useAuthStore } from '@/lib/store/useAuthStore';
 import api from '@/lib/api/client';
 
 type TerminalStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'error';
@@ -24,7 +23,6 @@ const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 
 export function TerminalPanel({ vpsId }: { vpsId?: string }) {
-    const token = useAuthStore((state) => state.token);
     const [status, setStatus] = useState<TerminalStatus>('idle');
     const containerRef = useRef<HTMLDivElement | null>(null);
     const terminalRef = useRef<Terminal | null>(null);
@@ -38,9 +36,9 @@ export function TerminalPanel({ vpsId }: { vpsId?: string }) {
     const shouldReconnectRef = useRef(true);
 
     const wsBaseUrl = useMemo(() => {
-        if (!vpsId || !token) return null;
-        return `${api.baseUrl.replace(/^http/, 'ws')}/terminal/${vpsId}?token=${encodeURIComponent(token)}`;
-    }, [token, vpsId]);
+        if (!vpsId) return null;
+        return `${api.baseUrl.replace(/^http/, 'ws')}/terminal/${vpsId}`;
+    }, [vpsId]);
 
     useEffect(() => {
         if (!containerRef.current || terminalRef.current) return;

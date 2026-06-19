@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Chrome, Loader2 } from 'lucide-react';
 import api from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/useAuthStore';
@@ -16,19 +16,12 @@ export default function GoogleCallbackPage() {
 
 function GoogleCallbackContent() {
     const router = useRouter();
-    const searchParams = useSearchParams();
-    const { setToken, setUser } = useAuthStore();
+    const { setUser } = useAuthStore();
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const accessToken = searchParams.get('accessToken');
-        const refreshToken = searchParams.get('refreshToken');
-
         async function completeSession() {
             try {
-                if (accessToken) {
-                    setToken(accessToken, refreshToken);
-                }
                 const response = await api.get<{ user: any }>('/auth/me');
                 setUser(response.user);
                 router.replace('/dashboard');
@@ -38,7 +31,7 @@ function GoogleCallbackContent() {
         }
 
         completeSession();
-    }, [router, searchParams, setToken, setUser]);
+    }, [router, setUser]);
 
     return (
         <GoogleCallbackFrame>

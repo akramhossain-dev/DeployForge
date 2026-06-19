@@ -25,9 +25,9 @@ const nav = [
 export function AdminShell({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
-    const { admin, adminToken, hasHydrated, setAdmin, logoutAdmin } = useAdminAuthStore();
+    const { admin, hasHydrated, setAdmin, logoutAdmin } = useAdminAuthStore();
     const isLogin = pathname === '/admin/login';
-    const me = useAdminMe(hasHydrated && !!adminToken && !isLogin);
+    const me = useAdminMe(hasHydrated && !isLogin);
     const role = me.data?.role || admin?.role;
     const activeItem = useMemo(() => nav.find((item) => item.href === pathname) || nav[0], [pathname]);
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -35,8 +35,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (isLogin) return;
         if (!hasHydrated) return;
-        if (!adminToken) router.replace('/admin/login');
-    }, [adminToken, hasHydrated, isLogin, router]);
+        if (me.isError) router.replace('/admin/login');
+    }, [hasHydrated, isLogin, me.isError, router]);
 
     useEffect(() => {
         if (me.data) setAdmin(me.data);
@@ -48,7 +48,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
     if (isLogin) return <>{children}</>;
 
-    if (!hasHydrated || (hasHydrated && !adminToken) || me.isLoading) {
+    if (!hasHydrated || me.isLoading) {
         return (
             <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-200">
                 <AuroraField />

@@ -26,11 +26,9 @@ DeployForge/
 │   ├── web/                # Next.js Frontend (shadcn/ui, Tailwind)
 │   └── api/                # Fastify Backend (TypeScript)
 ├── packages/
-│   ├── auth/               # Shared Authentication & JWT logic
-│   ├── github/             # GitHub API & Webhook integration
-│   ├── deployment/         # Core Deployment Engine (Dockerode)
+│   ├── database/           # Prisma database client
+│   ├── mail/               # SMTP mail transport
 │   ├── vps/                # VPS management and SSH communication
-│   ├── monitoring/         # Metrics collection and health checks
 │   ├── security/           # AES-256-GCM & Argon2 utilities
 │   └── shared/             # Shared types, constants, and utilities
 ├── prisma/                 # Database Schema (PostgreSQL)
