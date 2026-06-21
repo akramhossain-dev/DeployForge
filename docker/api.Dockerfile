@@ -42,7 +42,7 @@ RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
 # prisma CLI is a devDep (excluded by --prod). npx downloads it on the fly
 # without touching the pnpm workspace, so pnpm-workspace.yaml doesn't interfere.
 COPY prisma ./prisma
-RUN npx --yes prisma@5.22.0 generate --schema ./prisma/schema.prisma
+RUN PRISMA_GENERATE_SKIP_AUTOINSTALL=1 npx --yes prisma@5.22.0 generate --schema ./prisma/schema.prisma
 
 FROM base AS runner
 ENV NODE_ENV=production
@@ -51,6 +51,7 @@ WORKDIR /app
 # (written into the pnpm virtual store during the npx generate step above).
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=prod-deps --chown=node:node /app/apps/api/package.json ./apps/api/package.json
+COPY --from=prod-deps --chown=node:node /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=prod-deps --chown=node:node /app/packages ./packages
 COPY --from=builder --chown=node:node /app/apps/api/dist ./apps/api/dist
 COPY --from=builder --chown=node:node /app/packages/database/dist ./packages/database/dist

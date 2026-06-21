@@ -11,6 +11,8 @@ const redactionPaths = [
     '*.adminAccessToken',
     '*.csrfToken',
     '*.password',
+    '*.passwordHash',
+    '*.password_hash',
     '*.token',
     '*.secret',
     '*.privateKey',

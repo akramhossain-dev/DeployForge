@@ -102,10 +102,11 @@ services:
       context: .
       dockerfile: docker/web.Dockerfile
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-${API_URL}}
+      # Explicitly set PORT=3000 — MUST come before env_file to override any PORT from .env
+      PORT: "3000"
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:3001}}
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
       - "${WEB_PORT:-3000}:3000"

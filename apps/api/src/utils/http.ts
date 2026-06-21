@@ -32,7 +32,8 @@ export function cookie(name: string, value: string, maxAge: number, options: { h
     const isProd = config.app.env === 'production';
     const sameSite = options.sameSite || (isProd ? 'None' : 'Lax');
     const encodedValue = encodeURIComponent(value);
-    const expires = maxAge === 0 ? '; Expires=Thu, 01 Jan 1970 00:00:00 GMT' : '';
+    const expiresDate = maxAge === 0 ? new Date(0) : new Date(Date.now() + maxAge * 1000);
+    const expires = `; Expires=${expiresDate.toUTCString()}`;
     return `${name}=${encodedValue}; Path=/; ${options.httpOnly ? 'HttpOnly; ' : ''}${isProd ? 'Secure; ' : ''}SameSite=${sameSite}; Max-Age=${maxAge}${expires}`;
 }
 
