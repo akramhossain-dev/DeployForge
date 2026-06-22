@@ -88,7 +88,6 @@ export class MailService {
     }
 
     private async sendWithRetry(mailOptions: nodemailer.SendMailOptions, retries = 3, delay = 1000): Promise<any> {
-        const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || !process.env.NODE_ENV;
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
                 const info = await this.transporter.sendMail(mailOptions);
@@ -103,18 +102,12 @@ export class MailService {
                     stage: 'smtp',
                     severity: attempt === retries ? 'error' : 'warn',
                     message: `Attempt ${attempt}/${retries} failed to send email to ${mailOptions.to}: ${error.message}`,
-                    hint: attempt < retries ? 'Will retry...' : 'All retry attempts exhausted',
-                    fix_suggestion: attempt === retries ? 'Check SMTP configuration and network connectivity' : undefined,
+                    hint: attempt < retries ? 'Will retry...' : 'All retry attempts exhausted. Check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.',
+                    fix_suggestion: attempt === retries
+                        ? 'Verify SMTP credentials in .env. For Gmail use smtp.gmail.com:587 with an App Password (not your account password).'
+                        : undefined,
                 });
                 if (attempt === retries) {
-                    if (isDev) {
-                        structuredLog({
-                            stage: 'smtp',
-                            severity: 'info',
-                            message: `[DEVELOPMENT MOCK] Email content for ${mailOptions.to}:\nSubject: ${mailOptions.subject}\nHTML:\n${mailOptions.html}\n`,
-                        });
-                        return { messageId: 'mock-id' };
-                    }
                     throw error;
                 }
                 await new Promise((resolve) => setTimeout(resolve, delay * attempt));

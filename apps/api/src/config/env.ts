@@ -63,7 +63,7 @@ const rawEnvSchema = z.object({
     SMTP_SECURE: envBoolean(false),
     SMTP_USER: required('SMTP_USER'),
     SMTP_PASS: secret('SMTP_PASS', 1),
-    SMTP_FROM: z.string({ required_error: 'SMTP_FROM is required' }).trim().email('SMTP_FROM must be a valid email address'),
+    SMTP_FROM: z.string().trim().email('SMTP_FROM must be a valid email address').optional(),
 
     EMAIL_SERVICE: optional(),
     EMAIL_USER: optional(),
@@ -179,9 +179,7 @@ export const emailConfig = {
         user: env.SMTP_USER,
         pass: env.SMTP_PASS,
     },
-    service: env.EMAIL_SERVICE,
-    legacyUser: env.EMAIL_USER,
-    fromEmail: env.SMTP_FROM,
+    fromEmail: env.SMTP_FROM || env.SMTP_USER,
 } as const;
 
 export const securityConfig = {
