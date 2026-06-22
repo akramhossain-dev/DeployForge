@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { AlertCircle, Copy, Pause, Play, RefreshCw, RotateCcw, Server, Square, TerminalSquare, Trash2 } from 'lucide-react';
-import { Button, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
+import { AppModal, Button, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
 import { useDeleteDeployment, useDeployment, useDeploymentLogs, useDeploymentLogStream, useDeploymentStatusStream, usePauseDeployment, useRestartDeployment, useResumeDeployment, useRollbackDeployment, useStartDeployment, useStopDeployment } from '@/hooks/useDeployForgeData';
 import type { DeploymentLog } from '@/lib/api/types';
 import { parseError } from '@/lib/utils/errorParser';
@@ -300,28 +300,29 @@ Explanation: ${parsedError.explanation}
                 </>
             ) : null}
             {deleteOpen ? (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-                    <Panel className="w-full max-w-lg border-rose-400/30 bg-rose-500/10">
-                        <h2 className="text-lg font-black text-white">Delete Deployment</h2>
-                        <p className="mt-3 text-sm leading-6 text-rose-100/80">This will stop the container, remove deployment routing, free the port, and mark the deployment as deleted.</p>
-                        <label className="mt-5 block space-y-2">
-                            <span className="text-xs font-black uppercase text-rose-100/70">Confirmation required</span>
-                            <input
-                                value={deleteConfirm}
-                                onChange={(event) => setDeleteConfirm(event.target.value)}
-                                placeholder="Type DELETE here"
-                                className={inputClassName}
-                            />
-                            <span className="block text-xs leading-5 text-rose-100/70">
-                                Type <span className="font-mono font-black text-rose-100">DELETE</span> exactly to enable the delete button.
-                            </span>
-                        </label>
-                        <div className="mt-6 flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => { setDeleteOpen(false); setDeleteConfirm(''); }}>Cancel</Button>
-                            <Button variant="danger" disabled={deleteConfirm !== 'DELETE'} loading={deleteDeployment.isPending} onClick={confirmDelete}><Trash2 size={16} /> Delete Deployment</Button>
-                        </div>
-                    </Panel>
-                </div>
+                <AppModal
+                    title="Delete Deployment"
+                    open={deleteOpen}
+                    onClose={() => { setDeleteOpen(false); setDeleteConfirm(''); }}
+                >
+                    <p className="mt-3 text-sm leading-6 text-slate-400">This will stop the container, remove deployment routing, free the port, and mark the deployment as deleted.</p>
+                    <label className="mt-5 block space-y-2">
+                        <span className="text-xs font-black uppercase text-slate-500">Confirmation required</span>
+                        <input
+                            value={deleteConfirm}
+                            onChange={(event) => setDeleteConfirm(event.target.value)}
+                            placeholder="Type DELETE here"
+                            className={inputClassName}
+                        />
+                        <span className="block text-xs leading-5 text-slate-500">
+                            Type <span className="font-mono font-black text-slate-400">DELETE</span> exactly to enable the delete button.
+                        </span>
+                    </label>
+                    <div className="mt-6 flex justify-end gap-2">
+                        <Button variant="secondary" onClick={() => { setDeleteOpen(false); setDeleteConfirm(''); }}>Cancel</Button>
+                        <Button variant="danger" disabled={deleteConfirm !== 'DELETE'} loading={deleteDeployment.isPending} onClick={confirmDelete}><Trash2 size={16} /> Delete Deployment</Button>
+                    </div>
+                </AppModal>
             ) : null}
         </div>
     );

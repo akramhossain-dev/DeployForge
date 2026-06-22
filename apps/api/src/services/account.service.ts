@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { paginationMeta, parsePagination, sha256 } from '../utils/http';
 import { parseUserAgent } from '../utils/user-agent';
 import { logger } from '../utils/logger';
+import { CacheService } from './cache.service';
 
 const mailService = new MailService({
     host: config.email.smtp.host,
@@ -16,6 +17,7 @@ const mailService = new MailService({
         pass: config.email.smtp.pass,
     },
     fromEmail: config.email.fromEmail,
+    logger,
 });
 
 function publicError(message: string, statusCode: number) {
@@ -49,6 +51,10 @@ export class AccountService {
     }
 
     static async getProfile(userId: string) {
+        const cacheKey = `user:profile:${userId}`;
+        const cached = await CacheService.get<any>(cacheKey);
+        if (cached) return cached;
+
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: {
@@ -65,6 +71,8 @@ export class AccountService {
             },
         });
         if (!user) throw new Error('User not found');
+        
+        await CacheService.set(cacheKey, user, 300); // cache for 5 minutes
         return user;
     }
 
@@ -89,6 +97,8 @@ export class AccountService {
             data: updateData,
         });
 
+        await CacheService.del(`user:profile:${userId}`);
+
         await this.logAudit(userId, 'PROFILE_UPDATE', changes.join(', '), ip, ua);
         return updated;
     }
@@ -112,6 +122,8 @@ export class AccountService {
             where: { id: userId },
             data: { passwordHash: newHash },
         });
+
+        await CacheService.del(`user:profile:${userId}`);
 
         await this.logAudit(userId, 'PASSWORD_CHANGE', 'User password successfully changed.', ip, ua);
     }
@@ -326,6 +338,8 @@ export class AccountService {
         }
 
         await this.logAudit(userId, 'ACCOUNT_DELETED', 'Account successfully deleted.', ip, ua);
+
+        await CacheService.del(`user:profile:${userId}`);
 
         // We cascade delete sessions and tokens (handled by schema cascade rules).
         // Deployments should not be deleted automatically as requested.

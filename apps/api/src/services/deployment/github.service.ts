@@ -35,7 +35,26 @@ export class GitHubDeploymentService {
     static async prepareGithubSource(ssh: SSHService, deploymentId: string, source: GitHubDeploymentSource, repositoryUrl: string, workDir: string) {
         if (!source.accessToken) throw new DeploymentError('cloning', 'Missing GitHub access token', 'MISSING_GITHUB_TOKEN');
         const repoUrl = repositoryUrl.replace(/^https:\/\//, `https://${encodeURIComponent(source.accessToken)}@`);
-        await LoggingService.log(deploymentId, `Cloning branch ${source.branch}`, 'build');
-        await runCommand(ssh, deploymentId, 'build', `rm -rf ${shellQuote(workDir)} && git clone --depth 1 -b ${shellQuote(source.branch)} ${shellQuote(repoUrl)} ${shellQuote(workDir)}`, 'cloning', 'GIT_CLONE_FAILED');
+        await LoggingService.log(deploymentId, `Preparing repository source for branch ${source.branch}...`, 'build');
+
+        const quotedWorkDir = shellQuote(workDir);
+        const quotedBranch = shellQuote(source.branch);
+        const quotedRepoUrl = shellQuote(repoUrl);
+
+        const command = `export GIT_TERMINAL_PROMPT=0 && ` +
+            `if [ -d ${quotedWorkDir}/.git ] && cd ${quotedWorkDir} && ` +
+            `git remote set-url origin ${quotedRepoUrl} && ` +
+            `git fetch --depth 1 origin ${quotedBranch} && ` +
+            `git checkout -B ${quotedBranch} origin/${quotedBranch} && ` +
+            `git reset --hard origin/${quotedBranch} && ` +
+            `git clean -fdx -e node_modules -e .next/cache; then ` +
+            `echo "Incremental fetch successful. Reused cached repository."; ` +
+            `else ` +
+            `echo "Cache miss or update failed. Performing clean clone..."; ` +
+            `rm -rf ${quotedWorkDir} && ` +
+            `git clone --depth 1 -b ${quotedBranch} ${quotedRepoUrl} ${quotedWorkDir}; ` +
+            `fi`;
+
+        await runCommand(ssh, deploymentId, 'build', command, 'cloning', 'GIT_CLONE_FAILED');
     }
 }

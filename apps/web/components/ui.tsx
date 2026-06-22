@@ -2,7 +2,7 @@
 
 import clsx from 'clsx';
 import { AlertCircle, Eye, EyeOff, Loader2, RefreshCw, X } from 'lucide-react';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 
 export function PageHeader({
     title,
@@ -222,9 +222,18 @@ export function AppModal({
     open: boolean;
     onClose: () => void;
 }) {
+    useEffect(() => {
+        if (!open) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [open, onClose]);
+
     if (!open) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
             <Panel className="w-full max-w-lg">
                 <div className="mb-5 flex items-center justify-between gap-4">
                     <h2 className="text-lg font-black text-white">{title}</h2>

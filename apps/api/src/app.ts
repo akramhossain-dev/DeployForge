@@ -6,14 +6,19 @@ import rateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
 import { config, validateOAuthConfig } from './config/env';
 import { redactionPaths } from './utils/logger';
+import { AppMetricsService } from './services/app-metrics.service';
+import { randomUUID } from 'crypto';
 
 const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
-const probePaths = new Set(['/health', '/live', '/liveness', '/ready', '/readiness']);
+const probePaths = new Set(['/health', '/live', '/liveness', '/ready', '/readiness', '/metrics']);
 
 const app = Fastify({
     bodyLimit: 1024 * 1024, // API-5: Global body limit of 1MB for JSON/Form requests
     trustProxy: true,
+    genReqId: (req) => {
+        return (req.headers['x-request-id'] as string) || randomUUID();
+    },
     logger: {
         level: config.app.logLevel,
         redact: {
@@ -26,8 +31,29 @@ const app = Fastify({
     },
 });
 
+
+import prisma from '@deployforge/database';
+import { deploymentEventEmitter, DEPLOYMENT_EVENTS } from './utils/deployment-events';
+
 export async function buildApp() {
     validateOAuthConfig(app.log);
+
+    // Register Prisma middleware to emit deployment/log events to subscribers
+    prisma.$use(async (params, next) => {
+        const result = await next(params);
+
+        if (params.model === 'DeploymentLog' && params.action === 'create') {
+            if (result) {
+                deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.LOG_ADDED, result.deploymentId, result);
+            }
+        } else if (params.model === 'Deployment' && (params.action === 'update' || params.action === 'upsert' || params.action === 'create')) {
+            if (result) {
+                deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.STATUS_UPDATED, result.id, result);
+            }
+        }
+
+        return result;
+    });
 
     app.removeContentTypeParser('application/json');
     app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
@@ -61,7 +87,20 @@ export async function buildApp() {
             responseTimeMs: Math.round(reply.elapsedTime),
             ip: request.ip,
         }, 'HTTP request completed');
+
+        AppMetricsService.recordRequest(
+            request.method,
+            request.routerPath || request.url,
+            reply.statusCode,
+            reply.elapsedTime
+        );
     });
+
+    app.addHook('onSend', async (request, reply, payload) => {
+        reply.header('X-Request-Id', request.id);
+        return payload;
+    });
+
 
     app.addHook('preValidation', async (request, reply) => {
         const unsafeKeys = new Set(['__proto__', 'prototype', 'constructor']);
@@ -275,14 +314,15 @@ export async function buildApp() {
 
         // Log suspicious requests, malformed payloads and validation failures
         if (finalStatusCode === 400) {
-            app.log.warn({ ip: request.ip, path: request.url, err: error }, 'Bad Request / Validation Failure');
+            request.log.warn({ ip: request.ip, path: request.url, err: error }, 'Bad Request / Validation Failure');
         } else if (finalStatusCode === 401 || finalStatusCode === 403) {
-            app.log.warn({ ip: request.ip, path: request.url }, 'Suspicious unauthorized request');
+            request.log.warn({ ip: request.ip, path: request.url }, 'Suspicious unauthorized request');
         } else if (finalStatusCode === 429) {
-            app.log.warn({ ip: request.ip, path: request.url }, 'Rate limit violation');
+            request.log.warn({ ip: request.ip, path: request.url }, 'Rate limit violation');
         } else if (finalStatusCode >= 500) {
-            app.log.error(error);
+            request.log.error(error);
         }
+
 
         reply.status(finalStatusCode).send({
             success: false,

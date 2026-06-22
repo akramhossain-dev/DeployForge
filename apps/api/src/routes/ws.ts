@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import prisma from '@deployforge/database';
 import { z } from 'zod';
 import { socketToken, verifyDeploymentSocketAccess } from '../utils/socket-auth';
+import { deploymentEventEmitter, DEPLOYMENT_EVENTS } from '../utils/deployment-events';
 
 const wsParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid ID format' }),
@@ -29,11 +30,25 @@ export default async function wsRoutes(fastify: FastifyInstance) {
             }
         };
 
-        await sendLogs();
-        const interval = setInterval(() => sendLogs().catch((err) => {
+        const onLogAdded = (depId: string, log: any) => {
+            if (depId === session.deploymentId) {
+                const logTime = new Date(log.createdAt);
+                if (logTime > lastSeen) {
+                    lastSeen = logTime;
+                    connection.socket.send(JSON.stringify({ event: 'deployment:log', data: log }));
+                }
+            }
+        };
+
+        deploymentEventEmitter.on(DEPLOYMENT_EVENTS.LOG_ADDED, onLogAdded);
+
+        await sendLogs().catch((err) => {
             connection.socket.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
-        }), 1500);
-        connection.socket.on('close', () => clearInterval(interval));
+        });
+
+        connection.socket.on('close', () => {
+            deploymentEventEmitter.off(DEPLOYMENT_EVENTS.LOG_ADDED, onLogAdded);
+        });
     });
 
     fastify.get('/deployments/:id/status', { websocket: true }, async (connection, request) => {
@@ -56,11 +71,26 @@ export default async function wsRoutes(fastify: FastifyInstance) {
             }
         };
 
-        await sendStatus();
-        const interval = setInterval(() => sendStatus().catch((err) => {
+        const onStatusUpdated = (depId: string, deployment: any) => {
+            if (depId === session.deploymentId) {
+                const updatedAt = new Date(deployment.updatedAt).toISOString();
+                if (deployment.status !== lastStatus || updatedAt !== lastUpdatedAt) {
+                    lastStatus = deployment.status;
+                    lastUpdatedAt = updatedAt;
+                    connection.socket.send(JSON.stringify({ event: 'deployment:status', data: deployment }));
+                }
+            }
+        };
+
+        deploymentEventEmitter.on(DEPLOYMENT_EVENTS.STATUS_UPDATED, onStatusUpdated);
+
+        await sendStatus().catch((err) => {
             connection.socket.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
-        }), 2000);
-        connection.socket.on('close', () => clearInterval(interval));
+        });
+
+        connection.socket.on('close', () => {
+            deploymentEventEmitter.off(DEPLOYMENT_EVENTS.STATUS_UPDATED, onStatusUpdated);
+        });
     });
 }
 

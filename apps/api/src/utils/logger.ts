@@ -13,6 +13,7 @@ const redactionPaths = [
     '*.password',
     '*.passwordHash',
     '*.password_hash',
+    '*.passwordConfirmation',
     '*.token',
     '*.secret',
     '*.privateKey',
@@ -28,6 +29,10 @@ const redactionPaths = [
     '*.GITHUB_WEBHOOK_SECRET',
     '*.GOOGLE_CLIENT_SECRET',
     '*.SMTP_PASS',
+    '*.otp',
+    '*.code',
+    '*.resetToken',
+    '*.verificationToken',
 ];
 
 export const logger = pino({

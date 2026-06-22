@@ -9,6 +9,11 @@ export interface MailConfig {
         pass: string;
     };
     fromEmail?: string;
+    logger?: {
+        info: (msg: string, ...args: any[]) => void;
+        warn: (msg: string, ...args: any[]) => void;
+        error: (msg: string, ...args: any[]) => void;
+    };
 }
 
 export interface StructuredLog {
@@ -19,23 +24,35 @@ export interface StructuredLog {
     fix_suggestion?: string;
 }
 
-function structuredLog(log: StructuredLog) {
+function structuredLog(log: StructuredLog, customLogger?: MailConfig['logger']) {
     const payload = JSON.stringify({ ...log, timestamp: new Date().toISOString() });
-    if (log.severity === 'error') {
-        console.error(payload);
-    } else if (log.severity === 'warn') {
-        console.warn(payload);
+    if (customLogger) {
+        if (log.severity === 'error') {
+            customLogger.error(log.message, log);
+        } else if (log.severity === 'warn') {
+            customLogger.warn(log.message, log);
+        } else {
+            customLogger.info(log.message, log);
+        }
     } else {
-        console.log(payload);
+        if (log.severity === 'error') {
+            console.error(payload);
+        } else if (log.severity === 'warn') {
+            console.warn(payload);
+        } else {
+            console.log(payload);
+        }
     }
 }
 
 export class MailService {
     private transporter: nodemailer.Transporter;
     private fromEmail: string;
+    private customLogger?: MailConfig['logger'];
 
     constructor(config: MailConfig) {
         this.fromEmail = config.fromEmail || config.auth.user;
+        this.customLogger = config.logger;
 
         if (!config.host || !config.auth.user || !config.auth.pass) {
             structuredLog({
@@ -44,7 +61,7 @@ export class MailService {
                 message: 'SMTP configuration incomplete',
                 hint: 'SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and SMTP_FROM are required for real email delivery',
                 fix_suggestion: 'Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in .env file',
-            });
+            }, this.customLogger);
             throw new Error('SMTP configuration incomplete');
         }
 
@@ -75,7 +92,7 @@ export class MailService {
                     message: `SMTP connection verification failed: ${error.message}`,
                     hint: 'The SMTP server rejected the connection. This could be due to wrong credentials, port, or TLS settings.',
                     fix_suggestion: 'Check SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM. For Gmail, use smtp.gmail.com with port 587 and secure=false, or port 465 and secure=true.',
-                });
+                }, this.customLogger);
                 return;
             }
 
@@ -83,19 +100,19 @@ export class MailService {
                 stage: 'smtp',
                 severity: 'info',
                 message: 'SMTP connection is ready and verified',
-            });
+            }, this.customLogger);
         });
     }
 
     private async sendWithRetry(mailOptions: nodemailer.SendMailOptions, retries = 3, delay = 1000): Promise<any> {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
-                const info = await this.transporter.sendMail(mailOptions);
+                 const info = await this.transporter.sendMail(mailOptions);
                 structuredLog({
                     stage: 'smtp',
                     severity: 'info',
                     message: `Email sent successfully to ${mailOptions.to} (MessageID: ${info.messageId})`,
-                });
+                }, this.customLogger);
                 return info;
             } catch (error: any) {
                 structuredLog({
@@ -106,7 +123,7 @@ export class MailService {
                     fix_suggestion: attempt === retries
                         ? 'Verify SMTP credentials in .env. For Gmail use smtp.gmail.com:587 with an App Password (not your account password).'
                         : undefined,
-                });
+                }, this.customLogger);
                 if (attempt === retries) {
                     throw error;
                 }

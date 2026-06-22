@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import IORedis from 'ioredis';
 import prisma from '@deployforge/database';
 import { config } from '../config/env';
+import { AppMetricsService } from '../services/app-metrics.service';
 
 type DependencyStatus = {
     status: 'ok' | 'error' | 'disabled';
@@ -64,14 +65,22 @@ export default async function healthRoutes(fastify: FastifyInstance) {
         });
     };
 
+    const metricsHandler = async () => {
+        return await AppMetricsService.getMetrics();
+    };
+
     fastify.get('/health', livenessHandler);
     fastify.get('/live', livenessHandler);
     fastify.get('/liveness', livenessHandler);
     fastify.get('/ready', readinessHandler);
     fastify.get('/readiness', readinessHandler);
+    fastify.get('/metrics', metricsHandler);
+    
     fastify.get('/api/health', livenessHandler);
     fastify.get('/api/live', livenessHandler);
     fastify.get('/api/liveness', livenessHandler);
     fastify.get('/api/ready', readinessHandler);
     fastify.get('/api/readiness', readinessHandler);
+    fastify.get('/api/metrics', metricsHandler);
 }
+

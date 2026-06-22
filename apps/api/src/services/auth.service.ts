@@ -18,6 +18,7 @@ const mailService = new MailService({
         pass: config.email.smtp.pass,
     },
     fromEmail: config.email.fromEmail,
+    logger,
 });
 
 function emailServiceUnavailableError() {
