@@ -106,12 +106,26 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
         console.debug('[api:request]', { method, path });
     }
 
-    const response = await fetch(`${API_URL}${path}`, {
-        ...init,
-        headers,
-        cache: 'no-store',
-        credentials: 'include',
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let response: Response;
+    try {
+        response = await fetch(`${API_URL}${path}`, {
+            ...init,
+            headers,
+            cache: 'no-store',
+            credentials: 'include',
+            signal: controller.signal,
+        });
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            throw new ApiError('Request timed out. Please try again.', 0, undefined, 'TIMEOUT');
+        }
+        throw new ApiError('Network connection error. Please check your internet connection.', 0, undefined, 'NETWORK_ERROR');
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     const payload = await parseResponse(response).catch(() => null);
 
@@ -140,6 +154,10 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
             context: payload?.context,
             errorCode: payload?.error?.code || payload?.errorCode,
         };
+
+        if (response.status === 500 && (!payload || !payload.error?.message)) {
+            apiError.message = 'Internal Server Error';
+        }
 
         if (typeof window !== 'undefined') {
             console.error('[api:error]', { method, path, status: response.status, message: apiError.message, context: apiError.context });

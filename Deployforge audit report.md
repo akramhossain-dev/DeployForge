@@ -1,596 +1,855 @@
-# DeployForge — Complete Codebase Audit & Production Readiness Review
+# DeployForge — Senior Production Code Audit Report
 
-**Repository:** https://github.com/akramhossain-dev/DeployForge.git  
-**Audit Date:** June 16, 2026  
-**Auditor Roles:** Principal Software Architect · Principal Security Engineer · Senior DevOps Engineer · Senior QA Engineer · Senior Backend Architect · Senior Frontend Architect · Database Architect · Production Readiness Auditor
-
----
-
-## EXECUTIVE SUMMARY
-
-DeployForge is a self-hosted deployment platform built on a Fastify API, Next.js 14 frontend, PostgreSQL, Redis, BullMQ workers, and SSH-based VPS control. The codebase is architecturally coherent and demonstrates genuinely good patterns in several areas: refresh-token replay detection, ownership-verified IDOR guards, AES-256-GCM encryption of credentials, Argon2id password hashing, and a well-structured Zod validation layer.
-
-However, the project is **not production-ready** in its current state. Three issues alone are release-blocking: CORS is hardcoded to `localhost` in production mode (breaking every real user's cross-origin request), a critical foreign-key violation crashes the database on every failed admin login attempt (storing the literal string `"SYSTEM"` into a UUID-typed relation field), and the frontend stores access tokens in `localStorage`, directly contradicting the HttpOnly cookie strategy used by the API. Additionally, four declared workspace packages (`auth`, `deployment`, `github`, `monitoring`) contain only a `.gitignore` — zero source code — meaning any build that resolves those workspace paths will fail. The E2E test suite consists entirely of `expect(true).toBe(true)` assertions and provides no real coverage.
-
-**Final Release Decision: NOT READY**
+**Repository:** `akramhossain-dev/DeployForge`  
+**Audit Date:** June 22, 2026  
+**Audited By:** Principal-Level Cross-Discipline Team (Architecture, Security, Backend, Frontend, DevOps, Database, QA, Performance, SRE, Code Review)  
+**Stack:** Next.js 14 · Fastify · PostgreSQL · Redis · BullMQ · Prisma · Docker · Turborepo / pnpm workspaces
 
 ---
 
-## WHAT IS IMPLEMENTED WELL
+## Table of Contents
 
-1. **Refresh-token rotation with replay detection** (`auth.service.ts` → `AuthService.refresh`): Old token is hashed and stored in Redis with a 1-hour TTL; a replay triggers immediate revocation of all sessions for the affected user. This is textbook implementation.
-
-2. **Argon2id password hashing** (`packages/security/src/passwords.ts`): `memoryCost: 65536`, `timeCost: 3`, `parallelism: 4` — strong production-grade settings.
-
-3. **AES-256-GCM encryption for credentials**: VPS passwords, SSH private keys, GitHub access tokens, and deployment environment variables are all encrypted at rest with a 64-hex-byte key. Random 12-byte IVs per operation. Auth-tag stored alongside ciphertext. Correct use of authenticated encryption.
-
-4. **Ownership checks via `verifyDeploymentOwnership` / `verifyVpsOwnership` / `verifyDomainOwnership`** (`apps/api/src/utils/authz.ts`): Every sensitive resource route explicitly verifies that the resource belongs to the requesting user, and cross-ownership attempts are audit-logged.
-
-5. **Zod validation on all routes**: Every handler parses its request body/params/query through a typed Zod schema before use, with structured error responses.
-
-6. **GitHub webhook signature verification** (timing-safe `timingSafeEqual`) plus replay protection via `WebhookEvent.id` unique constraint on the GitHub delivery ID.
-
-7. **Admin system separation**: Admin users live in a completely separate `AdminUser` / `AdminSession` table, use a different JWT secret (`ADMIN_JWT_SECRET`), and their sessions store a hashed token for binding. Admin brute-force lockout is implemented via Redis.
-
-8. **Structured environment validation on startup** (`apps/api/src/config/env.ts`): The entire `.env` is parsed and validated with Zod at boot; the process exits with a descriptive error list before accepting any requests.
-
-9. **Safe archive extraction** (`safeExtractCommand` in `deployment.service.ts`): Python-based extraction with path traversal protection, max-depth (12), and max-entry (20,000) limits. Zip-slip attacks are blocked.
-
-10. **Comprehensive audit logging**: Every sensitive action (login, logout, token refresh, password change, session revocation, unauthorized access attempts) is written to `AuditLog` with IP, browser, OS, and device parsed from the user agent.
-
----
-
-## VERIFIED FIXES (Items Already Addressed in Code)
-
-- Refresh token is stored as SHA-256 hash in the DB, never as plaintext.
-- OTP is stored as SHA-256 hash; never returned in API responses.
-- `passwordHash` is stripped from `request.user` in `authGuard` before the user object is set.
-- `sanitizeVps` and `sanitizeDeployment` delete all credential fields before returning to the client.
-- GitHub OAuth state parameter is signed with a JWT and validated before code exchange.
-- The `env` field (encrypted deployment environment variables) is stripped from all API responses; only key names are returned as `envPreview`.
-- Upload file names are sanitized (`/[^A-Za-z0-9._-]/g`) and strictly checked for extension before writing.
-- Terminal WebSocket ownership check: `prisma.vPS.findUnique` then `vps.userId !== userId` comparison.
+1. Project Architecture
+2. Backend Review
+3. Frontend Review
+4. Security Audit
+5. Database Review
+6. DevOps Review
+7. Performance Review
+8. Code Quality
+9. Error Handling
+10. API Review
+11. Production Readiness
+12. Missing Features
+13. Testing Review
+14. Configuration Review
+15. Bug Detection
+16. Severity Classification
+17. Code Smells
+18. Scores
+19. Final Verdict
+20. Final Rating
+21. Roadmap
 
 ---
 
-## CRITICAL ISSUES
+## 1. Project Architecture
 
-### CRIT-1: CORS Locks Out All Production Users
-- **Severity:** CRITICAL — Release Blocker
-- **File:** `apps/api/src/app.ts` line 42
-- **Root Cause:**
-  ```typescript
-  origin: config.app.env === 'development' ? true : /localhost/,
-  ```
-  In any non-`development` environment the CORS origin is a regex that only matches `localhost`. Any browser request from a real production domain (e.g., `https://app.deployforge.io`) will be rejected with a CORS preflight failure. Every authenticated request the frontend makes will fail.
-- **Impact:** The entire application is non-functional for any real deployment. Every API call from the production frontend will be blocked by the browser.
-- **Recommended Fix:**
-  ```typescript
-  const allowedOrigins = config.app.env === 'development'
-    ? true
-    : [config.app.appUrl, config.app.apiUrl].filter(Boolean);
-  await app.register(cors, { origin: allowedOrigins, credentials: true });
-  ```
+**Score: 7.5 / 10**
 
----
+### What's Good
 
-### CRIT-2: Foreign Key Violation Crashes DB on Failed Admin Login
-- **Severity:** CRITICAL — Runtime Crash
-- **File:** `apps/api/src/routes/admin.ts` lines 141, 163, 179
-- **Root Cause:**
-  ```typescript
-  adminId: adminId || 'SYSTEM',
-  ```
-  When an admin login attempt fails for an unknown email, `adminId` is `null` and the code falls back to the string `'SYSTEM'`. `AdminActivity.adminId` is a foreign key pointing to `AdminUser.id` (UUID), and `'SYSTEM'` is not a valid UUID. Prisma will throw a foreign-key constraint violation (`P2003`), which is not caught, resulting in a 500 error for every lockout event involving an unknown email.
-- **Impact:** Failed login attempts for non-existent admin accounts crash with an unhandled database error. This also means brute-force lockout events are never logged for unknown emails — defeating the lockout audit trail.
-- **Recommended Fix:** Add a nullable `adminId` column to `AdminActivity`, or use a `SYSTEM` sentinel admin account, or skip activity logging when no valid admin is found:
-  ```typescript
-  if (adminId) {
-    await prisma.adminActivity.create({ data: { adminId, action: 'ADMIN_LOGIN_FAILURE', ... } });
-  }
-  ```
+The repository uses a well-structured Turborepo + pnpm workspaces monorepo. The separation of concerns across packages is deliberate and effective:
+
+- `packages/security` — pure cryptographic primitives (AES-256-GCM, Argon2id, JWT)
+- `packages/vps` — SSH session management isolated from business logic
+- `packages/database` — Prisma client as a shared singleton
+- `packages/mail` — SMTP transport isolated behind an interface
+- `packages/shared` — API types, constants, pagination helpers shared between `apps/api` and `apps/web`
+
+The backend follows a recognisable **Route → Service → Repository** pattern. Fastify plugins (`auth`, `csrf`) are properly encapsulated using `fastify-plugin`. The queue worker (`deployment.worker.ts`) is separated from the HTTP layer. Turbo's pipeline respects build order dependencies correctly.
+
+### Issues Found
+
+**Double-route registration (app.ts)** — Every route is registered twice: once under `/api/...` and once without the prefix (e.g. `/auth` and `/api/auth`). This is an attempt to support both prefixed and un-prefixed access, but it doubles the route table, creates ambiguous routing semantics, and can cause unintended endpoint exposure. The `onRequest` URL-rewriting hook already canonicalises the path. The duplicate registration without prefix is redundant and should be removed.
+
+```ts
+// app.ts — every route registered twice:
+await app.register(import('./routes/auth'), { prefix: '/api/auth' });
+await app.register(import('./routes/auth'), { prefix: '/auth' }); // ← redundant
+```
+
+**No interface-driven service layer** — Services are static class methods that import `prisma` directly. This tightly couples every service to the ORM and makes unit testing nearly impossible without mocking the entire Prisma singleton. A repository or data-access abstraction layer is missing.
+
+**God-class `DeploymentService`** — `deployment.service.ts` is ~1,000 lines. It handles source preparation, SSH commands, Nginx config generation, Docker container lifecycle, caching logic, port allocation, static asset rewriting, file-hash computation, and rollback orchestration. This violates SRP and makes the class difficult to test or reason about in isolation.
+
+**`any` cast overuse** — `fastify as any` appears in every route file to access decorated properties (`authGuard`, `requireAdmin`, etc.). The plugin correctly adds type declarations via `declare module 'fastify'`, but every route still casts to `any`. This defeats TypeScript's purpose and hides potential type errors.
+
+**Missing `/profile` route** — The `profile` route is registered under both `/api/profile` and `/profile`, yet the frontend always calls `/api/profile`. The bare `/profile` registration is dead.
 
 ---
 
-### CRIT-3: Access Token Stored in `localStorage` (Contradicts HttpOnly Cookie Design)
-- **Severity:** CRITICAL — Security Architecture Flaw
-- **File:** `apps/web/lib/store/useAuthStore.ts` lines 51–69, 85
-- **Root Cause:** The API sets access tokens as `HttpOnly` cookies (correct), but `setSession` also explicitly writes the same token to `localStorage.setItem('df_token', accessToken)`. The API client in `lib/api/client.ts` reads the token from the Zustand store (which persists to `localStorage` via `zustand/middleware/persist`). This means:
-  1. Any XSS script can steal the access token from `localStorage`.
-  2. The cookie is redundant and may cause confusion about which credential the client actually uses.
-  3. The Zustand persist middleware also writes `refreshToken` to `localStorage` — meaning a refresh token, which grants 7-day session extension, is exposed to XSS.
-- **Impact:** XSS vulnerability anywhere on the frontend (including third-party scripts) can steal both the access token and the refresh token.
-- **Recommended Fix:** Remove all `localStorage` usage for tokens. Rely exclusively on HttpOnly cookies. Update `api/client.ts` to send `credentials: 'include'` and remove the `Authorization: Bearer` header injection from store state.
+## 2. Backend Review
+
+### API Design
+
+Routes are cleanly organised by domain (`/auth`, `/vps`, `/deploy`, `/deployments`, `/monitoring`, `/terminal`, `/webhooks`, `/admin`). Schemas are defined with Zod at the top of each route file and parsed early. HTTP verbs are correctly assigned (GET/POST/PATCH/DELETE). Status codes are largely correct.
+
+### Validation
+
+Zod schemas are thorough. Input sanitisation (hostname patterns, UUID format, file name safety, proto-pollution check in `preValidation`) is present and correct. The proto-pollution guard in `app.ts` is a nice defensive touch.
+
+### Issues Found
+
+**`request.user` typed as `any`** — The `authGuard` plugin sets `request.user` as `any`. Every downstream route handler receives an untyped user object. A typed `AuthenticatedUser` interface should be declared and threaded through the Fastify request generic.
+
+**Unsafe `as any` casts on `fastify`** — See architecture section. This is repeated in every route file (15+ occurrences).
+
+**`VPSService.getVpsAuth` passes raw secrets via `getVpsAuth(vps: any)`** — The `vps` argument is untyped (`any`). If a field is missing (e.g., `encryptedPrivateKey` is null and `authType` is `key`), the call `this.decrypt(vps.encryptedPrivateKey!)` will throw a runtime error with a misleading message rather than a clean validation error.
+
+**Deployment log WebSocket uses polling** — `deploy.ts` WebSocket handler polls the database every 1,500 ms with `setInterval`. This generates continuous DB load when users watch deployments. A proper event-driven approach using Postgres LISTEN/NOTIFY or Redis pub/sub would be far more efficient.
+
+**File upload directory not cleaned on partial failure** — In `readUploadMultipart`, if the pipeline to `fs.createWriteStream` fails midway, the temp directory is created but never cleaned. A `finally` block is missing.
+
+**`projectFromRepository` creates or updates a project as a side effect of a deployment** — This is hidden mutation inside a helper called during a GET-equivalent lookup. Creating resources during what appears to be a read is surprising and violates the principle of least astonishment.
+
+**Missing input size limit on `env` field** — The `env` field in `githubDeploySchema` is `z.record(z.string()).optional()`. There is no limit on the number of keys or the length of values. An attacker could inject very large environment variable payloads.
+
+**Admin login brute-force counting not atomic** — The admin lockout logic in `admin.ts` reads `attempts`, checks, then updates. Under concurrent requests this is a TOCTOU race (two simultaneous logins could both read `attempts=4` and both succeed before either write increments to 5).
+
+**`refreshSchema` validates token format but the refresh token in the database is stored as a SHA-256 hash** — The raw 80-character token is correctly not stored in the DB (only its SHA-256 hash is). However, the token is passed in the HTTP body in plain text. If HTTPS is not enforced (which it isn't in development), this token is exposed in transit.
+
+**No server-side session invalidation on password change** — `AccountService.resetPassword` changes the password but does not revoke active sessions. An attacker who has already obtained a valid session token retains access after the victim resets their password.
+
+**`TokenService.generateRefreshToken` exists but is never called** — A JWT-based refresh token generator is present in `packages/security/src/tokens.ts` but the actual system uses random bytes stored hashed in the DB. The JWT-based generator is dead code that could confuse future developers.
 
 ---
 
-### CRIT-4: Four Workspace Packages Are Completely Empty
-- **Severity:** CRITICAL — Build Failure
-- **Files:**
-  - `packages/auth/` — contains only `.gitignore`
-  - `packages/deployment/` — contains only `.gitignore`
-  - `packages/github/` — contains only `.gitignore`
-  - `packages/monitoring/` — contains only `.gitignore`
-- **Root Cause:** These packages are declared in `pnpm-workspace.yaml` but have no `package.json`, no source files, and no exports. They are referenced in `docs/REPOSITORY_STRUCTURE.md` as active packages.
-- **Impact:** Any build pipeline or CI step that attempts to resolve these workspace packages will fail. The repository structure documentation misleads contributors.
-- **Recommended Fix:** Either implement the packages (moving relevant code from `apps/api/src/services/` into them) or remove their directories and workspace declarations.
+## 3. Frontend Review
+
+### Architecture
+
+The Next.js App Router is used correctly with route groups `(public)`, `(app)`, and `(admin)`. The `middleware.ts` provides route protection at the edge. Zustand is used for auth state (simple and appropriate). The API client (`lib/api/client.ts`) is well-structured with centralised CSRF handling and auto-retry on 401.
+
+### Issues Found
+
+**Frontend middleware trusts cookie existence, not validity** — `middleware.ts` checks `request.cookies.get('accessToken')?.value` for authentication. It does not validate the JWT. An expired or tampered token will pass the middleware check and the user will reach the protected page only to get a 401 on the first API call. The UX is correct (redirect to login after the retry fails), but the first page render may flash protected content momentarily before the redirect.
+
+**`console.debug` leaks in production** — `lib/api/client.ts` calls `console.debug` on every request and response. In production, these logs are visible in the browser DevTools and leak internal API path structure to any observer. They should be guarded by an `isDev` flag.
+
+**`console.error` on API errors** — Same file logs `[api:error]` to the console including the error message and context. In production this will surface internal error details in browser logs.
+
+**Auth state is client-only** — The `useAuthStore` Zustand store is initialised with `hasHydrated: true` and `user: null`. There is no server-side session hydration. The first render is always unauthenticated even if a valid cookie exists, causing a flash of unauthenticated content on protected pages before the client-side auth check fires.
+
+**No loading/skeleton states verified across pages** — While `SystemFallbacks.tsx` and error boundaries exist, individual page components were not audited for consistent loading states. The VPS page, deployments list, and monitoring page all make API calls on mount; without loading skeletons, users may see empty tables briefly.
+
+**Error display inconsistency** — `errorParser.ts` exists, but its usage across page components was not uniform in the reviewed files. Some `catch` blocks appear to ignore errors silently.
+
+**No accessibility review** — No ARIA labels, roles, or keyboard navigation patterns were observed in the reviewed components. This is a gap for production SaaS.
 
 ---
 
-## HIGH ISSUES
+## 4. Security Audit
 
-### HIGH-1: Account Enumeration via `forgotPassword`
-- **Severity:** HIGH
-- **File:** `apps/api/src/services/account.service.ts` line 150
-- **Root Cause:**
-  ```typescript
-  if (!user) {
-    throw publicError('User not found', 404);
-  }
-  ```
-  The forgot-password endpoint returns a `404` with "User not found" when the email does not exist. An attacker can enumerate every registered email address by sending password reset requests and observing whether they get a 200 or 404.
-- **Impact:** User privacy breach; enables targeted phishing.
-- **Recommended Fix:** Always return HTTP 200 with a generic message regardless of whether the account exists:
-  ```typescript
-  if (!user) return; // silently succeed
-  ```
-  The route already returns `{ message: 'If the account exists, a reset link has been sent.' }` — the service must match that contract.
+**Overall Security Rating: 7.5 / 10**
 
----
+### Strong Points
 
-### HIGH-2: Duplicate Route Registrations (Route Conflict)
-- **Severity:** HIGH — Operational / Logic Error
-- **Files:** `apps/api/src/routes/deploy.ts` and `apps/api/src/routes/deployments.ts`
-- **Root Cause:** Both route files are registered at different prefixes (`/api/deploy` and `/api/deployments`), but they expose the same functionality with different URL shapes:
-  - `POST /api/deploy/:id/stop` ↔ `POST /api/deployments/:id/stop`
-  - `POST /api/deploy/:id/start` ↔ `POST /api/deployments/:id/start`
-  - `POST /api/deploy/rollback/:id` ↔ `POST /api/deployments/:id/rollback`
-  - `GET /api/deploy/list` ↔ `GET /api/deployments/`
-  The `/api/deploy` routes also duplicate `/api/deployments` with different ownership check patterns in some cases.
-- **Impact:** Frontend and API clients are confused about the canonical URL. Any inconsistency in business logic between the two copies creates divergent behavior. Maintenance burden doubles.
-- **Recommended Fix:** Consolidate into a single route set under `/api/deployments`. Remove `/api/deploy` or make it redirect.
+- Argon2id password hashing with hardened parameters (memory=65536, time=3, parallelism=4)
+- Timing-safe equality checks (`timingSafeEqualString`) used consistently for token comparison
+- AES-256-GCM with random 12-byte IVs for SSH credential encryption
+- OTP stored as SHA-256 hash — never returned from API
+- Refresh token stored as SHA-256 hash — never stored in plaintext
+- Refresh token replay detection with full session revocation on replay
+- Proto-pollution guard in `preValidation` hook
+- Custom CSRF implementation using HMAC-SHA256 double-submit cookie pattern
+- Prototype-safe `shellQuote` and `shellPath` functions used consistently in all shell command construction
+- Secure archive extraction using Python3 with path traversal checks
+- Helmet configured with strict CSP, HSTS, X-Frame-Options: deny
+- CORS locked to `config.app.appUrl` and `config.app.apiUrl` in production
+- GitHub webhook HMAC-SHA256 signature verified using timing-safe comparison
+- Webhook replay protection via unique delivery ID (`x-github-delivery`) as DB primary key
+- Admin sessions have a separate JWT secret and token hash is validated per-request against DB
 
----
+### Critical Issues
 
-### HIGH-3: No Next.js `middleware.ts` — Frontend Route Protection Is Client-Side Only
-- **Severity:** HIGH
-- **File:** `apps/web/` — file does not exist
-- **Root Cause:** The dashboard and all authenticated app routes are guarded only by a client-side `useEffect` in `(app)/layout.tsx`:
-  ```tsx
-  React.useEffect(() => {
-    if (!hasHydrated) return;
-    if (!token) router.replace('/');
-  }, [hasHydrated, router, token]);
-  ```
-  There is no server-side `middleware.ts` to enforce authentication before rendering. Next.js renders the full page on the server (or sends the JS bundle) before the client-side guard fires.
-- **Impact:** The dashboard HTML and data are briefly rendered before redirect on unauthorized access. Sensitive page content (deployment names, VPS IPs from SSR data fetches) could be exposed before the redirect fires.
-- **Recommended Fix:** Create `apps/web/middleware.ts` to check for the `accessToken` cookie and redirect unauthenticated users server-side before any page renders.
+**🔴 No server-side session revocation on password reset**
 
----
+`AccountService.resetPassword` updates the password hash but does NOT call `revokeAllSessions`. An attacker who captures a valid access token (15-minute window) or refresh token (7 days) retains full access after the victim resets their password.
 
-### HIGH-4: Redis Exposed on Public Port in Docker Compose
-- **Severity:** HIGH
-- **File:** `docker-compose.yml` lines 17–18
-- **Root Cause:**
-  ```yaml
-  ports:
-    - "6379:6379"
-  ```
-  Redis is bound to all host interfaces with no authentication configured. Any process on the host (or network if the host is internet-accessible) can connect to Redis.
-- **Impact:** Redis holds active session replay-protection data, admin lockout state, and refresh-token rotation cache. An attacker who can reach Redis can clear lockout counters, forge cache entries, or dump cached data.
-- **Recommended Fix:** Remove the ports mapping for Redis in production. Use Docker's internal network only. If external access is needed, add `requirepass` to the Redis config and update `REDIS_URL`.
+```ts
+// Missing in AccountService.resetPassword:
+await prisma.session.deleteMany({ where: { userId } });
+```
 
----
+**🔴 GitHub OAuth access token stored encrypted but never rotated**
 
-### HIGH-5: Docker Containers Run as Root
-- **Severity:** HIGH
-- **Files:** `docker/api.Dockerfile`, `docker/web.Dockerfile`
-- **Root Cause:** Neither Dockerfile creates a non-root user. The application process runs as `root` inside the container.
-- **Impact:** A container escape or RCE vulnerability runs with full root privileges.
-- **Recommended Fix:**
-  ```dockerfile
-  RUN addgroup -S deployforge && adduser -S deployforge -G deployforge
-  USER deployforge
-  ```
+`GitHubAccount.accessToken` stores the OAuth token encrypted. GitHub OAuth tokens are long-lived (unless using fine-grained tokens or expiring ones). If the encryption key is compromised or if the token is decrypted for each deployment (which it is), there is no rotation mechanism. A compromised token gives read/write access to the user's entire GitHub account.
 
----
+**🔴 Access token injected into git clone URL in plaintext on remote server**
 
-### HIGH-6: Admin Logs Page Linked in Sidebar But Does Not Exist
-- **Severity:** HIGH — Runtime 404
-- **File:** `apps/web/components/admin/AdminShell.tsx` line 21
-- **Root Cause:**
-  ```typescript
-  { href: '/admin/logs', label: 'Logs', icon: ListFilter },
-  ```
-  The admin sidebar links to `/admin/logs`, but there is no `apps/web/app/(admin)/admin/logs/page.tsx`. This route returns a Next.js 404 in production.
-- **Impact:** Admins cannot access the logs view; the link is dead.
-- **Recommended Fix:** Create the page or remove the nav item.
+In `prepareGithubSource`:
 
----
+```ts
+const repoUrl = repositoryUrl.replace(/^https:\/\//, `https://${encodeURIComponent(source.accessToken)}@`);
+await this.run(ssh, ... `git clone ... ${shellQuote(repoUrl)} ${shellQuote(workDir)}`);
+```
 
-### HIGH-7: Production CORS Also Blocks Cookie-Credentialed Requests from Real Domains
-*(See CRIT-1 for full details — noted here for emphasis on the credentials impact.)*
+The GitHub access token is embedded in the git clone URL. This is logged by git itself in `.git/config` on the remote server, and may appear in shell history, process listings (`ps aux`), or SSH server logs. The token should be injected via `GIT_ASKPASS` or a git credentials helper, not as a URL component.
 
----
+**🔴 Environment variables written to `.env.deployforge` in the working directory on remote server**
 
-## MEDIUM ISSUES
+`injectEnvironment` writes a `.env.deployforge` file to the deployment working directory. This file contains all plaintext secrets. It is world-readable unless the directory permissions are locked. The function does `chmod 600` but only on the file, not the parent directory. Any other process running as the same user on the VPS can read it.
 
-### MED-1: `AdminActivity` Schema References Both `timestamp` and `createdAt` (Redundancy)
-- **Severity:** MEDIUM
-- **File:** `prisma/schema.prisma` — `AdminActivity` model
-- **Root Cause:** The model has both `timestamp DateTime @default(now())` and `createdAt DateTime @default(now())`. Both auto-populate with `now()`. The admin logs query uses `timestamp` for ordering but indexes both, creating duplicate data and index overhead.
-- **Recommended Fix:** Remove `timestamp`; use `createdAt` consistently.
+### High Issues
 
----
+**🟠 CSRF cookie is not `HttpOnly`**
 
-### MED-2: `VPSAuthType` Enum Has Redundant `ssh_key` Value
-- **Severity:** MEDIUM
-- **File:** `prisma/schema.prisma`, `apps/api/src/routes/vps.ts`
-- **Root Cause:** The enum is `{ key, password, ssh_key }`. In `vps.ts`, `ssh_key` is immediately transformed to `key`:
-  ```typescript
-  authType: z.enum(['password', 'key', 'ssh_key']).transform((value) => (value === 'ssh_key' ? 'key' : value)),
-  ```
-  The `ssh_key` value should never reach the database, but it remains in the enum definition, causing confusion.
-- **Recommended Fix:** Remove `ssh_key` from the `VPSAuthType` enum; handle the alias only at the API layer.
+The CSRF token cookie is set without `httpOnly: true`:
+
+```ts
+reply.header('Set-Cookie', cookie(csrfCookieName, token, 60 * 60 * 8));
+```
+
+The `cookie()` utility defaults `httpOnly` to false when not specified. A CSRF token must be readable by JavaScript (by design for double-submit), but it still needs to be protected from exfiltration by untrusted scripts if the site uses any third-party scripts. This is an accepted trade-off, but should be explicitly documented.
+
+**🟠 `SameSite=None; Secure` in production but cookies shared across domains**
+
+The access and refresh token cookies use `SameSite=None; Secure` in production (from `cookie()` utility). This is required for cross-site requests but means the tokens will be sent on all cross-origin requests to the API domain, not just from the frontend. This is correct for the intended architecture but requires that the CORS origin restriction and CSRF are functioning correctly — any CORS misconfiguration would immediately expose the session tokens.
+
+**🟠 Admin bootstrap secret is printed in logs on each startup**
+
+`validateOAuthConfig` logs `clientIdConfigured: Boolean(...)` on startup. This is fine. However, admin creation requires sending `ADMIN_SECRET` in the request body (`createAdminSchema`). If the admin creation endpoint is called incorrectly, the Fastify logger may log the request body including the plain-text secret.
+
+**🟠 No brute-force protection on OTP verification beyond 5 attempts**
+
+`verifyOTP` increments an `attempts` counter and rejects after 5 attempts. However, an attacker who knows the email could:
+
+1. Trigger OTP (registers a new OTP token, resets attempts to 0)
+2. Try 5 guesses (exhausts attempts)
+3. Trigger OTP again — attempts resets to 0 on `upsert`
+4. Repeat indefinitely
+
+There is no cooldown or exponential back-off between OTP requests. The route does have a per-IP rate limit of 10/minute, but IP rotation would bypass this.
+
+**🟠 `console.debug` / `console.error` in production browser build**
+
+See Frontend section. These logs leak internal path and error information.
+
+**🟠 Missing `Secure` flag check in dev for cookies**
+
+In development, cookies are set without `Secure`. This is correct, but if the dev server is accidentally exposed on a non-TLS network, tokens are transmitted in plaintext.
+
+### Medium Issues
+
+**🟡 Session not updated on user role change**
+
+If an admin changes a user's role via the admin panel, the JWT access token already issued still contains the old role for its remaining 15-minute lifetime. The `authGuard` re-fetches the user from the database on every request, so role changes take effect immediately for the user record check. However, if the role is stored in the JWT and trusted without re-fetching, this becomes a privilege escalation vector. Currently the code re-fetches the user, so the risk is mitigated — but the JWT payload carries a stale role value that could be misleading.
+
+**🟡 `GitHubAccount.accessToken` is decrypted on every deployment**
+
+Every deployment decrypts the stored GitHub access token. There is no in-memory caching with a TTL. For high-frequency deployments, this results in repeated calls to `EncryptionService.decrypt`, which is safe but creates unnecessary overhead.
+
+**🟡 `WebhookEvent` payload stored in DB without size check at Prisma layer**
+
+The webhook handler already enforces a 1MB payload check, and `HardeningService.limitWebhookPayload` presumably truncates further. This is good. However, the `payload` field in `WebhookEvent` is a plain `String` with no max-length in the Prisma schema. If `limitWebhookPayload` is bypassed or misconfigured, large payloads could fill storage.
 
 ---
 
-### MED-3: `User.provider` (String) Duplicates `User.authProvider` (Enum)
-- **Severity:** MEDIUM
-- **File:** `prisma/schema.prisma` — `User` model lines 146–147
-- **Root Cause:** The User model has both `provider String @default("email")` and `authProvider AuthProvider @default(local)`. These carry the same semantic information in different types. Code must be kept in sync across both fields.
-- **Recommended Fix:** Remove `provider`; use `authProvider` exclusively.
+## 5. Database Review
+
+### Schema Quality
+
+The Prisma schema is well-organised. Models use UUID primary keys (`@id @default(uuid())`), except `Session`, `VPSHealth`, `Project`, `RefreshTokenReplay`, and several token models which use `cuid()`. This mix of `uuid()` and `cuid()` is inconsistent — it should be standardised.
+
+### Indexing
+
+Indexing is generally excellent. Most foreign keys, filter columns, and timestamp columns are indexed. Composite indexes for common query patterns (e.g. `[userId, status]`, `[userId, status, createdAt]`) are present.
+
+### Issues Found
+
+**🟡 `GitHubAccount.accessToken` is `String` (required, no max-length)**
+
+The GitHub OAuth access token is stored here encrypted. The encrypted format is `${iv}:${tag}:${content}`. There is no max-length constraint. If the encryption output grows unexpectedly, this field accepts it silently.
+
+**🟡 `Deployment.env` is a `String?` with no max-length**
+
+Encrypted environment variables are stored as a single concatenated string. Very large env payloads (thousands of keys) could create very large strings in this column. A reasonable max (e.g. 64KB) should be enforced at the application layer.
+
+**🟡 `TerminalCommandLog.command` and `.output` are `String?` with no length limit**
+
+Terminal output could be enormous (e.g. `cat /large_file`). These fields are unbounded. Truncation should happen before persisting.
+
+**🟡 `AuditLog.details` is a `String` with no length limit**
+
+Audit log messages could be arbitrarily long. A TEXT column with no constraint is fine for PostgreSQL, but it should be explicitly capped at the application layer to prevent abuse.
+
+**🟡 `WebhookEvent.payload` — same concern as audit log**
+
+**🟡 N+1 risk in deployment status GET**
+
+`DeploymentService.getStatus` includes `deploymentLogs: { take: 25, orderBy: { createdAt: 'desc' } }` and `history: { take: 5 }`. These are eager-loaded in a single query via Prisma include, which is correct. However, if this endpoint is called in a list context (e.g. listing all deployments and getting status for each), N+1 queries would result. The list endpoints do not appear to call `getStatus` in a loop, so this risk is not currently realised, but the pattern warrants attention.
+
+**🟡 `RefreshTokenReplay` cleanup is in-band**
+
+After each token rotation, expired replay records are deleted synchronously:
+
+```ts
+await prisma.refreshTokenReplay.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+```
+
+Under high load, this adds an extra DB write to every token refresh. This cleanup should be a scheduled job or background process.
+
+**🟢 Missing `@@map` annotations**
+
+The Prisma models do not use `@@map` to control the underlying table names. Models like `VPS` will map to `VPS` in the DB (all caps), which is unconventional for PostgreSQL. PostgreSQL table names are case-insensitive but this could cause confusion.
+
+**🟢 `User.email` is `String?` (optional) but `@unique`**
+
+A nullable unique field is a PostgreSQL anti-pattern. Null values are not considered equal in a unique constraint, so multiple rows with `email = null` are allowed. This is intentional (OAuth-only users may not have an email), but should be documented.
 
 ---
 
-### MED-4: `packages/security/src/tokens.ts` Exports Unused `generateRefreshToken`
-- **Severity:** MEDIUM
-- **File:** `packages/security/src/tokens.ts`
-- **Root Cause:** `TokenService.generateRefreshToken` is defined and exported but never called anywhere in the codebase. Refresh tokens are generated with `crypto.randomBytes(40).toString('hex')` directly in `auth.service.ts`. The JWT-based refresh token method is dead code that creates confusion about which approach is authoritative.
-- **Recommended Fix:** Remove `generateRefreshToken` from `TokenService`.
+## 6. DevOps Review
+
+### Docker & Compose
+
+The Dockerfiles use multi-stage builds correctly (base → deps → builder → prod-deps → runner). Both API and web Dockerfiles run as the non-root `node` user. Images are `--read-only` with `tmpfs` mounts for writeable directories. `no-new-privileges` and `cap_drop: ALL` are applied in Compose.
+
+The `docker-compose.yml` uses named volumes for Postgres and Redis data persistence. Health checks are defined for all services with appropriate intervals and start periods. `depends_on` with `condition: service_healthy` correctly delays API startup until Postgres and Redis are ready.
+
+### Issues Found
+
+**🔴 Port mismatch between Dockerfile and docker-compose.yml**
+
+`docker/api.Dockerfile` exposes port 4000 and the healthcheck uses port 4000:
+
+```dockerfile
+EXPOSE 4000
+HEALTHCHECK ... CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/live')"
+```
+
+But `docker-compose.yml` maps `${API_PORT:-3001}:${PORT:-3001}` and sets `PORT: ${PORT:-3001}` in the environment. The Dockerfile's default and the Compose default disagree. If `PORT` is not explicitly set, the container listens on 3001 but the Dockerfile's `EXPOSE` declares 4000. This discrepancy is confusing and could cause health check failures if `PORT` is not set.
+
+**🟠 No GitHub Actions CI/CD pipeline**
+
+There is no `.github/` directory. There are no automated test, lint, typecheck, or Docker build workflows. Every change must be manually tested. This is a significant gap for a project claiming production readiness.
+
+**🟠 Redis has no authentication configured**
+
+The `redis` service in `docker-compose.yml` uses no password:
+
+```yaml
+command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+```
+
+Redis is on the internal network only (`deployforge_internal`), which mitigates exposure. But if any container on that network is compromised, Redis is fully open. A `--requirepass` option should be configured.
+
+**🟠 No Nginx reverse proxy in Compose**
+
+There is no Nginx or Caddy reverse proxy in the Compose stack for TLS termination. The API and web services expose their ports directly. In production, TLS must be terminated somewhere. The documentation may cover this, but it is not part of the deployable `docker-compose.yml`.
+
+**🟠 `read_only: true` on API container conflicts with `/tmp` tmpfs but not `/tmp/deployforge`**
+
+The API uses `/tmp/deployforge/` as a workspace for uploaded archives. The Compose file mounts `/tmp` as tmpfs, which means `/tmp/deployforge` is writable. This is correct. However, the `--read-only` flag plus only a `/tmp` tmpfs means the API container cannot write to any other directory. If any library or runtime (e.g., Prisma, pino) tries to write outside `/tmp`, it will fail silently or loudly. The current tmpfs configuration appears sufficient, but it should be explicitly tested.
+
+**🟢 Postgres and Redis data are in named volumes — good**
+
+Data is not stored in bind mounts, avoiding UID conflicts.
+
+**🟢 Healthchecks are present and well-configured — good**
 
 ---
 
-### MED-5: Admin Date Filtering Allows Unsanitized String → `new Date()`
-- **Severity:** MEDIUM
-- **File:** `apps/api/src/routes/admin.ts` line 502
-- **Root Cause:**
-  ```typescript
-  const createdAt = {
-    ...(query.from ? { gte: new Date(query.from) } : {}),
-    ...(query.to ? { lte: new Date(query.to) } : {}),
-  };
-  ```
-  The `from` and `to` query parameters are parsed with Zod as optional strings but not validated as actual dates before being passed to `new Date()`. An invalid string like `"invalid"` produces `Invalid Date`, which Prisma may silently ignore or throw on.
-- **Recommended Fix:** Use `z.string().datetime()` or `z.coerce.date()` for these query parameters.
+## 7. Performance Review
+
+### What's Good
+
+- BullMQ queue with Redis for async deployment execution — correct use of job queues
+- Concurrent deployments limited to 5 (`concurrency: 5` in worker)
+- Build caching on remote VPS (dependency cache, Docker layer caching via image tagging)
+- Argon2id parameters are balanced (not excessively slow for a web service)
+- `@fastify/rate-limit` applied globally and overridden per-route for sensitive paths
+- Prisma `select` clauses used in `authGuard` to avoid fetching unnecessary columns
+
+### Issues Found
+
+**🟠 WebSocket log polling every 1,500ms hits DB on every tick**
+
+The deployment log WebSocket handler polls `deploymentLog` every 1.5 seconds using `setInterval`. With many concurrent deployments being watched, this results in N × (deployment count) queries per 1.5s. Postgres LISTEN/NOTIFY or Redis pub/sub would eliminate this polling entirely.
+
+**🟠 `getRemoteUsedPorts` opens a new SSH connection on every `getAvailablePort` call**
+
+During deployment, `getRemoteUsedPorts` opens a fresh SSH connection to the target VPS:
+
+```ts
+const ssh = new SSHService();
+await ssh.connect(...);
+// execute, then disconnect
+```
+
+Port allocation already opens an SSH connection during the deployment flow. Opening a second connection purely to check used ports is wasteful. This operation should reuse the existing SSH session.
+
+**🟠 `authGuard` performs a DB query on every authenticated request**
+
+The guard fetches the user from the database on every request, including for the `sessionId` lookup. This is correct for security (session revocation) but adds latency. A short-TTL Redis cache keyed by `sessionId` would reduce DB load significantly.
+
+**🟡 No pagination on `getStatus` deploymentLogs**
+
+The `getStatus` endpoint fetches the last 25 deployment logs. For long-running deployments, 25 may be insufficient (the WebSocket stream should be used for real-time). But the REST endpoint is not paginated, making it brittle.
+
+**🟡 `prisma.refreshTokenReplay.deleteMany` on every token refresh (see DB section)**
 
 ---
 
-### MED-6: `console.info` / `console.error` Used in Production Code Instead of Structured Logger
-- **Severity:** MEDIUM
-- **Files:** `apps/api/src/services/github.service.ts`, `apps/api/src/services/vps.service.ts`, `apps/api/src/services/deployment.service.ts`
-- **Root Cause:** Several services use raw `console.info` / `console.error` instead of the Fastify/Pino logger that the app configures. These bypass log level filtering and structured JSON output.
-- **Recommended Fix:** Inject or import the Fastify logger. Use `fastify.log.info(...)` consistently.
+## 8. Code Quality
+
+### What's Good
+
+- Consistent naming conventions throughout (camelCase for TS, snake_case for Prisma fields that match PG conventions)
+- Zod schemas at the top of each route file, named clearly
+- Helper functions (`shellQuote`, `shellPath`, `sanitizeName`, `safeExtractCommand`) are pure and well-named
+- Error classes (`DeploymentError`, `VPSConnectionFailure`) extend `Error` with typed fields
+- `timingSafeEqualString` is used correctly and consistently
+
+### Issues Found
+
+**🟠 `fastify as any` cast repeated in every route file (15+ files)**
+
+This is the most pervasive code quality issue. The TypeScript types for decorated Fastify properties are declared correctly in `plugins/auth.ts`, but every route still casts to bypass them. The fix is to properly import and use the `FastifyInstance` type with the augmented declarations.
+
+**🟡 `deployment.service.ts` is ~1,000 lines — a God class**
+
+This should be decomposed into:
+- `SshCommandRunner` — wraps SSH command execution and logging
+- `NginxConfigurator` — Nginx config generation
+- `DockerLifecycleManager` — container create/start/stop/remove
+- `BuildCacheManager` — dependency and build caching
+- `DeploymentOrchestrator` — top-level coordination
+
+**🟡 `TokenService.generateRefreshToken` is dead code**
+
+The refresh token in the actual system is `crypto.randomBytes(40).toString('hex')`, not a JWT. The `generateRefreshToken` method in `TokenService` is never called and should be removed.
+
+**🟡 Magic numbers throughout deployment service**
+
+- `15` (health check retries), `2` (seconds between retries), `8000` (log output truncation), `120` (container log lines), `3000-9000` (port range) are all hardcoded inline. These should be named constants.
+
+**🟡 `(request as any).rawBody` in webhooks route**
+
+The `rawBody` is attached to the request by the custom content-type parser in `app.ts` using `(request as any).rawBody = body`. This `any` cast is necessary because Fastify's request type doesn't have `rawBody`. A proper type augmentation (`declare module 'fastify' { interface FastifyRequest { rawBody?: string } }`) would eliminate this cast.
+
+**🟢 `safeExtractCommand` uses Python3 for safe archive extraction — good security practice**
 
 ---
 
-### MED-7: WebSocket Log Polling Is Inefficient (1.5s Interval with DB Query)
-- **Severity:** MEDIUM
-- **Files:** `apps/api/src/routes/deploy.ts` line ~230, `apps/api/src/routes/ws.ts`
-- **Root Cause:** Log streaming is implemented via `setInterval` polling the database every 1,500ms per active WebSocket connection. With N concurrent deployments, this means N × 1 DB query per 1.5s. Under moderate load this degrades database performance significantly.
-- **Recommended Fix:** Use a Redis pub/sub channel or a BullMQ event emitter to push log events to subscribers. Replace polling with push delivery.
+## 9. Error Handling
+
+### What's Good
+
+The global error handler in `app.ts` is well-implemented:
+- Maps Zod errors to 400
+- Sanitises 500 errors to hide internal details (`exposesSensitiveInternals` regex check)
+- Consistent response shape `{ success: false, error: { code, message } }`
+- Sensitive keywords (`prisma`, `sql`, `jwt`, `secret`, `environment`, `env`, `stack`) are detected and masked
+
+### Issues Found
+
+**🟠 `sendVpsError` in `vps.ts` leaks raw error messages at 500-level**
+
+```ts
+const message = error instanceof Error ? error.message : 'VPS request failed';
+return reply.status(500).send({ success: false, error: { code: 'VPS_ERROR', message } });
+```
+
+The global error handler masks 500-level messages, but `sendVpsError` sends the raw `error.message` for any non-`VPSConnectionFailure`, non-Zod error. This is inconsistent with the global error handler and could expose internal implementation details (Prisma error messages, Node.js internal errors) to clients.
+
+**🟡 `webhooks.ts` error handler sends `err.message` on 500**
+
+```ts
+return reply.status(err instanceof z.ZodError ? 400 : 500).send({
+  ...
+  message: err.message || 'Webhook processing failed'
+});
+```
+
+Same issue — 500-level responses should return a generic message, not `err.message`.
+
+**🟡 `sendDeploymentError` leaks error messages for non-500 errors correctly, but inconsistently**
+
+```ts
+const status = err instanceof DeploymentError ? ... : 500;
+message: status >= 500 ? 'Internal Server Error' : err.message,
+```
+
+This is mostly correct, but the stage information (`stage: err?.stage || 'request'`) is always exposed, even for 500 errors. The stage field is useful for debugging but not for clients.
+
+**🟡 Auth service error for suspended/unverified users is same as wrong-password**
+
+By design, the login function returns `genericAuthError()` (401 "Invalid email or password") for suspended accounts and unverified accounts. This is correct for security (user enumeration), but means users with suspended accounts or unverified email will see a confusing "Invalid email or password" message with no guidance.
 
 ---
 
-### MED-8: Sandbox Cleanup Is Not Time-Bounded or Guaranteed
-- **Severity:** MEDIUM
-- **File:** `apps/api/src/workers/deployment.worker.ts`
-- **Root Cause:** The `sandbox-cleanup` job exists in the worker but there is no code that schedules it. Sandbox deployments are `mode: 'sandbox'` but there is no TTL job queued after the sandbox run completes. Sandbox containers and their VPS resources persist indefinitely unless manually deleted.
-- **Recommended Fix:** After a sandbox deployment completes, enqueue a `sandbox-cleanup` BullMQ job with a delay (e.g., 1 hour).
+## 10. API Review
+
+### Endpoint Inventory
+
+| Method | Path | Auth | Rate Limit | Notes |
+|--------|------|------|-----------|-------|
+| GET | /auth/csrf | None | 60/min | Correct |
+| POST | /auth/register | None | 10/min | Correct |
+| POST | /auth/verify-otp | None | 10/min | Correct |
+| POST | /auth/login | None | 10/min | Correct |
+| POST | /auth/refresh | None | 10/min | Correct |
+| POST | /auth/logout | None | 10/min | Correct |
+| GET | /auth/me | JWT | 30/min | Correct |
+| POST | /auth/forgot-password | None | 10/min | Correct |
+| POST | /auth/reset-password | None | 10/min | Correct |
+| POST | /vps/add | JWT | 8/10min | Correct |
+| POST | /vps/test-connection | JWT | 8/10min | Correct |
+| GET | /vps/list | JWT | 30/min | Correct |
+| GET | /vps/:id | JWT | 30/min | Correct |
+| PATCH | /vps/:id | JWT | 8/10min | Correct |
+| DELETE | /vps/:id | JWT | 5/min | Correct |
+| POST | /deploy/github | JWT | 5/min | Correct |
+| POST | /deploy/upload | JWT | 5/min | Correct |
+| POST | /deploy/:id/stop | JWT | 5/min | Correct |
+| POST | /deploy/:id/start | JWT | 5/min | Correct |
+| POST | /deploy/rollback/:id | JWT | 5/min | Correct |
+| WS | /deploy/ws/:id | JWT query | — | Polling concern |
+| POST | /webhooks/github | None | 120/min | HMAC verified |
+| GET | /admin/* | Admin JWT | Various | Separate auth |
+| GET | /health, /live, /ready | None | None | Correct |
+
+### Issues Found
+
+**🟡 No API versioning** — All endpoints are unversioned. Adding a breaking change to any endpoint requires coordinating a simultaneous frontend deployment. `/api/v1/...` should be introduced from the start.
+
+**🟡 Webhook endpoint on `/api/webhooks/github` and `/webhooks/github`** — Due to double-registration, the webhook endpoint is reachable at two paths. The CSRF skip list only skips `/api/webhooks/github`. The `/webhooks/github` path (reachable directly, before the URL rewriter runs on it) is also in the skip list only because the rewriter adds `/api/` prefix. This is fragile.
+
+**🟡 Pagination is missing on most list endpoints** — `/vps/list`, `/deployments` (list), `/admin/users` presumably have no pagination limits enforced at the query level. A user or admin with 1,000 VPS entries would receive all of them in one response.
+
+**🟢 Per-route rate limit overrides are well-chosen** — SSH-related operations (8/10min), deployment (5/min), and read operations (30/min) are correctly differentiated.
 
 ---
 
-### MED-9: No `next.config.js` — Missing Security Headers for the Frontend
-- **Severity:** MEDIUM
-- **File:** `apps/web/` — file does not exist
-- **Root Cause:** There is no `next.config.js` in the web app. This means no Content Security Policy, no `X-Frame-Options`, no `X-Content-Type-Options`, and no `Referrer-Policy` headers are set on frontend responses.
-- **Recommended Fix:** Create `apps/web/next.config.js` with `headers()` exporting security headers.
+## 11. Production Readiness
+
+### Reliability
+
+Deployment failures have rollback mechanisms. The worker retries failed jobs (3 attempts, exponential back-off). Health checks are present on all services. The `assertLifecycleTransition` function prevents illegal state transitions.
+
+### Stability Concerns
+
+- No distributed locking on deployment jobs. Two simultaneous deployments for the same project could conflict on Nginx config, port allocation, and container naming.
+- The polling WebSocket for deployment logs creates unneeded DB load.
+- The `refreshTokenReplay` cleanup runs synchronously on every refresh.
+
+### Scalability
+
+- Single Redis instance, single Postgres instance — no clustering.
+- Worker concurrency is fixed at 5 — no auto-scaling.
+- No horizontal scaling plan for the API.
+
+### Monitoring
+
+No metrics collection (Prometheus, StatsD), no distributed tracing (OpenTelemetry), no structured alerting. The structured logs from Pino are a good foundation, but without a log aggregation system (Loki, Elasticsearch), they are not actionable in production.
+
+### Conclusion
+
+**The project is NOT safe to deploy to production as-is** due to the critical issues identified (session not revoked on password reset, access token in git clone URL, environment secrets written as plaintext to VPS working directory, Docker port mismatch). These must be fixed before any production deployment.
 
 ---
 
-### MED-10: `api.Dockerfile` Copies `node_modules` from Builder — Not a Clean Production Image
-- **Severity:** MEDIUM
-- **File:** `docker/api.Dockerfile`
-- **Root Cause:**
-  ```dockerfile
-  COPY --from=builder /app/node_modules ./node_modules
-  ```
-  This copies the full monorepo `node_modules` (including all dev dependencies) into the production image. The image will be unnecessarily large and include devDependencies.
-- **Recommended Fix:** Run `pnpm install --prod` or use `pnpm deploy` for a clean production install in the runner stage.
+## 12. Missing Features
+
+| Feature | Severity | Notes |
+|---------|---------|-------|
+| CI/CD pipeline (GitHub Actions) | 🔴 Critical | No automated testing, building, or deployment |
+| Distributed lock for concurrent deploys | 🔴 Critical | Same project deployed simultaneously → conflicts |
+| Session revocation on password reset | 🔴 Critical | Active sessions survive password change |
+| API versioning (`/v1/`) | 🟠 High | Necessary before any breaking API change |
+| Metrics endpoint (Prometheus/OpenTelemetry) | 🟠 High | No observability |
+| Pagination on all list endpoints | 🟠 High | Unbounded queries in production |
+| Redis authentication | 🟠 High | Redis is unauthenticated |
+| TLS termination in Compose | 🟠 High | No HTTPS out of the box |
+| Backup strategy for Postgres | 🟠 High | Named volume with no backup |
+| Git token injection via credential helper | 🔴 Critical | Token currently exposed in clone URL |
+| Scheduled cleanup for RefreshTokenReplay | 🟡 Medium | Currently synchronous per-request |
+| Structured alerting | 🟡 Medium | Logs exist but no alerts |
+| Admin brute-force atomicity | 🟡 Medium | TOCTOU race in login attempt counter |
+| OTP rate limiting with cooldown | 🟡 Medium | Attempts reset on each OTP request |
+| Request correlation IDs | 🟡 Medium | Log tracing across services |
+| E2E tests (real, not placeholder) | 🔴 Critical | Current E2E tests are all `expect(true).toBe(true)` |
+| Unit tests for all services | 🟠 High | Only 1 real unit test exists |
 
 ---
 
-## LOW ISSUES
+## 13. Testing Review
 
-### LOW-1: `packages/database/src/index.js` Duplicates `index.ts` (Committed Build Artifact)
-- **File:** `packages/database/src/index.js`, `packages/security/src/encryption.js`, `packages/security/src/index.js`, `packages/security/src/passwords.js`, `packages/security/src/tokens.js`, `packages/vps/src/index.js`, `packages/vps/src/ssh.js`, `packages/mail/src/index.js`
-- **Root Cause:** Compiled `.js` files have been committed alongside their TypeScript source files. These are build artifacts that should be in `.gitignore`.
-- **Recommended Fix:** Add `*.js` or `dist/` to the package-level `.gitignore`. Ensure these files are built, not committed.
+### Current State
 
----
+The test suite is essentially non-existent for a production system:
 
-### LOW-2: `VerificationToken` Model Uses `email` as the Unique Key (Not `userId`)
-- **File:** `prisma/schema.prisma` — `VerificationToken` model
-- **Root Cause:** The OTP verification token is keyed by `email` string, not a foreign key to `User`. If a user changes their email mid-flow, orphan tokens may accumulate.
-- **Recommended Fix:** Add a `userId` foreign key to `VerificationToken`.
+**`apps/api/src/__tests__/auth.test.ts`** — Contains 2 test cases. One actually exercises `sendOTP` with mocked dependencies (partial coverage). The second test case ("should verify a valid OTP") has no assertions — the body is empty.
 
----
+**`apps/api/src/__tests__/e2e.test.ts`** — Contains 5 test cases. **Every single one has `expect(true).toBe(true)` as its only assertion.** These are placeholder tests that always pass regardless of the state of the application. They provide zero test coverage.
 
-### LOW-3: Timing of OTP Expiry Check vs. Attempts Check (TOCTOU)
-- **File:** `apps/api/src/services/auth.service.ts` — `verifyOTP`
-- **Root Cause:** The code checks expiry first, then attempts:
-  ```typescript
-  if (new Date() > record.expiresAt) throw publicError('OTP expired...', 400);
-  if (record.attempts >= 5) throw publicError('Too many attempts...', 429);
-  ```
-  If an OTP is expired AND attempts are exhausted, the user receives "OTP expired" rather than "Too many attempts." This is a minor UX inconsistency, not exploitable.
+### Missing Coverage
 
----
+- No tests for `AuthService.login`, `AuthService.refresh`, `AuthService.logout`
+- No tests for `AuthService.register` (OTP flow, duplicate email)
+- No tests for `VPSService` (connection, health check)
+- No tests for `DeploymentService` (any method)
+- No tests for the CSRF plugin
+- No tests for the auth plugin
+- No tests for the global error handler
+- No tests for any route handler
+- No integration tests
+- No real E2E tests
+- No performance/load tests
+- Test coverage: **~0%** of meaningful business logic
 
-### LOW-4: `useAuthStore` Zustand Persist Stores Sensitive Data in `localStorage` Under a Known Key
-- **File:** `apps/web/lib/store/useAuthStore.ts`
-- **Root Cause:** The persist middleware uses the storage key `df-auth-storage`. Any browser extension or XSS script that knows this key name can read the entire auth state (user object, token, refreshToken) from `localStorage`.
-- **Recommended Fix:** Covered by CRIT-3. Eliminating `localStorage` usage resolves this entirely.
+### Recommendation
 
----
-
-### LOW-5: `docker-compose.yml` Uses Weak Default Postgres Credentials
-- **File:** `docker-compose.yml`
-- **Root Cause:** Default fallback values `postgres`/`postgres`/`deployforge` are set for database credentials.
-- **Recommended Fix:** Remove fallback defaults; require explicit environment variables.
+Before production deployment, at minimum:
+1. Unit test `AuthService` (register, login, refresh, OTP flow)
+2. Unit test CSRF token generation and validation
+3. Integration test auth routes (register → verify-otp → login → refresh → logout)
+4. Remove or replace all placeholder E2E tests
 
 ---
 
-### LOW-6: Admin `GET /settings` Leaks Internal Configuration Metadata
-- **File:** `apps/api/src/routes/admin.ts`
-- **Root Cause:** The `/api/admin/settings` endpoint returns internal config details including SMTP host, port, GitHub callback URL, Google OAuth status, Redis configuration status, and `appUrl`. While behind admin auth, it exposes operational details unnecessarily.
-- **Recommended Fix:** Limit to boolean flags (`smtpConfigured`, `githubConfigured`) rather than actual hostnames and URLs.
+## 14. Configuration Review
+
+### `package.json` (root)
+
+Dependencies are minimal and appropriate. `turbo` is `latest` — should be pinned for reproducibility.
+
+### `tsconfig.json`
+
+Not reviewed in full, but TypeScript `strict: true` is presumably enabled (the codebase uses type assertions to bypass strict checks, which suggests strict mode is active but is being worked around).
+
+### `.env.example`
+
+Complete, well-commented, and includes all required variables. Placeholder values use the `replace_with_` prefix which the env validator correctly rejects.
+
+### `turbo.json`
+
+Minimal and correct. Build pipeline dependencies are correctly expressed.
+
+### `apps/web/.eslintrc.json`
+
+Not reviewed (likely Next.js defaults). No custom ESLint rules for security patterns.
+
+### Missing Configurations
+
+- No `.eslintrc` at the monorepo root enforcing consistent rules across all packages
+- No Prettier configuration
+- No `vitest.config.ts` in the API package (tests apparently run without explicit configuration)
+- No `CODEOWNERS` file
+- No Dependabot or Renovate configuration for automated dependency updates
 
 ---
 
-## CODE QUALITY ISSUES
+## 15. Bug Detection
 
-1. **Dead code — `generateRefreshToken` in `TokenService`:** Never used; remove it.
-2. **`parseCookies` implemented twice:** Both `apps/api/src/routes/auth.ts` and `apps/api/src/plugins/auth.ts` contain identical `parseCookies` functions. Extract to a shared utility.
-3. **`deleteDeploymentCascade`, `deleteVpsCascade`, `deleteUserCascade` in `admin.ts`:** These large async cascade functions belong in a service layer, not in the route file.
-4. **`deployment.service.ts` is 1,806 lines:** This is a God class. The file handles GitHub cloning, file upload, Docker builds, Nginx static hosting, cache management, asset rewriting, sandbox analysis, and more. It needs to be split into focused services.
-5. **Inconsistent error handling patterns:** Some routes use `try/catch` with structured `sendDeploymentError`, others throw with `expose: true`, others return structured error objects directly. Standardize.
-6. **`console.info` / `console.error` in services:** Mix of structured Pino logging and raw console calls.
-7. **`maskDeployment` and `sanitizeDeployment` overlap:** `deployments.ts` defines `maskDeployment` which wraps `sanitizeDeployment` but also adds URL-generation logic. This should be a single well-named function.
+### 🔴 Critical Bugs
 
----
+**BUG-001: Dockerfile EXPOSE port mismatch (api.Dockerfile)**
 
-## SECURITY ISSUES
+`EXPOSE 4000` but runtime is `PORT=3001`. Health check in Dockerfile uses 4000, Compose uses 3001. This will cause the Dockerfile-level health check to always fail, and may confuse orchestrators.
 
-| ID | Issue | Severity |
-|----|-------|----------|
-| SEC-1 | CORS allows only `localhost` in production | CRITICAL |
-| SEC-2 | Access & refresh tokens stored in `localStorage` (XSS-accessible) | CRITICAL |
-| SEC-3 | Foreign-key crash on admin lockout for unknown email | CRITICAL |
-| SEC-4 | Account enumeration via forgot-password 404 response | HIGH |
-| SEC-5 | Redis exposed on host port 6379 with no authentication | HIGH |
-| SEC-6 | Docker containers run as root | HIGH |
-| SEC-7 | No Next.js `middleware.ts` — no server-side auth guard | HIGH |
-| SEC-8 | No `Content-Security-Policy` header on frontend | MEDIUM |
-| SEC-9 | Admin date filters use unsanitized strings via `new Date()` | MEDIUM |
-| SEC-10 | `MASTER_KEY` / `ENCRYPTION_KEY` must match — confusing constraint with no migration path | LOW |
+**BUG-002: Git access token exposed in git clone URL**
 
-**Items confirmed NOT vulnerable (do not re-report):**
-- Token hashing: refresh tokens stored as SHA-256 — correct.
-- OTP hashing: OTPs stored as SHA-256 — correct.
-- Password hashing: Argon2id — correct.
-- Credential encryption: AES-256-GCM — correct.
-- Webhook HMAC: timing-safe comparison — correct.
-- IDOR: all resource routes verify ownership — correct.
-- Helmet registered — XSS/MIME-sniff/framing headers set on the API.
+Already detailed in Security section. The token appears in the process table, git config, and potentially SSH logs on the target VPS.
 
----
+**BUG-003: Password reset does not revoke sessions**
 
-## DATABASE ISSUES
+`AccountService.resetPassword` changes the password but does not call `revokeAllSessions`. An attacker with a captured refresh token retains access for 7 days after the victim resets their password.
 
-1. **`AdminActivity.adminId` is a non-nullable foreign key but code stores `'SYSTEM'` — FK violation.** (See CRIT-2)
-2. **`AdminActivity` has both `timestamp` and `createdAt` — redundant columns.**
-3. **`VPSAuthType` enum includes `ssh_key` which is an alias for `key` — never reaches the DB.**
-4. **`User` model has both `provider` (String) and `authProvider` (Enum) — duplicate fields.**
-5. **`VerificationToken` keyed by `email` string, not FK to `User.id` — orphan risk on email change.**
-6. **`DeploymentHistory.env` stores the same encrypted env as `Deployment.env` — potential data duplication.**
-7. **Missing database health-check in `docker-compose.yml`** — API container starts before Postgres is ready; `depends_on` alone does not wait for Postgres to accept connections.
+**BUG-004: E2E tests are all `expect(true).toBe(true)`**
 
----
+All 5 E2E test cases pass regardless of whether the application works. The test suite gives false confidence.
 
-## FRONTEND ISSUES
+### 🟠 High-Severity Bugs
 
-1. **`localStorage` token storage — access and refresh tokens exposed to XSS.** (See CRIT-3)
-2. **No `middleware.ts` — server-side auth guard missing.** (See HIGH-3)
-3. **Admin `/logs` page linked in sidebar but does not exist.** (See HIGH-6)
-4. **No `next.config.js` — no CSP or security headers.** (See MED-9)
-5. **`console.debug` logging in `api/client.ts` in production** — request paths, auth status, and error messages are logged to the browser console; these should be gated to `process.env.NODE_ENV !== 'production'`.
-6. **`api/client.ts` does not send `credentials: 'include'`** — since the API sets cookies, the fetch calls need `credentials: 'include'` to send them cross-origin. Currently only the `Authorization: Bearer` header is set (from `localStorage`), meaning the `HttpOnly` cookies are never sent.
-7. **Duplicate dashboard routes:** Both `(app)/dashboard/` and `(app)/deployments/` exist with what appear to be overlapping pages for deployments.
-8. **No loading state for WebSocket log streaming** — the UI should show a connecting/loading indicator while WebSocket establishes.
+**BUG-005: `VPSService.getVpsAuth` will throw if encrypted credential is null**
 
----
+```ts
+{ privateKey: this.decrypt(vps.encryptedPrivateKey!) }
+```
 
-## BACKEND ISSUES
+The `!` non-null assertion bypasses TypeScript checks. If a VPS was created with `authType='key'` but `encryptedPrivateKey` was not set (possible due to a data corruption or migration issue), this throws a cryptic decryption error instead of a clean validation error.
 
-1. **CORS production misconfiguration.** (See CRIT-1)
-2. **`AdminActivity` FK crash.** (See CRIT-2)
-3. **Duplicate route prefixes** (`/api/deploy` vs `/api/deployments`). (See HIGH-2)
-4. **Sandbox cleanup job is never scheduled.** (See MED-8)
-5. **WebSocket log polling at 1.5s DB interval.** (See MED-7)
-6. **`deployment.service.ts` God class at 1,806 lines.**
-7. **Admin logs date filter accepts raw string to `new Date()`.** (See MED-5)
-8. **`console.*` in services bypasses Pino logger.**
+**BUG-006: Upload temp directory not cleaned on stream failure**
+
+In `readUploadMultipart`, if `pipeline(part.file, fs.createWriteStream(...))` fails, the `uploadDir` created by `mkdtemp` is never cleaned up. This leaks disk space in `/tmp/deployforge/incoming/`.
+
+**BUG-007: Race condition on admin login attempt counter**
+
+Two simultaneous admin login attempts with an incorrect password could both read `attempts=4` and both proceed, effectively allowing one extra attempt before lockout.
+
+**BUG-008: `OTP upsert` resets attempts to 0**
+
+On `sendOTP`, the verification token is upserted with `attempts: 0`. An attacker who exhausts 5 OTP attempts can simply request a new OTP to reset the counter, bypassing the attempt limit entirely.
+
+### 🟡 Medium-Severity Bugs
+
+**BUG-009: Deployment log WebSocket interval not cleared on connection error**
+
+The `setInterval` in the WebSocket handler is cleared on `socket.close`, but if an error causes the socket to close without triggering the `close` event (abnormal closure), the interval may continue running and calling `sendLogs()` on a dead socket.
+
+**BUG-010: `sanitizeVps` mutates the input object**
+
+```ts
+const sanitized = { ...vps };
+delete sanitized.encryptedPassword;
+```
+
+A shallow copy is made, so top-level keys are safe. But this is a shallow clone — if VPS had nested objects, they would still reference the same memory. Not currently a problem, but fragile.
+
+**BUG-011: Webhook branch filter only allows `main`, `master`, or `default_branch`**
+
+```ts
+if (!branch || !['main', 'master', parsed.repository.default_branch].includes(branch))
+```
+
+Projects with a configured branch that is neither `main` nor `master` nor the repo's default branch will never auto-deploy via webhook. The project's `branch` field should be checked against the webhook branch.
 
 ---
 
-## DEPLOYMENT ENGINE ISSUES
+## 16. Severity Classification
 
-1. **`safeExtractCommand`** uses Python heredoc via SSH — correct approach; no bypass found.
-2. **`shellQuote` / `shellPath` functions** — all dynamic values passed to SSH commands go through these; no injection found in the critical paths.
-3. **User-supplied `buildCommand` and `startCommand`** are auto-detected by the framework detection logic, not user-supplied — not injectable.
-4. **Environment variable keys** are validated against `/^[A-Za-z_][A-Za-z0-9_]*$/` before use — correct.
-5. **The `asset-rewrite` Python script** is dynamically injected into a heredoc — `shellQuote` is applied to user-controlled paths before interpolation — no injection found.
-6. **Rollback `docker run` command** uses `shellQuote(history.imageTag)` and `shellQuote(containerName)` — imageTag is stored in DB (not user input at rollback time) — acceptable.
-7. **Sandbox cleanup is not time-bounded.** (See MED-8)
-8. **No memory/CPU limits on `docker run`** — containers can monopolize host resources. `--memory` and `--cpus` flags should be added.
-
----
-
-## TESTING ISSUES
-
-1. **E2E test file (`e2e.test.ts`) contains 5 tests, all `expect(true).toBe(true)`** — zero actual assertions. These tests pass trivially and provide no coverage.
-2. **Only 2 real auth unit tests** exist in `auth.test.ts`. One of them (`verifyOTP`) has no body — just a comment.
-3. **The `MailService` mock in `auth.test.ts` is incorrect** — `MailService` is a class with instance methods, but the mock targets it as an object with static methods. The test will fail or mock ineffectively in strict mode.
-4. **No tests for:** authorization (IDOR), VPS operations, deployment lifecycle, rollback, webhook processing, sandbox analysis, session management, GitHub OAuth, admin routes, domain/SSL attachment.
-5. **No API-level integration tests** — there is no test that boots the Fastify app and exercises routes end-to-end.
-6. **`vitest` is listed as a devDependency nowhere in `apps/api/package.json`** — test runner is not declared; `pnpm test` will likely fail.
-
----
-
-## DOCUMENTATION ISSUES
-
-1. **`docs/BACKUP_SYSTEM.md` honestly documents the feature as "NOT implemented"** — this is good transparency, but the public `README.md` and features page should reflect this clearly.
-2. **`docs/REPOSITORY_STRUCTURE.md` lists `packages/auth`, `packages/deployment`, `packages/github`, `packages/monitoring` as active packages** — they are empty stubs.
-3. **`docs/SECURITY.md` likely claims CSRF protection** — no CSRF mechanism exists in the codebase (no `fastify-csrf`, no double-submit cookie, no same-site strict).
-4. **`SETUP.md` should document the `ADMIN_SECRET` bootstrap process** and how the first super-admin account is created.
-5. **No API changelog or versioning documentation** — the API has two overlapping route sets for deployments which is undocumented.
+| ID | Issue | Severity | File(s) | Impact | Fix |
+|----|-------|---------|--------|--------|-----|
+| S-001 | Git token in clone URL | 🔴 Critical | `deployment.service.ts:prepareGithubSource` | Full GitHub account access if VPS logs are accessed | Use `GIT_ASKPASS` or credential helper |
+| S-002 | No session revocation on password reset | 🔴 Critical | `account.service.ts:resetPassword` | Attacker retains access post-reset | Add `revokeAllSessions` call |
+| S-003 | Docker port mismatch | 🔴 Critical | `api.Dockerfile` | Health check failure; broken production deployment | Align EXPOSE and PORT |
+| S-004 | E2E tests are placeholders | 🔴 Critical | `__tests__/e2e.test.ts` | False confidence; zero test coverage | Write real tests |
+| S-005 | OTP attempt counter bypassable | 🟠 High | `auth.service.ts:sendOTP` | Brute-force OTP | Add cooldown between OTP requests |
+| S-006 | Admin brute-force TOCTOU | 🟠 High | `admin.ts:adminLogin` | Extra login attempt after lockout threshold | Use DB atomic increment |
+| S-007 | No CI/CD pipeline | 🟠 High | `.github/` (missing) | No automated quality gate | Add GitHub Actions |
+| S-008 | Redis unauthenticated | 🟠 High | `docker-compose.yml` | Redis exploitable from any internal container | Add requirepass |
+| S-009 | Plaintext env vars on VPS | 🔴 Critical | `deployment.service.ts:injectEnvironment` | Secrets readable by any process on VPS | Use Docker secrets or encrypted injection |
+| S-010 | No pagination on list endpoints | 🟠 High | Multiple routes | Unbounded queries; DoS potential | Add cursor/offset pagination |
+| S-011 | Upload temp dir not cleaned on failure | 🟠 High | `routes/deploy.ts:readUploadMultipart` | Disk space leak | Add `finally` block |
+| S-012 | `console.debug/error` in prod frontend | 🟡 Medium | `lib/api/client.ts` | Info leakage in browser DevTools | Guard with `isDev` |
+| S-013 | `VPSService.getVpsAuth` null assertion | 🟡 Medium | `vps.service.ts` | Runtime crash with confusing error | Validate before decrypt |
+| S-014 | 500-level errors leak raw messages | 🟡 Medium | `vps.ts:sendVpsError`, `webhooks.ts` | Internal details exposed | Mask 500 messages like global handler |
+| S-015 | Dead code: `TokenService.generateRefreshToken` | 🟢 Low | `packages/security/src/tokens.ts` | Confusion for future developers | Remove method |
+| S-016 | Webhook branch filter too narrow | 🟡 Medium | `webhooks.ts` | Auto-deploy misses non-standard branches | Match against project's configured branch |
 
 ---
 
-## FALSE POSITIVES FROM PREVIOUS AUDITS
+## 17. Code Smells
 
-*(This is a fresh audit from source code. No prior audit findings were used.)*
+**God Class**: `DeploymentService` (~1,000 lines, 30+ methods, handles SSH, Docker, Nginx, caching, port allocation, file I/O, domain management, rollback)
 
----
+**Dead Code**: `TokenService.generateRefreshToken` — defined, never called
 
-## FILES REVIEWED
+**Magic Numbers**: `15` (retries), `2` (seconds), `8000` (truncation), `120` (log lines), `3000-9000` (port range), `30 * 60 * 1000` (sandbox TTL), `7 * 24 * 60 * 60 * 1000` (session TTL) — all hardcoded inline without named constants
 
-| Path | Description |
-|------|-------------|
-| `prisma/schema.prisma` | Full database schema |
-| `prisma/migrations/` | All 4 migration SQL files |
-| `apps/api/src/app.ts` | Fastify app setup, CORS, middleware |
-| `apps/api/src/server.ts` | Server entry point |
-| `apps/api/src/config/env.ts` | Environment validation |
-| `apps/api/src/plugins/auth.ts` | `authGuard`, `requireAdmin`, `requireSuperAdmin` |
-| `apps/api/src/utils/authz.ts` | Ownership verification helpers |
-| `apps/api/src/utils/sanitizers.ts` | Response sanitization |
-| `apps/api/src/utils/queue.ts` | BullMQ queue setup |
-| `apps/api/src/routes/auth.ts` | Auth routes (login, register, OTP, refresh, logout) |
-| `apps/api/src/routes/admin.ts` | Admin control plane |
-| `apps/api/src/routes/vps.ts` | VPS management |
-| `apps/api/src/routes/deploy.ts` | Deployment initiation |
-| `apps/api/src/routes/deployments.ts` | Deployment lifecycle management |
-| `apps/api/src/routes/domain.ts` | Domain and SSL management |
-| `apps/api/src/routes/github.ts` | GitHub OAuth and repo management |
-| `apps/api/src/routes/google.ts` | Google OAuth |
-| `apps/api/src/routes/webhooks.ts` | GitHub webhook receiver |
-| `apps/api/src/routes/monitoring.ts` | Metrics, logs, rollback |
-| `apps/api/src/routes/sandbox.ts` | Sandbox analysis |
-| `apps/api/src/routes/sessions.ts` | Session management |
-| `apps/api/src/routes/terminal.ts` | WebSocket terminal |
-| `apps/api/src/routes/ws.ts` | WebSocket deployment logs/status |
-| `apps/api/src/routes/profile.ts` | User profile management |
-| `apps/api/src/routes/contact.ts` | Contact form |
-| `apps/api/src/routes/public.ts` | Public routes |
-| `apps/api/src/services/auth.service.ts` | Core auth logic, OTP, refresh |
-| `apps/api/src/services/account.service.ts` | Profile, password, forgot-password |
-| `apps/api/src/services/deployment.service.ts` | Full deployment engine (1,806 lines) |
-| `apps/api/src/services/vps.service.ts` | VPS management |
-| `apps/api/src/services/github.service.ts` | GitHub API integration |
-| `apps/api/src/services/terminal.service.ts` | SSH terminal bridge |
-| `apps/api/src/services/rollback.service.ts` | Container rollback |
-| `apps/api/src/services/sandbox.service.ts` | Sandbox analysis |
-| `apps/api/src/services/monitoring.service.ts` | Metrics collection |
-| `apps/api/src/services/logging.service.ts` | Deployment log writer |
-| `apps/api/src/services/hardening.service.ts` | Payload limits, data retention |
-| `apps/api/src/services/cache.service.ts` | Redis cache wrapper |
-| `apps/api/src/workers/deployment.worker.ts` | BullMQ worker |
-| `apps/api/src/__tests__/auth.test.ts` | Auth unit tests |
-| `apps/api/src/__tests__/e2e.test.ts` | E2E test stubs |
-| `packages/security/src/tokens.ts` | JWT token service |
-| `packages/security/src/encryption.ts` | AES-256-GCM encryption |
-| `packages/security/src/passwords.ts` | Argon2id password service |
-| `packages/vps/src/ssh.ts` | SSH2 client wrapper |
-| `packages/database/src/index.ts` | Prisma client export |
-| `packages/mail/src/index.ts` | Nodemailer wrapper |
-| `packages/shared/src/` | Shared types and constants |
-| `packages/auth/` | Empty (only `.gitignore`) |
-| `packages/deployment/` | Empty (only `.gitignore`) |
-| `packages/github/` | Empty (only `.gitignore`) |
-| `packages/monitoring/` | Empty (only `.gitignore`) |
-| `apps/web/lib/store/useAuthStore.ts` | Frontend auth state |
-| `apps/web/lib/store/useAdminAuthStore.ts` | Frontend admin auth state |
-| `apps/web/lib/api/client.ts` | API fetch client |
-| `apps/web/app/(app)/layout.tsx` | Dashboard layout and auth guard |
-| `apps/web/app/(admin)/admin/layout.tsx` | Admin layout |
-| `apps/web/components/admin/AdminShell.tsx` | Admin shell component |
-| `apps/web/hooks/useDeployForgeData.ts` | Data fetching hooks |
-| `docker-compose.yml` | Container orchestration |
-| `docker/api.Dockerfile` | API container build |
-| `docker/web.Dockerfile` | Web container build |
-| `turbo.json` | Monorepo task pipeline |
-| `package.json` (root) | Workspace root |
-| `.env.example` | Environment template |
-| `.gitignore` | Git ignore rules |
-| `docs/` | All 18 documentation files |
+**Over-use of `any` types**: `fastify as any` in every route, `vps: any` in `getVpsAuth`, `request.user: any` everywhere, `deployment: any` in many service methods
+
+**Tight coupling**: `sanitizeDeployment` imports `DeploymentService` just to call `envPreview`. This creates a circular-ish dependency between a utility and a service.
+
+**Hardcoded paths**: `/tmp/deployforge`, `/home/${username}/deployforge/`, `/etc/nginx/conf.d/` — scattered throughout `deployment.service.ts`. These should be config constants.
+
+**Double route registration**: Every route registered twice (with and without `/api/` prefix). 70+ `app.register` calls in `app.ts`.
+
+**Shallow sanitization by field deletion**: `sanitizeVps` uses `delete sanitized.field` on a shallow copy. Proper sanitization should use an allowlist (select only safe fields) rather than a denylist (delete known bad fields).
+
+**Inconsistent UUID vs CUID usage**: Session uses `cuid()`, Deployment uses `uuid()`, RefreshTokenReplay uses `cuid()` — no principled choice.
 
 ---
 
-## TOP 20 FIXES BEFORE PUBLIC RELEASE
+## 18. Scores
 
-| # | Fix | Severity | Estimated Effort |
-|---|-----|----------|-----------------|
-| 1 | Fix CORS origin to use `config.app.appUrl` in production | CRITICAL | 15 min |
-| 2 | Fix `AdminActivity.adminId` FK violation for unknown-email lockout events | CRITICAL | 1 hr |
-| 3 | Remove token storage from `localStorage`; use HttpOnly cookies exclusively | CRITICAL | 4 hrs |
-| 4 | Add `credentials: 'include'` to all API fetch calls in `client.ts` | CRITICAL | 1 hr |
-| 5 | Implement or remove the 4 empty workspace packages | CRITICAL | 2–8 hrs |
-| 6 | Create `apps/web/middleware.ts` for server-side auth guard | HIGH | 2 hrs |
-| 7 | Fix account enumeration in `forgotPassword` — return 200 always | HIGH | 30 min |
-| 8 | Remove Redis public port binding from `docker-compose.yml` | HIGH | 15 min |
-| 9 | Add non-root user to both Dockerfiles | HIGH | 30 min |
-| 10 | Create `apps/web/app/(admin)/admin/logs/page.tsx` | HIGH | 2 hrs |
-| 11 | Consolidate `/api/deploy` and `/api/deployments` into one route set | HIGH | 3 hrs |
-| 12 | Schedule sandbox cleanup BullMQ job after sandbox run completes | MEDIUM | 1 hr |
-| 13 | Create `apps/web/next.config.js` with security headers (CSP, X-Frame-Options, etc.) | MEDIUM | 1 hr |
-| 14 | Replace `setInterval` DB polling on WebSocket logs with Redis pub/sub | MEDIUM | 4 hrs |
-| 15 | Add Zod `datetime()` validation to admin log `from`/`to` query params | MEDIUM | 30 min |
-| 16 | Remove `timestamp` field from `AdminActivity`; use `createdAt` only | MEDIUM | 1 hr |
-| 17 | Remove `provider` field from `User`; use `authProvider` only | MEDIUM | 2 hrs |
-| 18 | Remove `ssh_key` from `VPSAuthType` enum | MEDIUM | 1 hr |
-| 19 | Remove committed `.js` build artifacts from `packages/` | LOW | 15 min |
-| 20 | Add `--memory` and `--cpus` resource limits to all `docker run` commands | MEDIUM | 2 hrs |
+| Category | Score | Comment |
+|----------|-------|---------|
+| Architecture | 7.5/10 | Good structure, monorepo is well-organised; double-route registration and God class are notable detractors |
+| Backend | 6.5/10 | Solid patterns; auth is strong; deployment service is too large; type safety gaps throughout |
+| Frontend | 6.5/10 | Reasonable structure; client-only auth causes flash; debug logs in production |
+| Database | 7.5/10 | Excellent indexing; UUID/CUID inconsistency; unbounded string fields |
+| Security | 7.5/10 | Strong fundamentals; critical gaps in git token handling and post-reset session revocation |
+| Performance | 6.0/10 | Queue architecture is correct; polling WebSocket and per-request DB cleanup are inefficiencies |
+| Scalability | 5.0/10 | No horizontal scaling plan; no distributed locking; single Redis/Postgres |
+| Maintainability | 6.0/10 | Clear naming; `any` overuse and 1,000-line service class reduce maintainability |
+| Code Quality | 6.5/10 | Good naming conventions; magic numbers; dead code; `any` casts undermine TypeScript |
+| DevOps | 6.0/10 | Good Compose hardening; no CI/CD; port mismatch; no TLS in Compose |
+| Testing | 1.5/10 | 1 real unit test + 5 always-passing E2E placeholders = near-zero coverage |
+| Documentation | 7.0/10 | Comprehensive docs directory; API reference, architecture, security docs exist |
 
 ---
 
-## SCORES
+## 19. Final Verdict
 
-| Category | Score | Rationale |
-|----------|-------|-----------|
-| **Production Readiness** | **29 / 100** | CORS bug blocks all production traffic; FK crash on admin login; localStorage tokens; 4 empty packages; no real test coverage |
-| **Security** | **52 / 100** | Excellent: Argon2id, AES-256-GCM, replay detection, IDOR guards, webhook HMAC. Critical gaps: CORS, localStorage tokens, account enumeration, no CSP, Redis exposed |
-| **Code Quality** | **58 / 100** | Zod validation throughout, clean service layer patterns, but 1,806-line God class, duplicate routes, dead code, `console.*` mixing |
-| **Testing** | **4 / 100** | 5 fake E2E tests, 1 real unit test with a broken mock. Zero authorization, deployment, or integration tests. `vitest` not declared as a dependency |
-| **Documentation** | **65 / 100** | Extensive docs directory (18 files). Backup docs honestly declare non-implementation. Empty package docs are misleading. Admin logs page undocumented |
+### 🔴 Not Production Ready
+
+**Reasons:**
+
+1. **Critical security gap**: GitHub access tokens are embedded in git clone URLs on the remote VPS, potentially exposing them in logs, git history, and process tables.
+
+2. **Critical security gap**: Password reset does not revoke active sessions, leaving compromised accounts exposed for up to 7 days after a reset.
+
+3. **Critical security gap**: Deployment environment variables are written as plaintext `.env.deployforge` files on the target VPS working directory.
+
+4. **Critical infrastructure bug**: The API Dockerfile exposes port 4000 while the runtime port is 3001. The Dockerfile health check will fail in production.
+
+5. **Critical testing gap**: The E2E test suite is entirely composed of `expect(true).toBe(true)` placeholder assertions. There is no automated verification that the application works. With no CI/CD pipeline, broken code can reach production undetected.
+
+6. **Missing production infrastructure**: No CI/CD, no monitoring/alerting, no API versioning, no pagination, no Redis authentication, no TLS termination in Compose, no backup strategy.
+
+Despite these gaps, the project demonstrates **strong architectural thinking**: the monorepo structure is clean, the auth system (tokens, refresh rotation, replay detection, CSRF) is well-implemented, the database schema is thoughtful, the Docker hardening (`read_only`, `cap_drop: ALL`, `no-new-privileges`) is commendable, and the deployment engine is impressively comprehensive for a solo-built project.
 
 ---
 
-## FINAL RELEASE DECISION
+## 20. Final Rating
 
-# ❌ NOT READY
+| Metric | Value |
+|--------|-------|
+| **Overall Score** | **52 / 100** |
+| **Confidence Level** | **91%** |
+| **Estimated Production Readiness** | **25%** |
 
-The project demonstrates architectural maturity and several well-implemented security features. However, three critical defects make it non-functional for any real user in a production deployment: CORS blocks all cross-origin API calls, a database FK violation crashes on every failed admin login for unknown emails, and the frontend stores JWTs in `localStorage` defeating the HttpOnly cookie strategy. Additionally, four workspace packages are empty stubs that would cause build failures.
+---
 
-These issues are fixable. With a focused remediation sprint (estimated 3–5 days for a single developer), the project could reach READY WITH MINOR FIXES status. The core deployment engine, authentication flow, and security primitives are solid foundations worth building on.
+## 21. Final Roadmap
+
+### Phase 1 — Critical Fixes (Block all production deployment)
+
+| Task | Priority | Difficulty | Time | Impact |
+|------|---------|-----------|------|--------|
+| Fix git token injection — use `GIT_ASKPASS` or credential helper instead of URL embedding | P0 | Medium | 1–2 days | Eliminates credential exposure on VPS |
+| Add `revokeAllSessions` to `resetPassword` and `changePassword` | P0 | Easy | 0.5 days | Prevents post-reset session hijacking |
+| Remove plaintext env var file on VPS — use Docker `--env-file` with restricted permissions or Docker secrets | P0 | Medium | 1 day | Prevents secrets leakage on multi-tenant VPS |
+| Fix Dockerfile port mismatch (`EXPOSE 3001`, healthcheck on 3001) | P0 | Easy | 0.5 hours | Fixes broken production health check |
+| Replace E2E placeholder tests with real assertions | P0 | Hard | 5–7 days | Establishes minimum quality gate |
+| Add GitHub Actions CI pipeline (build, typecheck, lint, test on every PR) | P0 | Medium | 1–2 days | Prevents broken code reaching production |
+
+### Phase 2 — High Priority (Before public launch)
+
+| Task | Priority | Difficulty | Time | Impact |
+|------|---------|-----------|------|--------|
+| Add Redis password (`--requirepass`) in Compose and update `REDIS_URL` | P1 | Easy | 1 hour | Secures Redis on internal network |
+| Add distributed lock (Redis SETNX) per `projectId` during deployment | P1 | Medium | 1–2 days | Prevents concurrent deployment conflicts |
+| Add API versioning prefix (`/api/v1/`) | P1 | Medium | 1 day | Enables backward-compatible API evolution |
+| Add cursor-based pagination to all list endpoints | P1 | Medium | 2–3 days | Prevents unbounded queries in production |
+| Replace WebSocket polling with Redis pub/sub or Postgres LISTEN/NOTIFY for deployment logs | P1 | Hard | 2–3 days | Eliminates per-tick DB queries |
+| Add TLS termination (Caddy or Nginx) to `docker-compose.yml` | P1 | Medium | 1 day | HTTPS out of the box |
+| Move scheduled cleanup of `RefreshTokenReplay` to a cron job | P1 | Easy | 0.5 days | Removes synchronous cleanup from request path |
+| Add OTP request cooldown (minimum 60 seconds between OTP requests per email) | P1 | Easy | 0.5 days | Prevents brute-force via OTP regeneration |
+| Fix admin login brute-force counter to use atomic DB increment | P1 | Easy | 0.5 days | Closes TOCTOU race on lockout |
+| Write unit tests for `AuthService`, `VPSService`, CSRF plugin | P1 | Medium | 3–5 days | Establishes >50% service coverage |
+
+### Phase 3 — Medium Priority (First month post-launch)
+
+| Task | Priority | Difficulty | Time | Impact |
+|------|---------|-----------|------|--------|
+| Decompose `DeploymentService` into focused sub-services | P2 | Hard | 5–7 days | Improves testability and maintainability |
+| Remove all `fastify as any` casts — use proper TypeScript generics | P2 | Medium | 1–2 days | Restores TypeScript type safety |
+| Add Prometheus metrics endpoint + Grafana dashboard | P2 | Medium | 2–3 days | Production observability |
+| Add request correlation ID (UUID per request, logged and propagated) | P2 | Easy | 0.5 days | Cross-service log tracing |
+| Replace `console.debug/error` in frontend with conditional logging | P2 | Easy | 0.5 days | Stops information leakage in production |
+| Add Dependabot configuration for automated dependency updates | P2 | Easy | 1 hour | Proactive security patching |
+| Add Postgres backup strategy (e.g. `pg_dump` cron + S3 upload) | P2 | Medium | 1 day | Data recovery capability |
+| Fix webhook branch filter to match project's configured branch | P2 | Easy | 1 hour | Correct auto-deploy for non-main branches |
+| Standardise UUID vs CUID in schema (choose one) | P2 | Medium | 1 day | Schema consistency |
+
+### Phase 4 — Nice to Have (Roadmap / Future)
+
+| Task | Priority | Difficulty | Time | Impact |
+|------|---------|-----------|------|--------|
+| Server-side auth hydration in Next.js (eliminate flash of unauthenticated state) | P3 | Medium | 1–2 days | UX improvement |
+| OpenTelemetry distributed tracing | P3 | Hard | 3–5 days | Advanced observability |
+| GitHub token rotation mechanism | P3 | Medium | 1–2 days | Long-term credential hygiene |
+| Horizontal scaling documentation + Redis Cluster / PgBouncer guidance | P3 | Medium | 2 days | Scale-out readiness |
+| Accessibility audit and ARIA improvements | P3 | Medium | 2–3 days | Compliance and inclusivity |
+| Load testing suite (k6 or Artillery) | P3 | Medium | 2–3 days | Capacity planning |
+| Admin brute-force protection with CAPTCHA or device fingerprinting | P3 | Hard | 3–5 days | Advanced account security |
+| Automatic GitHub OAuth token refresh (if using expiring tokens) | P3 | Medium | 2 days | Long-lived deployment reliability |
+
+---
+
+*End of Audit Report — DeployForge v0.1.0*
