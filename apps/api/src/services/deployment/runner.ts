@@ -8,9 +8,10 @@ export async function runCommand(
     type: LogType,
     command: string,
     stage = 'deploying',
-    errorCode = 'COMMAND_FAILED'
+    errorCode = 'COMMAND_FAILED',
+    timeoutMs?: number
 ) {
-    const result = await ssh.execute(command);
+    const result = await ssh.execute(command, timeoutMs);
     const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
     if (output) {
         const clipped = output.length > 8000 ? `${output.slice(0, 8000)}\n[output truncated]` : output;

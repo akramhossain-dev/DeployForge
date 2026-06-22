@@ -8,6 +8,11 @@ import { GitHubDeploymentSource } from './types';
 import { runCommand } from './runner';
 import { shellQuote, extractRepoFullName } from './utils';
 
+// Git clone/fetch timeout: 2 minutes. If git hangs longer than this the
+// deployment would be stuck at CLONING forever. 120s is generous enough
+// for large repos but short enough to surface network/auth issues quickly.
+const GIT_TIMEOUT_MS = 2 * 60 * 1000;
+
 export class GitHubDeploymentService {
     static async ensureRepositoryWebhook(userId: string, repositoryUrl: string, deploymentId?: string) {
         const repoFullName = extractRepoFullName(repositoryUrl);
@@ -41,7 +46,15 @@ export class GitHubDeploymentService {
         const quotedBranch = shellQuote(source.branch);
         const quotedRepoUrl = shellQuote(repoUrl);
 
-        const command = `export GIT_TERMINAL_PROMPT=0 && ` +
+        // GIT_HTTP_LOW_SPEED_LIMIT / GIT_HTTP_LOW_SPEED_TIME:
+        //   Abort if transfer rate stays below 1 KB/s for 30 s. Prevents git
+        //   from hanging silently on a broken or stalled connection.
+        const gitEnv =
+            `export GIT_TERMINAL_PROMPT=0 && ` +
+            `export GIT_HTTP_LOW_SPEED_LIMIT=1024 && ` +
+            `export GIT_HTTP_LOW_SPEED_TIME=30 && `;
+
+        const command = gitEnv +
             `if [ -d ${quotedWorkDir}/.git ] && cd ${quotedWorkDir} && ` +
             `git remote set-url origin ${quotedRepoUrl} && ` +
             `git fetch --depth 1 origin ${quotedBranch} && ` +
@@ -55,6 +68,9 @@ export class GitHubDeploymentService {
             `git clone --depth 1 -b ${quotedBranch} ${quotedRepoUrl} ${quotedWorkDir}; ` +
             `fi`;
 
-        await runCommand(ssh, deploymentId, 'build', command, 'cloning', 'GIT_CLONE_FAILED');
+        // Use a dedicated timeout so a frozen network surfaces immediately
+        // as a CLONING error rather than blocking for the full 15-minute
+        // default ssh.execute() timeout.
+        await runCommand(ssh, deploymentId, 'build', command, 'cloning', 'GIT_CLONE_FAILED', GIT_TIMEOUT_MS);
     }
 }

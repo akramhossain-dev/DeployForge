@@ -68,17 +68,32 @@ export class SSHService {
         });
     }
 
-    async execute(command: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
+    async execute(command: string, timeoutMs = 15 * 60 * 1000): Promise<{ stdout: string; stderr: string; code: number | null }> {
         return new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (fn: () => void) => {
+                if (settled) return;
+                settled = true;
+                fn();
+            };
+
+            const timer = setTimeout(() => {
+                finish(() => reject(new SSHConnectionError(`Command timed out after ${Math.round(timeoutMs / 1000)}s`, 'SSH_COMMAND_FAILED')));
+            }, timeoutMs);
+
             this.client.exec(command, (err, stream) => {
-                if (err) return reject(err);
+                if (err) {
+                    clearTimeout(timer);
+                    return reject(err);
+                }
 
                 let stdout = '';
                 let stderr = '';
 
                 stream
                     .on('close', (code: number | null) => {
-                        resolve({ stdout, stderr, code });
+                        clearTimeout(timer);
+                        finish(() => resolve({ stdout, stderr, code }));
                     })
                     .on('data', (data: Buffer) => {
                         stdout += data.toString();

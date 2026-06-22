@@ -221,9 +221,15 @@ export class DeploymentService {
 
             if (source.type === 'github_repo') {
                 await GitHubDeploymentService.prepareGithubSource(ssh, deploymentId, source, project.repositoryUrl, workDir);
+                // ✅ Advance to BUILDING immediately after clone completes.
+                //    Previously setStatus('BUILDING') was only called after the
+                //    entire caching + dep-install phase, leaving the UI stuck
+                //    at CLONING for the full duration of that work.
+                await this.setStatus(deploymentId, 'BUILDING');
             } else {
                 await this.setStatus(deploymentId, 'EXTRACTING');
                 await BuildService.prepareUploadedSource(ssh, deploymentId, source, workDir);
+                await this.setStatus(deploymentId, 'BUILDING');
             }
 
             await BuildService.normalizeProjectRoot(ssh, deploymentId, workDir);
@@ -315,8 +321,9 @@ export class DeploymentService {
             }
             // ------------------ CACHING SYSTEM END ------------------
 
+            await LoggingService.log(deploymentId, 'Analysing project and preparing build environment...', 'build');
             const hasEnv = await EnvironmentService.injectEnvironment(ssh, deploymentId, workDir, deployment.env);
-            await this.setStatus(deploymentId, 'BUILDING');
+            // (status is already BUILDING — set right after clone/extract above)
             if (detected.deploymentType === 'STATIC') {
                 if (buildCacheHit) {
                     await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Restoring built static files from cache', 'build');
@@ -1217,19 +1224,19 @@ for root, dirs, files in os.walk(directory):
     private static assertLifecycleTransition(current: string, next: DeploymentStatus) {
         const normalizedCurrent = current.toUpperCase();
         const allowed: Record<string, DeploymentStatus[]> = {
-            PENDING: ['BUILDING', 'DELETING'],
-            CLONING: ['BUILDING', 'DELETING', 'FAILED'],
-            UPLOADING: ['BUILDING', 'DELETING', 'FAILED'],
+            PENDING:    ['CLONING', 'UPLOADING', 'BUILDING', 'DELETING', 'FAILED'],
+            CLONING:    ['BUILDING', 'DELETING', 'FAILED'],
+            UPLOADING:  ['EXTRACTING', 'BUILDING', 'DELETING', 'FAILED'],
             EXTRACTING: ['BUILDING', 'DELETING', 'FAILED'],
-            BUILDING: ['DEPLOYING', 'DELETING', 'FAILED'],
-            DEPLOYING: ['RUNNING', 'DELETING', 'FAILED'],
-            RUNNING: ['STOPPED', 'PAUSED', 'DELETING', 'FAILED'],
-            PAUSED: ['RUNNING', 'DELETING'],
-            STOPPED: ['RUNNING', 'DELETING'],
-            FAILED: ['DELETING'],
+            BUILDING:   ['DEPLOYING', 'DELETING', 'FAILED'],
+            DEPLOYING:  ['RUNNING', 'DELETING', 'FAILED'],
+            RUNNING:    ['STOPPED', 'PAUSED', 'DELETING', 'FAILED'],
+            PAUSED:     ['RUNNING', 'DELETING'],
+            STOPPED:    ['RUNNING', 'DELETING'],
+            FAILED:     ['RUNNING', 'DELETING'],
             ROLLED_BACK: ['STOPPED', 'PAUSED', 'DELETING', 'FAILED'],
-            DELETING: ['DELETED'],
-            DELETED: [],
+            DELETING:   ['DELETED'],
+            DELETED:    [],
         };
         if (!allowed[normalizedCurrent]?.includes(next)) {
             throw new DeploymentError('state', `Invalid deployment state transition: ${current} -> ${next}`, 'INVALID_STATE_TRANSITION');
