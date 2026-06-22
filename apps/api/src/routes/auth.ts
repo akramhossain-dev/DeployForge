@@ -1,10 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import prisma from '@deployforge/database';
-import { PasswordService } from '@deployforge/security';
+import { PasswordService, TokenService } from '@deployforge/security';
 import { AuthService } from '../services/auth.service';
 import { AccountService } from '../services/account.service';
 import { apiError, cookie, parseCookies, sha256 } from '../utils/http';
+import { config } from '../config/env';
+
+const tokenService = new TokenService(config.auth.jwtSecret);
 
 const strongPasswordSchema = z.string()
     .min(12)
@@ -188,6 +191,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         return { success: true, data: { user: request.user } };
+    });
+
+    fastify.get('/socket-token', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request) => {
+        const token = tokenService.generateAccessToken({
+            userId: request.user.id,
+            tokenType: 'user',
+        });
+        return { success: true, data: { token } };
     });
 
     fastify.post('/forgot-password', {

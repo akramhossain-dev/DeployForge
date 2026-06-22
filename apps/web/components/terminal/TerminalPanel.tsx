@@ -119,7 +119,7 @@ export function TerminalPanel({ vpsId }: { vpsId?: string }) {
         };
     }
 
-    function connect(isReconnect = false) {
+    async function connect(isReconnect = false) {
         if (!wsBaseUrl || !terminalRef.current) return;
         if (!isReconnect && (status === 'connecting' || status === 'reconnecting')) return;
 
@@ -135,13 +135,25 @@ export function TerminalPanel({ vpsId }: { vpsId?: string }) {
             socketRef.current.close();
         }
 
+        setStatus(isReconnect ? 'reconnecting' : 'connecting');
+        writeStatus(isReconnect ? 'reconnecting...' : 'connecting...');
+
+        let token = '';
+        try {
+            const res = await api.get<{ token: string }>('/auth/socket-token');
+            token = res.token;
+        } catch (err) {
+            shouldReconnectRef.current = false;
+            setStatus('error');
+            writeStatus('authentication failed. Please log in.');
+            return;
+        }
+
         const { cols, rows } = dimensions();
-        const socket = new WebSocket(`${wsBaseUrl}&cols=${cols}&rows=${rows}`);
+        const socket = new WebSocket(`${wsBaseUrl}?token=${token}&cols=${cols}&rows=${rows}`);
         socket.binaryType = 'arraybuffer';
         socketRef.current = socket;
         manualCloseRef.current = false;
-        setStatus(isReconnect ? 'reconnecting' : 'connecting');
-        writeStatus(isReconnect ? 'reconnecting...' : 'connecting...');
 
         socket.onopen = () => {
             writeStatus('websocket open, starting shell...');
