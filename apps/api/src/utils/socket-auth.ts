@@ -12,12 +12,28 @@ export function socketToken(request: FastifyRequest, queryToken?: string) {
 
 export async function verifySocketUser(token: string) {
     if (!token) return null;
-    const payload = tokenService.verifyToken(token);
-    const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
-        select: { id: true },
-    });
-    return user ? { userId: user.id } : null;
+    try {
+        const payload = tokenService.verifyToken(token);
+        if (payload.tokenType && payload.tokenType !== 'user') {
+            return null;
+        }
+        if (!payload.sessionId) {
+            return null;
+        }
+        const activeSession = await prisma.session.findUnique({
+            where: { id: payload.sessionId },
+        });
+        if (!activeSession || new Date() > activeSession.expiresAt) {
+            return null;
+        }
+        const user = await prisma.user.findUnique({
+            where: { id: payload.userId },
+            select: { id: true },
+        });
+        return user ? { userId: user.id } : null;
+    } catch {
+        return null;
+    }
 }
 
 export async function verifyDeploymentSocketAccess(deploymentId: string, token: string) {

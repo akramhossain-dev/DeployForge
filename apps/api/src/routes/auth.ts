@@ -200,6 +200,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         const token = tokenService.generateAccessToken({
             userId: request.user.id,
             tokenType: 'user',
+            sessionId: request.user.sessionId,
         });
         return { success: true, data: { token } };
     });

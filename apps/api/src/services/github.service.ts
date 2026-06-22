@@ -8,6 +8,32 @@ import { logger } from '../utils/logger';
 const encryptionService = new EncryptionService(config.encryption.key);
 
 export class GitHubService {
+    static sanitizeErrorMessage(message: string): string {
+        if (!message) return '';
+        let sanitized = message;
+        if (config.oauth.github.clientSecret) {
+            const escaped = config.oauth.github.clientSecret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            sanitized = sanitized.replace(new RegExp(escaped, 'g'), '[REDACTED]');
+        }
+        // Redact any GitHub personal access tokens or OAuth tokens (ghp_, gho_, etc.)
+        sanitized = sanitized.replace(/gh[pos]_[a-zA-Z0-9]{36,255}/g, '[REDACTED]');
+        return sanitized;
+    }
+
+    static checkOAuthConfig() {
+        const clientId = config.oauth.github.clientId?.trim();
+        const clientSecret = config.oauth.github.clientSecret?.trim();
+        if (!clientId || !clientSecret) {
+            throw new Error('GitHub client ID or client secret is not configured.');
+        }
+    }
+
+    static checkUserToken(accessToken?: string) {
+        if (!accessToken?.trim()) {
+            throw new Error('GitHub access token is missing or not provided.');
+        }
+    }
+
     static validateOAuthConfig() {
         const clientId = config.oauth.github.clientId.trim();
         const clientSecret = config.oauth.github.clientSecret.trim();
@@ -28,6 +54,7 @@ export class GitHubService {
 
     static getAuthUrl(state: string) {
         this.validateOAuthConfig();
+        this.checkOAuthConfig();
         const params = new URLSearchParams({
             client_id: config.oauth.github.clientId,
             redirect_uri: config.oauth.github.callbackUrl,
@@ -38,100 +65,121 @@ export class GitHubService {
     }
 
     static packEncryptedToken(accessToken: string) {
+        this.checkUserToken(accessToken);
         const encryptedToken = encryptionService.encrypt(accessToken);
         return `${encryptedToken.iv}:${encryptedToken.tag}:${encryptedToken.content}`;
     }
 
     static async exchangeCodeForToken(code: string) {
+        this.checkOAuthConfig();
+        if (!code?.trim()) {
+            throw new Error('GitHub OAuth code is missing or not provided.');
+        }
         logger.info({ audit: true, event: 'github_oauth_code_exchange_started' }, 'Exchanging GitHub OAuth code');
-        const response = await fetch('https://github.com/login/oauth/access_token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-            },
-            body: JSON.stringify({
-                client_id: config.oauth.github.clientId,
-                client_secret: config.oauth.github.clientSecret,
-                code,
-                redirect_uri: config.oauth.github.callbackUrl,
-            }),
-        });
-
-        const text = await response.text();
-        let data: any;
+        
         try {
-            data = JSON.parse(text);
-        } catch (err: any) {
-            logger.error({ status: response.status }, 'GitHub OAuth token response was not valid JSON');
-            throw new Error(`GitHub returned non-JSON response: ${text || 'empty response'}`);
-        }
+            const response = await fetch('https://github.com/login/oauth/access_token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({
+                    client_id: config.oauth.github.clientId,
+                    client_secret: config.oauth.github.clientSecret,
+                    code,
+                    redirect_uri: config.oauth.github.callbackUrl,
+                }),
+            });
 
-        if (!response.ok || data.error || !data.access_token) {
-            const errorMsg = data.error_description || data.error || `HTTP ${response.status}`;
-            logger.error({
-                status: response.status,
-                error: data.error,
-                description: data.error_description,
-            }, 'GitHub OAuth token exchange failed');
-            throw new Error(errorMsg);
+            const text = await response.text();
+            let data: any;
+            try {
+                data = JSON.parse(text);
+            } catch (err: any) {
+                logger.error({ status: response.status }, 'GitHub OAuth token response was not valid JSON');
+                throw new Error(`GitHub returned non-JSON response: ${this.sanitizeErrorMessage(text) || 'empty response'}`);
+            }
+
+            if (!response.ok || data.error || !data.access_token) {
+                const errorMsg = data.error_description || data.error || `HTTP ${response.status}`;
+                logger.error({
+                    status: response.status,
+                    error: data.error,
+                    description: this.sanitizeErrorMessage(data.error_description),
+                }, 'GitHub OAuth token exchange failed');
+                throw new Error(this.sanitizeErrorMessage(errorMsg));
+            }
+            logger.info({ audit: true, event: 'github_oauth_code_exchange_completed' }, 'GitHub OAuth code exchange completed');
+            return data.access_token as string;
+        } catch (err: any) {
+            throw new Error(this.sanitizeErrorMessage(err.message));
         }
-        logger.info({ audit: true, event: 'github_oauth_code_exchange_completed' }, 'GitHub OAuth code exchange completed');
-        return data.access_token as string;
     }
 
     static async getProfile(accessToken: string) {
-        const response = await fetch('https://api.github.com/user', {
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                Accept: 'application/vnd.github+json',
-                'X-GitHub-Api-Version': '2022-11-28',
-            },
-        });
-
-        const text = await response.text();
-        if (!response.ok) {
-            let detail = '';
-            try {
-                const parsed = JSON.parse(text);
-                detail = parsed.message || '';
-            } catch {
-                detail = text;
-            }
-            logger.error({
-                status: response.status,
-                message: detail,
-            }, 'GitHub profile fetch failed');
-            throw new Error(detail || `GitHub profile fetch failed (HTTP ${response.status})`);
-        }
-
+        this.checkUserToken(accessToken);
         try {
-            return JSON.parse(text);
+            const response = await fetch('https://api.github.com/user', {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    Accept: 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2022-11-28',
+                },
+            });
+
+            const text = await response.text();
+            if (!response.ok) {
+                let detail = '';
+                try {
+                    const parsed = JSON.parse(text);
+                    detail = parsed.message || '';
+                } catch {
+                    detail = text;
+                }
+                logger.error({
+                    status: response.status,
+                    message: this.sanitizeErrorMessage(detail),
+                }, 'GitHub profile fetch failed');
+                throw new Error(this.sanitizeErrorMessage(detail || `GitHub profile fetch failed (HTTP ${response.status})`));
+            }
+
+            try {
+                return JSON.parse(text);
+            } catch (err: any) {
+                throw new Error(`Invalid JSON response for GitHub profile: ${this.sanitizeErrorMessage(err.message)}`);
+            }
         } catch (err: any) {
-            throw new Error(`Invalid JSON response for GitHub profile: ${err.message}`);
+            throw new Error(this.sanitizeErrorMessage(err.message));
         }
     }
 
     static async getPrimaryEmail(accessToken: string) {
-        const response = await fetch('https://api.github.com/user/emails', {
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                Accept: 'application/vnd.github+json',
-                'X-GitHub-Api-Version': '2022-11-28',
-            },
-        });
+        this.checkUserToken(accessToken);
+        try {
+            const response = await fetch('https://api.github.com/user/emails', {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    Accept: 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2022-11-28',
+                },
+            });
 
-        const data = await response.json() as any;
-        if (!response.ok) {
-            throw new Error(data?.message || 'Unable to fetch GitHub email addresses');
+            const data = await response.json() as any;
+            if (!response.ok) {
+                throw new Error(this.sanitizeErrorMessage(data?.message || 'Unable to fetch GitHub email addresses'));
+            }
+
+            if (!Array.isArray(data)) return null;
+            const primary = data.find((email) => email.primary && email.verified) || data.find((email) => email.verified);
+            return primary?.email || null;
+        } catch (err: any) {
+            throw new Error(this.sanitizeErrorMessage(err.message));
         }
-
-        if (!Array.isArray(data)) return null;
-        const primary = data.find((email) => email.primary && email.verified) || data.find((email) => email.verified);
-        return primary?.email || null;
     }
 
     static async authenticateOAuthUser(accessToken: string, userAgent?: string, ipAddress?: string) {
+        this.checkUserToken(accessToken);
         const profile = await this.getProfile(accessToken);
         const email = profile.email || await this.getPrimaryEmail(accessToken);
 
@@ -219,6 +267,7 @@ export class GitHubService {
     }
 
     static async syncUser(userId: string, accessToken: string) {
+        this.checkUserToken(accessToken);
         logger.info({ userId }, 'Syncing GitHub account');
         
         let profile;
@@ -231,7 +280,7 @@ export class GitHubService {
                 email: profile.email,
             }, 'GitHub profile fetched successfully');
         } catch (fetchErr: any) {
-            throw new Error(`GitHub API Error: ${fetchErr.message}`);
+            throw new Error(`GitHub API Error: ${this.sanitizeErrorMessage(fetchErr.message)}`);
         }
 
         const tokenString = this.packEncryptedToken(accessToken);
@@ -279,13 +328,14 @@ export class GitHubService {
                 githubId: profile.id,
             }, 'User GitHub link updated');
         } catch (dbErr: any) {
-            throw new Error(`Database Storage Error: ${dbErr.message}`);
+            throw new Error(`Database Storage Error: ${this.sanitizeErrorMessage(dbErr.message)}`);
         }
 
         return githubAccount;
     }
 
     static async fetchRepos(accessToken: string) {
+        this.checkUserToken(accessToken);
         const repos: any[] = [];
         let page = 1;
 
@@ -297,29 +347,33 @@ export class GitHubService {
                 affiliation: 'owner,collaborator,organization_member',
                 page: String(page),
             });
-            const response = await fetch(`https://api.github.com/user/repos?${params.toString()}`, {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    Accept: 'application/vnd.github+json',
-                    'X-GitHub-Api-Version': '2022-11-28',
-                },
-            });
-            const data = await response.json() as any;
+            try {
+                const response = await fetch(`https://api.github.com/user/repos?${params.toString()}`, {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                        Accept: 'application/vnd.github+json',
+                        'X-GitHub-Api-Version': '2022-11-28',
+                    },
+                });
+                const data = await response.json() as any;
 
-            if (!response.ok) {
-                logger.error({
-                    status: response.status,
-                    message: data.message,
-                    page,
-                }, 'GitHub repository fetch failed');
-                throw new Error(data.message || 'Unable to fetch GitHub repositories');
+                if (!response.ok) {
+                    logger.error({
+                        status: response.status,
+                        message: this.sanitizeErrorMessage(data.message),
+                        page,
+                    }, 'GitHub repository fetch failed');
+                    throw new Error(this.sanitizeErrorMessage(data.message || 'Unable to fetch GitHub repositories'));
+                }
+
+                repos.push(...data);
+                logger.info({ page, count: data.length }, 'Fetched GitHub repository page');
+
+                if (!Array.isArray(data) || data.length < 100) break;
+                page += 1;
+            } catch (err: any) {
+                throw new Error(this.sanitizeErrorMessage(err.message));
             }
-
-            repos.push(...data);
-            logger.info({ page, count: data.length }, 'Fetched GitHub repository page');
-
-            if (!Array.isArray(data) || data.length < 100) break;
-            page += 1;
         }
 
         return repos;
@@ -328,9 +382,15 @@ export class GitHubService {
     static async syncRepos(userId: string) {
         const account = await prisma.gitHubAccount.findUnique({ where: { userId } });
         if (!account) throw new Error('GitHub account not connected');
+        this.checkUserToken(account.accessToken);
 
-        const [iv, tag, content] = account.accessToken.split(':');
+        const parts = account.accessToken.split(':');
+        if (parts.length !== 3) {
+            throw new Error('GitHub access token format in database is invalid');
+        }
+        const [iv, tag, content] = parts;
         const accessToken = encryptionService.decrypt({ iv, tag, content });
+        this.checkUserToken(accessToken);
 
         const githubRepos = await this.fetchRepos(accessToken);
         logger.info({
@@ -375,51 +435,61 @@ export class GitHubService {
     static async createWebhook(userId: string, repoFullName: string) {
         const account = await prisma.gitHubAccount.findUnique({ where: { userId } });
         if (!account) throw new Error('GitHub account not connected');
+        this.checkUserToken(account.accessToken);
 
-        const [iv, tag, content] = account.accessToken.split(':');
+        const parts = account.accessToken.split(':');
+        if (parts.length !== 3) {
+            throw new Error('GitHub access token format in database is invalid');
+        }
+        const [iv, tag, content] = parts;
         const accessToken = encryptionService.decrypt({ iv, tag, content });
+        this.checkUserToken(accessToken);
 
-        const response = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                Accept: 'application/vnd.github+json',
-                'X-GitHub-Api-Version': '2022-11-28',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                name: 'web',
-                active: true,
-                events: ['push', 'pull_request'],
-                config: {
-                    url: `${config.app.apiUrl}/webhooks/github`,
-                    content_type: 'json',
-                    secret: config.oauth.github.webhookSecret,
-                    insecure_ssl: '0',
+        try {
+            const response = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    Accept: 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2022-11-28',
+                    'Content-Type': 'application/json',
                 },
-            }),
-        });
-
-        const data = await response.json() as any;
-        if (!response.ok) {
-            const details = Array.isArray(data.errors)
-                ? data.errors.map((item: any) => [item.resource, item.field, item.code, item.message].filter(Boolean).join(' ')).filter(Boolean).join('; ')
-                : '';
-            const message = [data.message, details].filter(Boolean).join(': ');
-            logger.error({
-                repoFullName,
-                status: response.status,
-                message,
-            }, 'GitHub webhook creation failed');
-            throw new Error(message || 'Unable to create GitHub webhook');
-        }
-        if (data.id) {
-            await prisma.repository.updateMany({
-                where: { githubAccountId: account.id, fullName: repoFullName },
-                data: { webhookId: data.id.toString() },
+                body: JSON.stringify({
+                    name: 'web',
+                    active: true,
+                    events: ['push', 'pull_request'],
+                    config: {
+                        url: `${config.app.apiUrl}/webhooks/github`,
+                        content_type: 'json',
+                        secret: config.oauth.github.webhookSecret,
+                        insecure_ssl: '0',
+                    },
+                }),
             });
+
+            const data = await response.json() as any;
+            if (!response.ok) {
+                const details = Array.isArray(data.errors)
+                    ? data.errors.map((item: any) => [item.resource, item.field, item.code, item.message].filter(Boolean).join(' ')).filter(Boolean).join('; ')
+                    : '';
+                const message = [data.message, details].filter(Boolean).join(': ');
+                logger.error({
+                    repoFullName,
+                    status: response.status,
+                    message: this.sanitizeErrorMessage(message),
+                }, 'GitHub webhook creation failed');
+                throw new Error(this.sanitizeErrorMessage(message || 'Unable to create GitHub webhook'));
+            }
+            if (data.id) {
+                await prisma.repository.updateMany({
+                    where: { githubAccountId: account.id, fullName: repoFullName },
+                    data: { webhookId: data.id.toString() },
+                });
+            }
+            return data;
+        } catch (err: any) {
+            throw new Error(this.sanitizeErrorMessage(err.message));
         }
-        return data;
     }
 
     static verifySignature(payload: string, signature: string) {

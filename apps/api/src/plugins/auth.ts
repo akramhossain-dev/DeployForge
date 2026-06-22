@@ -51,13 +51,15 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
-            if (payload.sessionId) {
-                const activeSession = await prisma.session.findUnique({
-                    where: { id: payload.sessionId },
-                });
-                if (!activeSession || new Date() > activeSession.expiresAt) {
-                    return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
-                }
+            if (!payload.sessionId) {
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+            }
+
+            const activeSession = await prisma.session.findUnique({
+                where: { id: payload.sessionId },
+            });
+            if (!activeSession || new Date() > activeSession.expiresAt) {
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
             const user = await prisma.user.findUnique({
