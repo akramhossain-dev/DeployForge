@@ -84,6 +84,7 @@ export default function ProfilePage() {
                     <div className="relative group mb-6">
                         <div className="h-32 w-32 overflow-hidden rounded-full border-2 border-cyan-500 bg-slate-900 flex items-center justify-center font-bold text-4xl text-cyan-400 select-none">
                             {gitHubAvatar ? (
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img src={gitHubAvatar} alt="GitHub Avatar" className="h-full w-full object-cover" />
                             ) : (
                                 getInitials()

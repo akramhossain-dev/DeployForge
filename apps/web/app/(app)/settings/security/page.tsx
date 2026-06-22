@@ -92,6 +92,7 @@ export default function SecurityPage() {
     useEffect(() => {
         fetchSessions();
         fetchAuditLogs(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleChangePassword = async (e: React.FormEvent) => {

@@ -98,6 +98,7 @@ export default function SecurityActivityPage() {
     // Refetch when page, category, or search filters change
     useEffect(() => {
         fetchLogs(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, category]);
 
     // Handle search submit

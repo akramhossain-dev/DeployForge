@@ -20,15 +20,17 @@ function StatCard({ title, value, icon, detail }: { title: string; value: string
     );
 }
 
+const EMPTY_ARRAY: any[] = [];
+
 export default function DashboardPage() {
     const deployments = useDeployments();
     const vps = useVpsList();
     const github = useGitHubProfile();
     const repos = useRepositories(!!github.data);
 
-    const deploymentList = deployments.data || [];
-    const vpsList = vps.data || [];
-    const repoList = repos.data || [];
+    const deploymentList = deployments.data || EMPTY_ARRAY;
+    const vpsList = vps.data || EMPTY_ARRAY;
+    const repoList = repos.data || EMPTY_ARRAY;
     const running = deploymentList.filter((deployment) => deployment.status === 'RUNNING').length;
     const failed = deploymentList.filter((deployment) => deployment.status === 'FAILED').length;
     const successRate = deploymentList.length ? Math.round(((deploymentList.length - failed) / deploymentList.length) * 100) : 0;
