@@ -26,7 +26,7 @@ export default function ContactPage() {
         setError(null);
 
         try {
-            const response = await api.post<{ success: true; message: string }>('/api/contact', form);
+            const response = await api.post<{ success: true; message: string }>('/contact', form);
             setSuccess(response.message || 'Message received.');
             setForm(initialForm);
         } catch (err) {
