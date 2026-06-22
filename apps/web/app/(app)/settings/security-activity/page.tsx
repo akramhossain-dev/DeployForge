@@ -1,20 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-    Clock, 
-    Search, 
-    ChevronLeft, 
-    ChevronRight, 
-    RefreshCw, 
-    Monitor, 
-    Smartphone, 
-    Tablet, 
-    HelpCircle, 
-    Shield, 
-    Key, 
-    Github, 
-    User, 
+import {
+    Clock,
+    Search,
+    ChevronLeft,
+    ChevronRight,
+    RefreshCw,
+    Monitor,
+    Smartphone,
+    Tablet,
+    HelpCircle,
+    Shield,
+    Key,
+    Github,
+    User,
     LogOut,
     AlertTriangle
 } from 'lucide-react';
@@ -72,23 +72,23 @@ export default function SecurityActivityPage() {
 
             // api.get automatically unwraps response.data
             const response = await api.get<ApiResponseShape>(`/profile/audit-logs?${queryParams.toString()}`);
-            
+
             setLogs(response.logs || []);
             setPagination(response.pagination || null);
 
             if (isManualRefresh) {
-                addToast({ 
-                    title: 'Logs Updated', 
-                    description: 'Security activity log successfully loaded.', 
-                    severity: 'success' 
+                addToast({
+                    title: 'Logs Updated',
+                    description: 'Security activity log successfully loaded.',
+                    severity: 'success'
                 });
             }
         } catch (err: any) {
             console.error('Failed to fetch security logs:', err);
-            addToast({ 
-                title: 'Load Failure', 
-                description: err.message || 'Failed to load security activity logs.', 
-                severity: 'error' 
+            addToast({
+                title: 'Load Failure',
+                description: err.message || 'Failed to load security activity logs.',
+                severity: 'error'
             });
         } finally {
             setIsLoading(false);
@@ -117,7 +117,7 @@ export default function SecurityActivityPage() {
 
     const getActionBadge = (action: string) => {
         const actionLower = action.toLowerCase();
-        
+
         let colorClasses = 'bg-slate-500/10 border-slate-500/20 text-slate-300';
         let Icon = Shield;
 
@@ -156,10 +156,10 @@ export default function SecurityActivityPage() {
                         <Clock className="text-cyan-400" size={18} />
                         <h3 className="font-bold text-white">Security Activity Log</h3>
                     </div>
-                    <Button 
-                        variant="secondary" 
-                        className="self-end md:self-auto text-xs px-3 py-1.5" 
-                        onClick={() => fetchLogs(true)} 
+                    <Button
+                        variant="secondary"
+                        className="self-end md:self-auto text-xs px-3 py-1.5"
+                        onClick={() => fetchLogs(true)}
                         disabled={isLoading}
                     >
                         <RefreshCw size={14} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />

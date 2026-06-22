@@ -203,22 +203,43 @@ export async function buildApp() {
 
     // API-1: Registered all routes cleanly with standard structure and no duplicates
     await app.register(import('./routes/auth'), { prefix: '/api/auth' });
+    await app.register(import('./routes/auth'), { prefix: '/auth' });
     await app.register(import('./routes/profile'), { prefix: '/api/profile' });
+    await app.register(import('./routes/profile'), { prefix: '/profile' });
     await app.register(import('./routes/sessions'), { prefix: '/api/sessions' });
+    await app.register(import('./routes/sessions'), { prefix: '/sessions' });
     await app.register(import('./routes/public'), { prefix: '/api/public' });
+    await app.register(import('./routes/public'), { prefix: '/public' });
     await app.register(import('./routes/contact'), { prefix: '/api/contact' });
+    await app.register(import('./routes/contact'), { prefix: '/contact' });
     await app.register(import('./routes/admin'), { prefix: '/api/admin' });
+    await app.register(import('./routes/admin'), { prefix: '/admin' });
     await app.register(import('./routes/github'), { prefix: '/api/github' });
+    await app.register(import('./routes/github'), { prefix: '/api/auth/github' });
+    await app.register(import('./routes/github'), { prefix: '/github' });
+    await app.register(import('./routes/github'), { prefix: '/auth/github' });
     await app.register(import('./routes/google'), { prefix: '/api/google' });
+    await app.register(import('./routes/google'), { prefix: '/api/auth/google' });
+    await app.register(import('./routes/google'), { prefix: '/google' });
+    await app.register(import('./routes/google'), { prefix: '/auth/google' });
     await app.register(import('./routes/webhooks'), { prefix: '/api/webhooks' });
+    await app.register(import('./routes/webhooks'), { prefix: '/webhooks' });
     await app.register(import('./routes/vps'), { prefix: '/api/vps' });
+    await app.register(import('./routes/vps'), { prefix: '/vps' });
     await app.register(import('./routes/deploy'), { prefix: '/api/deploy' });
+    await app.register(import('./routes/deploy'), { prefix: '/deploy' });
     await app.register(import('./routes/deployments'), { prefix: '/api/deployments' });
+    await app.register(import('./routes/deployments'), { prefix: '/deployments' });
     await app.register(import('./routes/ws'), { prefix: '/api/ws' });
+    await app.register(import('./routes/ws'), { prefix: '/ws' });
     await app.register(import('./routes/sandbox'), { prefix: '/api/sandbox' });
+    await app.register(import('./routes/sandbox'), { prefix: '/sandbox' });
     await app.register(import('./routes/domain'), { prefix: '/api/domain' });
+    await app.register(import('./routes/domain'), { prefix: '/domain' });
     await app.register(import('./routes/monitoring'), { prefix: '/api/monitor' });
+    await app.register(import('./routes/monitoring'), { prefix: '/monitor' });
     await app.register(import('./routes/terminal'), { prefix: '/api/terminal' });
+    await app.register(import('./routes/terminal'), { prefix: '/terminal' });
     await app.register(import('./routes/health'));
 
     return app;

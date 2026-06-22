@@ -88,6 +88,7 @@ export class MailService {
     }
 
     private async sendWithRetry(mailOptions: nodemailer.SendMailOptions, retries = 3, delay = 1000): Promise<any> {
+        const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || !process.env.NODE_ENV;
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
                 const info = await this.transporter.sendMail(mailOptions);
@@ -106,6 +107,14 @@ export class MailService {
                     fix_suggestion: attempt === retries ? 'Check SMTP configuration and network connectivity' : undefined,
                 });
                 if (attempt === retries) {
+                    if (isDev) {
+                        structuredLog({
+                            stage: 'smtp',
+                            severity: 'info',
+                            message: `[DEVELOPMENT MOCK] Email content for ${mailOptions.to}:\nSubject: ${mailOptions.subject}\nHTML:\n${mailOptions.html}\n`,
+                        });
+                        return { messageId: 'mock-id' };
+                    }
                     throw error;
                 }
                 await new Promise((resolve) => setTimeout(resolve, delay * attempt));

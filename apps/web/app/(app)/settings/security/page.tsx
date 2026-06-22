@@ -71,18 +71,18 @@ export default function SecurityPage() {
             const logList = response?.logs || response?.data?.logs || [];
             setLogs(logList);
             if (showToast) {
-                addToast({ 
-                    title: 'Logs Updated', 
-                    description: 'Security log loaded successfully.', 
-                    severity: 'success' 
+                addToast({
+                    title: 'Logs Updated',
+                    description: 'Security log loaded successfully.',
+                    severity: 'success'
                 });
             }
         } catch (err: any) {
             console.error('Failed to load audit logs:', err);
-            addToast({ 
-                title: 'Load Failure', 
-                description: err.message || 'Failed to load security activity logs.', 
-                severity: 'error' 
+            addToast({
+                title: 'Load Failure',
+                description: err.message || 'Failed to load security activity logs.',
+                severity: 'error'
             });
         } finally {
             setIsLoadingLogs(false);
@@ -241,17 +241,17 @@ export default function SecurityPage() {
                     </div>
                     {sessions.length > 1 && (
                         <div className="flex gap-2">
-                            <Button 
-                                variant="secondary" 
-                                className="text-xs" 
+                            <Button
+                                variant="secondary"
+                                className="text-xs"
                                 onClick={handleRevokeOthers}
                                 loading={isRevokingOthers}
                             >
                                 Logout Other Sessions
                             </Button>
-                            <Button 
-                                variant="danger" 
-                                className="text-xs bg-rose-500/10 border-rose-500/20 text-rose-300 hover:bg-rose-500/20" 
+                            <Button
+                                variant="danger"
+                                className="text-xs bg-rose-500/10 border-rose-500/20 text-rose-300 hover:bg-rose-500/20"
                                 onClick={handleRevokeAll}
                                 loading={isRevokingAll}
                             >
@@ -276,11 +276,10 @@ export default function SecurityPage() {
                 ) : (
                     <div className="space-y-3 mb-6">
                         {sessions.map((session) => (
-                            <div 
-                                key={session.id} 
-                                className={`flex items-center justify-between p-4 rounded-lg border bg-slate-950/50 hover:bg-slate-950/80 transition-colors ${
-                                    session.isCurrent ? 'border-cyan-500/30' : 'border-white/5'
-                                }`}
+                            <div
+                                key={session.id}
+                                className={`flex items-center justify-between p-4 rounded-lg border bg-slate-950/50 hover:bg-slate-950/80 transition-colors ${session.isCurrent ? 'border-cyan-500/30' : 'border-white/5'
+                                    }`}
                             >
                                 <div className="flex items-start gap-3">
                                     <span className="mt-1 p-2 rounded-md bg-white/5 border border-white/10">
@@ -302,10 +301,10 @@ export default function SecurityPage() {
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 {!session.isCurrent && (
-                                    <Button 
-                                        variant="danger" 
+                                    <Button
+                                        variant="danger"
                                         className="p-2 bg-rose-500/5 hover:bg-rose-500/15 border-rose-500/10 text-rose-400"
                                         onClick={() => handleRevoke(session.id)}
                                         loading={isRevoking === session.id}
