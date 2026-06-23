@@ -3,8 +3,12 @@ import { config } from './config/env';
 import './workers/deployment.worker';
 import { HardeningService } from './services/hardening.service';
 import { BackupService } from './services/backup.service';
+import { SuperAdminService } from './services/superadmin.service';
 
 async function start() {
+    // Sync/ensure Super Admin exists on startup
+    await SuperAdminService.ensureSuperAdmin();
+
     const app = await buildApp();
 
     try {

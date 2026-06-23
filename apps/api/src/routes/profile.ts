@@ -4,7 +4,7 @@ import { PasswordService } from '@deployforge/security';
 import { AccountService } from '../services/account.service';
 
 const strongPasswordSchema = z.string()
-    .min(12)
+    .min(6)
     .refine((password) => PasswordService.validate(password).valid, {
         message: 'Password does not meet security requirements',
     });

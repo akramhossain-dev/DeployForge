@@ -17,6 +17,7 @@ enum Role {
 enum UserStatus {
   ACTIVE
   SUSPENDED
+  DISABLED
 }
 
 enum AuthProvider {
@@ -149,6 +150,7 @@ model User {
 model AdminUser {
   id            String          @id @default(uuid())
   email         String          @unique
+  name          String?
   passwordHash  String
   role          Role
   createdById   String?

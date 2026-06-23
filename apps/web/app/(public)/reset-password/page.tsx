@@ -10,8 +10,8 @@ import { useToastStore } from '@/lib/store/useToastStore';
 import { PasswordInput } from '@/components/ui';
 
 function validatePassword(pass: string): { valid: true } | { valid: false; message: string } {
-    if (pass.length < 12) {
-        return { valid: false, message: 'Password must be at least 12 characters long' };
+    if (pass.length < 6) {
+        return { valid: false, message: 'Password must be at least 6 characters long' };
     }
     const weakPasswords = new Set(['password', 'password123', 'password1234', 'qwerty123456', 'letmein123456', 'admin123456', 'deployforge123']);
     if (weakPasswords.has(pass.toLowerCase()) || /(.)\1{5,}/.test(pass) || /^(?:1234567890|0987654321)/.test(pass)) {

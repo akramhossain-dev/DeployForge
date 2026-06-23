@@ -1,6 +1,6 @@
 import argon2 from 'argon2';
 
-const minPasswordLength = 12;
+const minPasswordLength = 6;
 const weakPasswords = new Set([
     'password',
     'password123',

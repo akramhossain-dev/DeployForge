@@ -27,10 +27,11 @@ const adminLoginSchema = z.object({
 });
 
 const createAdminSchema = z.object({
-    adminSecret: z.string().min(1),
+    adminSecret: z.string().min(1).optional(),
     email: z.string().email(),
-    password: z.string().min(12),
+    password: z.string().min(6),
     role: z.enum(['ADMIN', 'MODERATOR']),
+    name: z.string().min(1),
 });
 
 const userQuerySchema = z.object({
@@ -210,7 +211,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     fastify.post('/create-user', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request, reply) => {
         const data = createAdminSchema.parse(request.body);
-        if (data.adminSecret !== config.auth.adminSecret) {
+        if (data.adminSecret && data.adminSecret !== config.auth.adminSecret) {
             return error(reply, 403, 'Invalid admin secret', 'INVALID_ADMIN_SECRET');
         }
 
@@ -219,19 +220,20 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         const admin = await prisma.adminUser.create({
             data: {
                 email: data.email,
+                name: data.name,
                 passwordHash,
                 role: data.role,
                 createdById: request.admin.id,
             },
-            select: { id: true, email: true, role: true, createdById: true, createdAt: true },
+            select: { id: true, email: true, name: true, role: true, createdById: true, createdAt: true },
         });
-        await audit(request, 'CREATE_ADMIN_USER', { targetUserId: admin.id, targetRole: admin.role, targetType: 'ADMIN_USER', targetId: admin.id });
+        await audit(request, data.role === 'ADMIN' ? 'CREATE_ADMIN' : 'CREATE_MODERATOR', { targetUserId: admin.id, targetRole: admin.role, targetType: 'ADMIN_USER', targetId: admin.id });
         return { success: true, data: admin };
     });
 
-    fastify.get('/users', { preHandler: [(fastify as any).requireSuperAdmin] }, async () => {
+    fastify.get('/users', { preHandler: [(fastify as any).requireAdmin] }, async () => {
         const admins = await prisma.adminUser.findMany({
-            select: { id: true, email: true, role: true, createdById: true, lastLoginAt: true, createdAt: true, updatedAt: true },
+            select: { id: true, email: true, name: true, role: true, createdById: true, lastLoginAt: true, createdAt: true, updatedAt: true },
             orderBy: { createdAt: 'desc' },
         });
         return { success: true, data: admins };
@@ -239,32 +241,151 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     fastify.patch('/users/:id/role', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request, reply) => {
         const { id } = idParamsSchema.parse(request.params);
-        const { role } = z.object({ role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MODERATOR']) }).parse(request.body);
-        if (id === request.admin.id && role !== 'SUPER_ADMIN') {
-            return error(reply, 400, 'You cannot demote your own super admin account', 'INSUFFICIENT_ROLE');
+        const { role } = z.object({ role: z.enum(['ADMIN', 'MODERATOR', 'USER']) }).parse(request.body);
+
+        // 1. Try to find the user in the AdminUser table
+        const adminUser = await prisma.adminUser.findUnique({ where: { id } });
+        if (adminUser) {
+            if (adminUser.role === 'SUPER_ADMIN') {
+                return error(reply, 400, 'You cannot modify or demote the Super Admin account', 'INSUFFICIENT_ROLE');
+            }
+
+            if (role === 'USER') {
+                // Demote ADMIN/MODERATOR -> USER
+                // Ensure they have a record in the User table
+                let userRecord = await prisma.user.findUnique({ where: { email: adminUser.email } });
+                if (!userRecord) {
+                    userRecord = await prisma.user.create({
+                        data: {
+                            email: adminUser.email,
+                            name: adminUser.name,
+                            passwordHash: adminUser.passwordHash,
+                            role: 'USER',
+                            isVerified: true,
+                        }
+                    });
+                } else {
+                    await prisma.user.update({
+                        where: { id: userRecord.id },
+                        data: { role: 'USER' }
+                    });
+                }
+
+                // Delete admin-specific records
+                await prisma.adminSession.deleteMany({ where: { adminId: id } });
+                await prisma.adminActivity.deleteMany({ where: { adminId: id } });
+                await prisma.adminUser.delete({ where: { id } });
+
+                await audit(request, 'DEMOTE_ADMIN_TO_USER', { targetUserId: userRecord.id, targetRole: 'USER', targetType: 'USER', targetId: userRecord.id });
+                return { success: true, data: { id: userRecord.id, email: userRecord.email, role: 'USER' } };
+            } else {
+                // Update role in AdminUser table
+                const updatedAdmin = await prisma.adminUser.update({
+                    where: { id },
+                    data: { role },
+                    select: { id: true, email: true, role: true, name: true, updatedAt: true }
+                });
+
+                // Also update User table role if they exist there
+                const userRecord = await prisma.user.findUnique({ where: { email: adminUser.email } });
+                if (userRecord) {
+                    await prisma.user.update({
+                        where: { id: userRecord.id },
+                        data: { role }
+                    });
+                }
+
+                await audit(request, 'UPDATE_ADMIN_ROLE', { targetUserId: id, targetRole: role, targetType: 'ADMIN_USER', targetId: id });
+                return { success: true, data: updatedAdmin };
+            }
         }
-        const admin = await prisma.adminUser.update({
-            where: { id },
-            data: { role },
-            select: { id: true, email: true, role: true, updatedAt: true },
-        });
-        await audit(request, 'UPDATE_ADMIN_ROLE', { targetUserId: id, targetRole: role, targetType: 'ADMIN_USER', targetId: id });
-        return { success: true, data: admin };
+
+        // 2. Try to find the user in the regular User table
+        const regularUser = await prisma.user.findUnique({ where: { id } });
+        if (regularUser) {
+            if (role === 'USER') {
+                return { success: true, data: { id: regularUser.id, email: regularUser.email, role: 'USER' } };
+            }
+
+            if (!regularUser.email) {
+                return error(reply, 400, 'User email is required to promote to administrator', 'INVALID_INPUT');
+            }
+
+            const email = regularUser.email;
+
+            // Promote USER -> ADMIN/MODERATOR
+            let adminRecord = await prisma.adminUser.findUnique({ where: { email } });
+            if (!adminRecord) {
+                const passwordHash = regularUser.passwordHash || await PasswordService.hash(crypto.randomBytes(16).toString('hex'));
+                adminRecord = await prisma.adminUser.create({
+                    data: {
+                        email,
+                        name: regularUser.name,
+                        passwordHash,
+                        role,
+                        createdById: request.admin.id,
+                    }
+                });
+            } else {
+                await prisma.adminUser.update({
+                    where: { id: adminRecord.id },
+                    data: { role }
+                });
+            }
+
+            // Update role in User table
+            await prisma.user.update({
+                where: { id },
+                data: { role }
+            });
+
+            await audit(request, 'PROMOTE_USER_TO_ADMIN', { targetUserId: regularUser.id, targetRole: role, targetType: 'ADMIN_USER', targetId: adminRecord.id });
+            return { success: true, data: { id: adminRecord.id, email: adminRecord.email, role } };
+        }
+
+        return error(reply, 404, 'User not found', 'NOT_FOUND');
     });
 
     fastify.delete('/users/:id', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request, reply) => {
         const { id } = idParamsSchema.parse(request.params);
         if (id === request.admin.id) return error(reply, 400, 'You cannot delete your own super admin account', 'INSUFFICIENT_ROLE');
+
+        const adminUser = await prisma.adminUser.findUnique({ where: { id } });
+        if (!adminUser) return error(reply, 404, 'Admin user not found', 'NOT_FOUND');
+        if (adminUser.role === 'SUPER_ADMIN') return error(reply, 400, 'You cannot delete the Super Admin account', 'INSUFFICIENT_ROLE');
+
         await prisma.adminActivity.deleteMany({ where: { adminId: id } });
         await prisma.adminSession.deleteMany({ where: { adminId: id } });
         await prisma.adminUser.delete({ where: { id } });
-        await audit(request, 'DELETE_ADMIN_USER', { targetUserId: id, targetType: 'ADMIN_USER', targetId: id });
+        await audit(request, adminUser.role === 'ADMIN' ? 'DELETE_ADMIN' : 'DELETE_MODERATOR', { targetUserId: id, targetType: 'ADMIN_USER', targetId: id });
         return { success: true, data: { message: 'Admin user deleted' } };
     });
 
     fastify.get('/overview', { preHandler: [(fastify as any).requireAdmin] }, async () => {
-        const [totalUsers, totalDeployments, activeDeployments, totalVps, connectedGitHubAccounts, totalRepositories, recentActivities, latestHealth, deploymentJobs] = await Promise.all([
+        const [
+            totalUsers,
+            totalAdmins,
+            totalModerators,
+            activeUsers,
+            suspendedUsers,
+            disabledUsers,
+            recentRegistrations,
+            totalDeployments,
+            activeDeployments,
+            totalVps,
+            connectedGitHubAccounts,
+            totalRepositories,
+            recentActivities,
+            latestHealth,
+            deploymentJobs
+        ] = await Promise.all([
             prisma.user.count(),
+            prisma.adminUser.count({ where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] } } }),
+            prisma.adminUser.count({ where: { role: 'MODERATOR' } }),
+            prisma.user.count({ where: { status: 'ACTIVE' } }),
+            prisma.user.count({ where: { status: 'SUSPENDED' } }),
+            prisma.user.count({ where: { status: 'DISABLED' } }),
+            prisma.user.findMany({ take: 5, orderBy: { createdAt: 'desc' }, select: { id: true, email: true, name: true, createdAt: true, status: true } }),
             prisma.deployment.count(),
             prisma.deployment.count({ where: { status: { in: ['RUNNING', 'BUILDING', 'PENDING'] } } }),
             prisma.vPS.count(),
@@ -279,7 +400,20 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return {
             success: true,
             data: {
-                totals: { totalUsers, totalDeployments, activeDeployments, totalVps, connectedGitHubAccounts, totalRepositories },
+                totals: {
+                    totalUsers,
+                    totalAdmins,
+                    totalModerators,
+                    activeUsers,
+                    suspendedUsers,
+                    disabledUsers,
+                    totalDeployments,
+                    activeDeployments,
+                    totalVps,
+                    connectedGitHubAccounts,
+                    totalRepositories
+                },
+                recentRegistrations,
                 resources: { cpuUsage: avg(latestHealth.map((item) => item.cpuUsage)), memoryUsage: avg(latestHealth.map((item) => item.memoryUsage)), diskUsage: avg(latestHealth.map((item) => item.diskUsage)) },
                 queue: { recentJobs: deploymentJobs.length, failedJobs: deploymentJobs.filter((job) => job.status === 'FAILED').length, successRate: deploymentJobs.length ? Math.round((successJobs / deploymentJobs.length) * 100) : 0 },
                 recentActivities,

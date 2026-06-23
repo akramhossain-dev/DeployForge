@@ -74,6 +74,8 @@ const rawEnvSchema = z.object({
     RATE_LIMIT_WINDOW: z.string().trim().min(1).default('1 minute'),
     ADMIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     ADMIN_LOCKOUT_TIME: z.coerce.number().int().positive().default(900),
+    SUPER_ADMIN_EMAIL: z.string().email('SUPER_ADMIN_EMAIL must be a valid email address'),
+    SUPER_ADMIN_PASSWORD: z.string().min(8, 'SUPER_ADMIN_PASSWORD must be at least 8 characters'),
 });
 
 function formatEnvErrors(error: z.ZodError) {
@@ -231,6 +233,10 @@ export const config = {
     RATE_LIMIT_WINDOW: securityConfig.rateLimitWindow,
     ADMIN_MAX_ATTEMPTS: securityConfig.adminMaxAttempts,
     ADMIN_LOCKOUT_TIME: securityConfig.adminLockoutTime,
+    superAdmin: {
+        email: env.SUPER_ADMIN_EMAIL,
+        password: env.SUPER_ADMIN_PASSWORD,
+    },
 } as const;
 
 export function validateOAuthConfig(logger: Pick<Console, 'info' | 'warn'> = console) {

@@ -88,7 +88,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
             });
 
             if (!user) return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
-            if (user.status === 'SUSPENDED') return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
+            if (user.status === 'SUSPENDED' || user.status === 'DISABLED') return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
 
             const { passwordHash, ...safeUser } = user;
             request.user = {
@@ -105,7 +105,7 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
         }
     });
 
-    fastify.decorate('requireAdmin', async (request: FastifyRequest, reply: FastifyReply) => {
+    const authenticateAdmin = async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const authHeader = request.headers.authorization;
             const cookies = parseCookies(request.headers.cookie);
@@ -114,12 +114,14 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 : cookies['adminAccessToken'] || '';
 
             if (!token) {
-                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                return null;
             }
 
             const payload = adminTokenService.verifyToken(token);
             if (payload.tokenType !== 'admin' || !payload.adminId || !payload.sessionId) {
-                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                return null;
             }
 
             const session = await prisma.adminSession.findUnique({
@@ -128,36 +130,69 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
             });
 
             if (!session || session.revokedAt || session.tokenHash !== tokenHash(token) || new Date() > session.expiresAt) {
-                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                return null;
             }
 
-            if (!adminRoles.has(session.admin.role)) {
-                return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
-            }
-
-            request.admin = {
-                id: session.admin.id,
-                email: session.admin.email,
-                role: session.admin.role,
-                createdAt: session.admin.createdAt,
-                lastLoginAt: session.admin.lastLoginAt,
-            };
-            request.adminSessionId = session.id;
+            return session;
         } catch (err) {
-            return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+            apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+            return null;
         }
+    };
+
+    fastify.decorate('requireAdmin', async (request: FastifyRequest, reply: FastifyReply) => {
+        const session = await authenticateAdmin(request, reply);
+        if (!session) return;
+
+        if (session.admin.role !== 'ADMIN' && session.admin.role !== 'SUPER_ADMIN') {
+            return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
+        }
+
+        request.admin = {
+            id: session.admin.id,
+            email: session.admin.email,
+            role: session.admin.role,
+            createdAt: session.admin.createdAt,
+            lastLoginAt: session.admin.lastLoginAt,
+        };
+        request.adminSessionId = session.id;
     });
 
     fastify.decorate('requireSuperAdmin', async (request: FastifyRequest, reply: FastifyReply) => {
-        await (fastify as any).requireAdmin(request, reply);
-        if (reply.sent) return;
-        if (request.admin?.role !== 'SUPER_ADMIN') {
+        const session = await authenticateAdmin(request, reply);
+        if (!session) return;
+
+        if (session.admin.role !== 'SUPER_ADMIN') {
             return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
         }
+
+        request.admin = {
+            id: session.admin.id,
+            email: session.admin.email,
+            role: session.admin.role,
+            createdAt: session.admin.createdAt,
+            lastLoginAt: session.admin.lastLoginAt,
+        };
+        request.adminSessionId = session.id;
     });
 
     fastify.decorate('requireModerator', async (request: FastifyRequest, reply: FastifyReply) => {
-        await (fastify as any).requireAdmin(request, reply);
+        const session = await authenticateAdmin(request, reply);
+        if (!session) return;
+
+        if (session.admin.role !== 'MODERATOR' && session.admin.role !== 'ADMIN' && session.admin.role !== 'SUPER_ADMIN') {
+            return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
+        }
+
+        request.admin = {
+            id: session.admin.id,
+            email: session.admin.email,
+            role: session.admin.role,
+            createdAt: session.admin.createdAt,
+            lastLoginAt: session.admin.lastLoginAt,
+        };
+        request.adminSessionId = session.id;
     });
 
     done();

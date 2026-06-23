@@ -18,7 +18,7 @@ export type User = {
     };
     isVerified?: boolean;
     role?: 'SUPER_ADMIN' | 'ADMIN' | 'MODERATOR' | 'USER' | string;
-    status?: 'ACTIVE' | 'SUSPENDED' | string;
+    status?: 'ACTIVE' | 'SUSPENDED' | 'DISABLED' | string;
 };
 
 export type GitHubProfile = {
@@ -155,12 +155,24 @@ export type DeploymentLog = {
 export type AdminOverview = {
     totals: {
         totalUsers: number;
+        totalAdmins: number;
+        totalModerators: number;
+        activeUsers: number;
+        suspendedUsers: number;
+        disabledUsers: number;
         totalDeployments: number;
         activeDeployments: number;
         totalVps: number;
         connectedGitHubAccounts: number;
         totalRepositories: number;
     };
+    recentRegistrations?: {
+        id: string;
+        email: string | null;
+        name: string | null;
+        status: string;
+        createdAt: string;
+    }[];
     resources: {
         cpuUsage: number;
         memoryUsage: number;

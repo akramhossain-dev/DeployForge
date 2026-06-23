@@ -177,8 +177,8 @@ export class AuthService {
             throw genericAuthError();
         }
 
-        if (user.status === 'SUSPENDED') {
-            await AccountService.logAudit(user.id, 'LOGIN_FAILURE', 'Login failed: Account suspended', ipAddress, userAgent, { email });
+        if (user.status === 'SUSPENDED' || user.status === 'DISABLED') {
+            await AccountService.logAudit(user.id, 'LOGIN_FAILURE', `Login failed: Account is ${user.status.toLowerCase()}`, ipAddress, userAgent, { email });
             throw genericAuthError();
         }
         if (!user.isVerified) {
