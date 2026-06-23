@@ -1,11 +1,12 @@
 'use client';
 
-import { FormEvent, ReactNode, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useMemo, useState, useRef } from 'react';
 import { CheckCircle2, KeyRound, Plus, RefreshCw, Server, Trash2, XCircle } from 'lucide-react';
 import { ApiError } from '@/lib/api/client';
 import { Button, EmptyState, ErrorState, PageHeader, Panel, PasswordInput, SectionHeading, SkeletonBlock, StatusBadge, formatDate, inputClassName } from '@/components/ui';
 import { useAddVps, useDeleteVps, useTestVpsConnection, useVpsList } from '@/hooks/useDeployForgeData';
 import type { VpsConnectionPayload } from '@/lib/api/types';
+import clsx from 'clsx';
 
 const initialForm = {
     name: '',
@@ -31,11 +32,77 @@ export default function VpsPage() {
     const [testState, setTestState] = useState<TestState>({ status: 'idle', message: '' });
     const [testingId, setTestingId] = useState<string | null>(null);
 
+    // Local validation errors
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    // Refs for focus management
+    const nameRef = useRef<HTMLInputElement>(null);
+    const ipRef = useRef<HTMLInputElement>(null);
+    const portRef = useRef<HTMLInputElement>(null);
+    const usernameRef = useRef<HTMLInputElement>(null);
+    const passwordRef = useRef<HTMLInputElement>(null);
+    const privateKeyRef = useRef<HTMLTextAreaElement>(null);
+
     const payload = useMemo(() => buildPayload(form), [form]);
     const isTestingForm = testConnection.isPending && !testingId;
-    const canSubmit = Boolean(form.name && form.ipAddress && form.username && (form.authType === 'password' ? form.password : form.privateKey));
+    const isSubmitting = addVps.isPending || isTestingForm;
+
+    function validateForm(): boolean {
+        const newErrors: Record<string, string> = {};
+        let isValid = true;
+
+        if (!form.name.trim()) {
+            newErrors.name = 'VPS Name is required';
+            isValid = false;
+        }
+
+        if (!form.ipAddress.trim()) {
+            newErrors.ipAddress = 'IP Address or Hostname is required';
+            isValid = false;
+        }
+
+        const portNum = Number(form.port);
+        if (!form.port.trim()) {
+            newErrors.port = 'Port is required';
+            isValid = false;
+        } else if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+            newErrors.port = 'Port must be a valid number (1 - 65535)';
+            isValid = false;
+        }
+
+        if (!form.username.trim()) {
+            newErrors.username = 'SSH Username is required';
+            isValid = false;
+        }
+
+        if (form.authType === 'password') {
+            if (!form.password) {
+                newErrors.password = 'SSH Password is required';
+                isValid = false;
+            }
+        } else {
+            if (!form.privateKey.trim()) {
+                newErrors.privateKey = 'SSH Private Key is required';
+                isValid = false;
+            }
+        }
+
+        setErrors(newErrors);
+
+        if (!isValid) {
+            if (newErrors.name) nameRef.current?.focus();
+            else if (newErrors.ipAddress) ipRef.current?.focus();
+            else if (newErrors.port) portRef.current?.focus();
+            else if (newErrors.username) usernameRef.current?.focus();
+            else if (newErrors.password) passwordRef.current?.focus();
+            else if (newErrors.privateKey) privateKeyRef.current?.focus();
+        }
+
+        return isValid;
+    }
 
     async function handleTest() {
+        if (!validateForm()) return;
         setTestState({ status: 'idle', message: '' });
         try {
             const result = await testConnection.mutateAsync(payload);
@@ -47,10 +114,12 @@ export default function VpsPage() {
 
     async function handleAdd(event: FormEvent) {
         event.preventDefault();
+        if (!validateForm()) return;
         setTestState({ status: 'idle', message: '' });
         try {
             await addVps.mutateAsync({ ...payload, name: form.name.trim() });
             setForm(initialForm);
+            setErrors({});
             setTestState({ status: 'success', message: 'VPS added successfully' });
         } catch (error) {
             setTestState({ status: 'failed', message: errorMessage(error) });
@@ -79,17 +148,74 @@ export default function VpsPage() {
                     <SectionHeading icon={<Server size={18} />} title="Add VPS" description="Credentials are tested before save and encrypted at rest." />
 
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        <Field label="VPS Name">
-                            <input className={inputClassName} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Production API" />
+                        <Field label="VPS Name" error={errors.name}>
+                            <input
+                                ref={nameRef}
+                                className={clsx(
+                                    inputClassName,
+                                    "transition-colors",
+                                    errors.name ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                value={form.name}
+                                onChange={(event) => {
+                                    setForm({ ...form, name: event.target.value });
+                                    if (errors.name) setErrors({ ...errors, name: '' });
+                                }}
+                                placeholder="Production API"
+                                disabled={isSubmitting}
+                            />
                         </Field>
-                        <Field label="IP Address / Hostname">
-                            <input className={inputClassName} value={form.ipAddress} onChange={(event) => setForm({ ...form, ipAddress: event.target.value })} placeholder="203.0.113.10" />
+                        <Field label="IP Address / Hostname" error={errors.ipAddress}>
+                            <input
+                                ref={ipRef}
+                                className={clsx(
+                                    inputClassName,
+                                    "transition-colors",
+                                    errors.ipAddress ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                value={form.ipAddress}
+                                onChange={(event) => {
+                                    setForm({ ...form, ipAddress: event.target.value });
+                                    if (errors.ipAddress) setErrors({ ...errors, ipAddress: '' });
+                                }}
+                                placeholder="203.0.113.10"
+                                disabled={isSubmitting}
+                            />
                         </Field>
-                        <Field label="Port">
-                            <input className={inputClassName} value={form.port} onChange={(event) => setForm({ ...form, port: event.target.value })} inputMode="numeric" placeholder="22" />
+                        <Field label="Port" error={errors.port}>
+                            <input
+                                ref={portRef}
+                                className={clsx(
+                                    inputClassName,
+                                    "transition-colors",
+                                    errors.port ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                value={form.port}
+                                onChange={(event) => {
+                                    setForm({ ...form, port: event.target.value });
+                                    if (errors.port) setErrors({ ...errors, port: '' });
+                                }}
+                                inputMode="numeric"
+                                placeholder="22"
+                                disabled={isSubmitting}
+                            />
                         </Field>
-                        <Field label="SSH Username">
-                            <input className={inputClassName} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} placeholder="root" />
+                        <Field label="SSH Username" error={errors.username}>
+                            <input
+                                ref={usernameRef}
+                                className={clsx(
+                                    inputClassName,
+                                    "transition-colors",
+                                    errors.username ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                value={form.username}
+                                onChange={(event) => {
+                                    setForm({ ...form, username: event.target.value });
+                                    if (errors.username) setErrors({ ...errors, username: '' });
+                                }}
+                                placeholder="root"
+                                disabled={isSubmitting}
+                            />
                         </Field>
                     </div>
 
@@ -100,9 +226,14 @@ export default function VpsPage() {
                                 type="button"
                                 onClick={() => {
                                     setForm({ ...form, authType });
+                                    setErrors({});
                                     setTestState({ status: 'idle', message: '' });
                                 }}
-                                className={`h-9 rounded-md px-4 text-sm font-black transition-colors ${form.authType === authType ? 'bg-white text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                className={clsx(
+                                    "h-9 rounded-md px-4 text-sm font-black transition-colors",
+                                    form.authType === authType ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"
+                                )}
+                                disabled={isSubmitting}
                             >
                                 {authType === 'password' ? 'Password' : 'Private Key'}
                             </button>
@@ -110,12 +241,40 @@ export default function VpsPage() {
                     </div>
 
                     {form.authType === 'password' ? (
-                        <Field label="SSH Password">
-                            <PasswordInput className={inputClassName} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" />
+                        <Field label="SSH Password" error={errors.password}>
+                            <PasswordInput
+                                ref={passwordRef}
+                                className={clsx(
+                                    inputClassName,
+                                    "transition-colors",
+                                    errors.password ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                value={form.password}
+                                onChange={(event) => {
+                                    setForm({ ...form, password: event.target.value });
+                                    if (errors.password) setErrors({ ...errors, password: '' });
+                                }}
+                                autoComplete="new-password"
+                                disabled={isSubmitting}
+                            />
                         </Field>
                     ) : (
-                        <Field label="SSH Private Key">
-                            <textarea className={`${inputClassName} min-h-40 py-3 font-mono text-xs`} value={form.privateKey} onChange={(event) => setForm({ ...form, privateKey: event.target.value })} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
+                        <Field label="SSH Private Key" error={errors.privateKey}>
+                            <textarea
+                                ref={privateKeyRef}
+                                className={clsx(
+                                    inputClassName,
+                                    "min-h-40 py-3 font-mono text-xs transition-colors",
+                                    errors.privateKey ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                value={form.privateKey}
+                                onChange={(event) => {
+                                    setForm({ ...form, privateKey: event.target.value });
+                                    if (errors.privateKey) setErrors({ ...errors, privateKey: '' });
+                                }}
+                                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                                disabled={isSubmitting}
+                            />
                         </Field>
                     )}
 
@@ -127,10 +286,10 @@ export default function VpsPage() {
                     ) : null}
 
                     <div className="flex flex-col gap-3 sm:flex-row">
-                        <Button type="button" variant="secondary" onClick={handleTest} loading={isTestingForm} disabled={!canSubmit}>
+                        <Button type="button" variant="secondary" onClick={handleTest} loading={isTestingForm} disabled={isSubmitting}>
                             <KeyRound size={16} /> Test Connection
                         </Button>
-                        <Button type="submit" loading={addVps.isPending} disabled={!canSubmit}>
+                        <Button type="submit" loading={addVps.isPending} disabled={isSubmitting}>
                             <Plus size={16} /> Add VPS
                         </Button>
                     </div>
@@ -213,11 +372,12 @@ export default function VpsPage() {
     );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, error }: { label: string; children: ReactNode; error?: string }) {
     return (
         <label className="block">
             <span className="mb-2 block text-xs font-bold uppercase text-slate-400">{label}</span>
             {children}
+            {error && <p className="mt-1.5 text-xs font-semibold text-rose-400">{error}</p>}
         </label>
     );
 }

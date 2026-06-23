@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Chrome, Github, Loader2, LockKeyhole } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
@@ -16,25 +18,65 @@ export default function LoginPage() {
     const [googleLoading, setGoogleLoading] = useState(false);
     const [githubLoading, setGithubLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // Field-level error states
+    const [emailError, setEmailError] = useState<string | null>(null);
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+
+    // Refs for focus management
+    const emailRef = useRef<HTMLInputElement>(null);
+    const passwordRef = useRef<HTMLInputElement>(null);
+
     const { setSession } = useAuthStore();
     const auth = useAuthSession();
     const router = useRouter();
+    const queryClient = useQueryClient();
 
     useEffect(() => {
-        if (!auth.isLoading && auth.isAuthenticated) router.replace('/dashboard');
+        if (!auth.isLoading && auth.isAuthenticated) {
+            const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+            router.replace(redirectUrl.startsWith('/') ? redirectUrl : '/dashboard');
+        }
     }, [auth.isAuthenticated, auth.isLoading, router]);
 
     const handleLogin = async (event: React.FormEvent) => {
         event.preventDefault();
-        setLoading(true);
+        setEmailError(null);
+        setPasswordError(null);
         setError(null);
 
+        let isValid = true;
+        if (!email.trim()) {
+            setEmailError('Email address is required');
+            isValid = false;
+        } else if (!/\S+@\S+\.\S+/.test(email)) {
+            setEmailError('Please enter a valid email address');
+            isValid = false;
+        }
+
+        if (!password) {
+            setPasswordError('Password is required');
+            isValid = false;
+        }
+
+        if (!isValid) {
+            if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+                emailRef.current?.focus();
+            } else if (!password) {
+                passwordRef.current?.focus();
+            }
+            return;
+        }
+
+        setLoading(true);
         try {
             const response = await api.post<{ user: any }>('/auth/login', { email, password });
             setSession(response);
-            router.push('/dashboard');
+            queryClient.setQueryData(['auth', 'me'], response.user);
+            const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/dashboard';
+            router.push(redirectUrl.startsWith('/') ? redirectUrl : '/dashboard');
         } catch (err: any) {
-            setError(err.message || 'Unable to sign in.');
+            setError(err.message || 'Unable to sign in. Please verify your credentials.');
         } finally {
             setLoading(false);
         }
@@ -103,14 +145,22 @@ export default function LoginPage() {
                             <label className="block">
                                 <span className="text-sm font-bold text-slate-300">Email address</span>
                                 <input
+                                    ref={emailRef}
                                     type="email"
                                     autoComplete="email"
                                     value={email}
-                                    onChange={(event) => setEmail(event.target.value)}
-                                    className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300"
+                                    onChange={(event) => {
+                                        setEmail(event.target.value);
+                                        if (emailError) setEmailError(null);
+                                    }}
+                                    className={clsx(
+                                        "mt-2 h-12 w-full rounded-lg border bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600",
+                                        emailError ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                    )}
                                     placeholder="name@company.com"
-                                    required
+                                    disabled={loading || googleLoading || githubLoading}
                                 />
+                                {emailError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{emailError}</p>}
                             </label>
                             <label className="block">
                                 <div className="flex items-center justify-between">
@@ -120,14 +170,22 @@ export default function LoginPage() {
                                     </Link>
                                 </div>
                                 <PasswordInput
+                                    ref={passwordRef}
                                     autoComplete="current-password"
                                     value={password}
-                                    onChange={(event) => setPassword(event.target.value)}
+                                    onChange={(event) => {
+                                        setPassword(event.target.value);
+                                        if (passwordError) setPasswordError(null);
+                                    }}
                                     wrapperClassName="mt-2"
-                                    className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300"
+                                    className={clsx(
+                                        "h-12 w-full rounded-lg border bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600",
+                                        passwordError ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                    )}
                                     placeholder="Password"
-                                    required
+                                    disabled={loading || googleLoading || githubLoading}
                                 />
+                                {passwordError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{passwordError}</p>}
                             </label>
 
                             {error ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p> : null}

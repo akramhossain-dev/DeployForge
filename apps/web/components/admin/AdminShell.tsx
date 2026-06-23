@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Activity, Github, LayoutDashboard, ListFilter, LogOut, Menu, Rocket, Server, Settings, ShieldCheck, Users, X } from 'lucide-react';
 import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
 import { useAdminMe } from '@/hooks/useDeployForgeData';
@@ -25,6 +26,7 @@ const nav = [
 export function AdminShell({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
+    const queryClient = useQueryClient();
     const { admin, hasHydrated, setAdmin, logoutAdmin } = useAdminAuthStore();
     const isLogin = pathname === '/admin/login';
     const me = useAdminMe(hasHydrated && !isLogin);
@@ -77,6 +79,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
     async function signOut() {
         await api.post('/admin/logout').catch(() => null);
         logoutAdmin();
+        queryClient.setQueryData(['admin', 'me'], null);
+        queryClient.clear();
         router.replace('/admin/login');
     }
 

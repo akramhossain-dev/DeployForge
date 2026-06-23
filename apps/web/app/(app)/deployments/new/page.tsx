@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import clsx from 'clsx';
 import { CheckCircle2, Github, PackagePlus, Plus, Trash2, UploadCloud } from 'lucide-react';
 import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, inputClassName } from '@/components/ui';
 import { useCreateGithubDeployment, useCreateUploadDeployment, useRepositories, useVpsList } from '@/hooks/useDeployForgeData';
@@ -37,6 +38,15 @@ function GithubDeployForm() {
     const repositories = useRepositories();
     const vps = useVpsList();
     const deploy = useCreateGithubDeployment();
+
+    // Ref hooks for focus management
+    const repositoryRef = useRef<HTMLSelectElement>(null);
+    const vpsRef = useRef<HTMLSelectElement>(null);
+    const branchRef = useRef<HTMLSelectElement>(null);
+
+    // Error state
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
     const [repositoryId, setRepositoryId] = useState('');
     const [branch, setBranch] = useState('main');
     const [environment, setEnvironment] = useState<EnvName>('production');
@@ -53,9 +63,66 @@ function GithubDeployForm() {
     const branchOptions = useMemo(() => Array.from(new Set(['main', 'master', selectedRepo?.defaultBranch].filter(Boolean) as string[])), [selectedRepo?.defaultBranch]);
     const domainInvalid = hostType === 'domain' && !isValidDomainInput(domainName);
 
+    const isSubmitting = deploy.isPending;
+
+    function validate(): boolean {
+        const newErrors: Record<string, string> = {};
+        let isValid = true;
+
+        if (!repositoryId) {
+            newErrors.repository = 'Please select a repository';
+            isValid = false;
+        }
+        if (!vpsId) {
+            newErrors.vps = 'Please select a deployment target';
+            isValid = false;
+        }
+        if (!branch) {
+            newErrors.branch = 'Please select a branch';
+            isValid = false;
+        }
+        if (mode === 'production' && hostType === 'domain') {
+            if (!domainName) {
+                newErrors.domain = 'Domain name is required when using Custom Domain';
+                isValid = false;
+            } else if (domainInvalid) {
+                newErrors.domain = 'Please enter a valid domain (e.g. app.example.com)';
+                isValid = false;
+            }
+        }
+        if (useEnv && hasInvalidEnvRows(envRows)) {
+            newErrors.env = 'One or more environment variable keys are invalid';
+            isValid = false;
+        }
+
+        setErrors(newErrors);
+
+        if (!isValid) {
+            if (newErrors.repository) repositoryRef.current?.focus();
+            else if (newErrors.vps) vpsRef.current?.focus();
+            else if (newErrors.branch) branchRef.current?.focus();
+        }
+
+        return isValid;
+    }
+
     async function submit() {
-        const deployment = await deploy.mutateAsync({ repositoryId, vpsId, branch, environment, autoDeploy, domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined, env: useEnv ? envRowsToRecord(envRows) : {}, mode });
-        router.push(`/deployments/${deployment.id}`);
+        if (!validate()) return;
+        try {
+            const deployment = await deploy.mutateAsync({
+                repositoryId,
+                vpsId,
+                branch,
+                environment,
+                autoDeploy,
+                domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined,
+                env: useEnv ? envRowsToRecord(envRows) : {},
+                mode
+            });
+            router.push(`/deployments/${deployment.id}`);
+        } catch (err) {
+            // Error handled by query/mutation helper
+        }
     }
 
     if (repositories.isLoading || vps.isLoading) return <Panel><SkeletonBlock className="h-80" /></Panel>;
@@ -66,25 +133,71 @@ function GithubDeployForm() {
         <Panel className="space-y-5">
             {deploy.isError ? <ErrorState title="GitHub deployment failed" message={(deploy.error as Error)?.message} /> : null}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <Field label="Repository">
-                    <select value={repositoryId} onChange={(event) => { setRepositoryId(event.target.value); const repo = repositories.data?.find((item) => item.id === event.target.value); if (repo) setBranch(repo.defaultBranch); }} className={inputClassName}>
+                <Field label="Repository" error={errors.repository}>
+                    <select
+                        ref={repositoryRef}
+                        value={repositoryId}
+                        onChange={(event) => {
+                            setRepositoryId(event.target.value);
+                            const repo = repositories.data?.find((item) => item.id === event.target.value);
+                            if (repo) setBranch(repo.defaultBranch);
+                            if (errors.repository) setErrors({ ...errors, repository: '' });
+                        }}
+                        className={clsx(
+                            inputClassName,
+                            "transition-colors",
+                            errors.repository ? "border-rose-500 focus:border-rose-400" : "border-white/10"
+                        )}
+                        disabled={isSubmitting}
+                    >
                         <option value="">Select repository</option>
                         {repositories.data.map((repo) => <option key={repo.id} value={repo.id}>{repo.fullName}</option>)}
                     </select>
                 </Field>
-                <Field label="Deployment target">
-                    <select value={vpsId} onChange={(event) => setVpsId(event.target.value)} className={inputClassName}>
+                <Field label="Deployment target" error={errors.vps}>
+                    <select
+                        ref={vpsRef}
+                        value={vpsId}
+                        onChange={(event) => {
+                            setVpsId(event.target.value);
+                            if (errors.vps) setErrors({ ...errors, vps: '' });
+                        }}
+                        className={clsx(
+                            inputClassName,
+                            "transition-colors",
+                            errors.vps ? "border-rose-500 focus:border-rose-400" : "border-white/10"
+                        )}
+                        disabled={isSubmitting}
+                    >
                         <option value="">Select VPS</option>
                         {vps.data.map((server) => <option key={server.id} value={server.id}>{server.name} ({server.ipAddress})</option>)}
                     </select>
                 </Field>
-                <Field label="Branch">
-                    <select value={branch} onChange={(event) => setBranch(event.target.value)} className={inputClassName}>
+                <Field label="Branch" error={errors.branch}>
+                    <select
+                        ref={branchRef}
+                        value={branch}
+                        onChange={(event) => {
+                            setBranch(event.target.value);
+                            if (errors.branch) setErrors({ ...errors, branch: '' });
+                        }}
+                        className={clsx(
+                            inputClassName,
+                            "transition-colors",
+                            errors.branch ? "border-rose-500 focus:border-rose-400" : "border-white/10"
+                        )}
+                        disabled={isSubmitting}
+                    >
                         {branchOptions.map((item) => <option key={item} value={item}>{item}</option>)}
                     </select>
                 </Field>
                 <Field label="Environment">
-                    <select value={environment} onChange={(event) => setEnvironment(event.target.value as EnvName)} className={inputClassName}>
+                    <select
+                        value={environment}
+                        onChange={(event) => setEnvironment(event.target.value as EnvName)}
+                        className={inputClassName}
+                        disabled={isSubmitting}
+                    >
                         <option value="production">Production</option>
                         <option value="development">Development</option>
                     </select>
@@ -106,7 +219,13 @@ function GithubDeployForm() {
                     <span className="block font-black text-white">Auto Deploy on Push</span>
                     <span className="mt-1 block text-sm text-slate-400">Register a GitHub webhook when this deployment starts.</span>
                 </span>
-                <input type="checkbox" checked={autoDeploy && mode === 'production'} disabled={mode === 'sandbox'} onChange={(event) => setAutoDeploy(event.target.checked)} className="h-5 w-5 accent-cyan-300" />
+                <input
+                    type="checkbox"
+                    checked={autoDeploy && mode === 'production'}
+                    disabled={mode === 'sandbox' || isSubmitting}
+                    onChange={(event) => setAutoDeploy(event.target.checked)}
+                    className="h-5 w-5 accent-cyan-300"
+                />
             </label>
             <div className={mode === 'sandbox' ? 'rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100' : 'rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100'}>
                 {mode === 'sandbox' ? 'Temporary environment: no webhook, domain binding, rollback, or permanent container commitment.' : 'Rollback enabled: GitHub deployments keep commit and image version history for CI/CD recovery.'}
@@ -118,6 +237,7 @@ function GithubDeployForm() {
                     domainName={domainName}
                     setDomainName={setDomainName}
                     ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
+                    error={errors.domain}
                 />
             ) : (
                 <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-400">
@@ -125,8 +245,10 @@ function GithubDeployForm() {
                     <p className="mt-1">Sandbox runs use direct ephemeral port access and skip Nginx/domain routing.</p>
                 </div>
             )}
-            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} />
-            <Button onClick={submit} loading={deploy.isPending} disabled={!repositoryId || !vpsId || (mode === 'production' && domainInvalid) || (useEnv && hasInvalidEnvRows(envRows))}><Github size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy repository'}</Button>
+            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} error={errors.env} />
+            <Button onClick={submit} loading={deploy.isPending} disabled={isSubmitting}>
+                <Github size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy repository'}
+            </Button>
         </Panel>
     );
 }
@@ -135,6 +257,14 @@ function UploadDeployForm() {
     const router = useRouter();
     const vps = useVpsList();
     const deploy = useCreateUploadDeployment();
+
+    // Ref hooks for focus management
+    const vpsRef = useRef<HTMLSelectElement>(null);
+    const projectNameRef = useRef<HTMLInputElement>(null);
+
+    // Error state
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
     const [file, setFile] = useState<File | null>(null);
     const [projectName, setProjectName] = useState('');
     const [environment, setEnvironment] = useState<EnvName>('production');
@@ -150,10 +280,63 @@ function UploadDeployForm() {
     const selectedVps = vps.data?.find((server) => server.id === vpsId);
     const domainInvalid = hostType === 'domain' && !isValidDomainInput(domainName);
 
+    const isSubmitting = deploy.isPending;
+
+    function validate(): boolean {
+        const newErrors: Record<string, string> = {};
+        let isValidForm = true;
+
+        if (!file) {
+            newErrors.file = 'Please upload a deployment archive';
+            isValidForm = false;
+        } else if (!isValid) {
+            newErrors.file = 'Invalid archive format. Only .zip, .tar.gz and .tgz are allowed';
+            isValidForm = false;
+        }
+        if (!vpsId) {
+            newErrors.vps = 'Please select a deployment target';
+            isValidForm = false;
+        }
+        if (mode === 'production' && hostType === 'domain') {
+            if (!domainName) {
+                newErrors.domain = 'Domain name is required when using Custom Domain';
+                isValidForm = false;
+            } else if (domainInvalid) {
+                newErrors.domain = 'Please enter a valid domain (e.g. app.example.com)';
+                isValidForm = false;
+            }
+        }
+        if (useEnv && hasInvalidEnvRows(envRows)) {
+            newErrors.env = 'One or more environment variable keys are invalid';
+            isValidForm = false;
+        }
+
+        setErrors(newErrors);
+
+        if (!isValidForm) {
+            if (newErrors.vps) vpsRef.current?.focus();
+            else if (newErrors.projectName) projectNameRef.current?.focus();
+        }
+
+        return isValidForm;
+    }
+
     async function submit() {
-        if (!file) return;
-        const deployment = await deploy.mutateAsync({ file, vpsId, name: projectName || file.name.replace(/\.(zip|tar\.gz|tgz)$/i, ''), environment, domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined, env: useEnv ? envRowsToRecord(envRows) : {}, mode });
-        router.push(`/deployments/${deployment.id}`);
+        if (!file || !validate()) return;
+        try {
+            const deployment = await deploy.mutateAsync({
+                file,
+                vpsId,
+                name: projectName || file.name.replace(/\.(zip|tar\.gz|tgz)$/i, ''),
+                environment,
+                domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined,
+                env: useEnv ? envRowsToRecord(envRows) : {},
+                mode
+            });
+            router.push(`/deployments/${deployment.id}`);
+        } catch (err) {
+            // Error handled by query/mutation helper
+        }
     }
 
     if (vps.isLoading) return <Panel><SkeletonBlock className="h-80" /></Panel>;
@@ -164,14 +347,33 @@ function UploadDeployForm() {
             {deploy.isError ? <ErrorState title="Upload deployment failed" message={(deploy.error as Error)?.message} /> : null}
             <label
                 onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => { event.preventDefault(); setFile(event.dataTransfer.files?.[0] || null); }}
-                className="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-cyan-300/30 bg-cyan-300/[0.08] p-6 text-center transition-colors hover:bg-cyan-300/[0.12]"
+                onDrop={(event) => {
+                    if (isSubmitting) return;
+                    event.preventDefault();
+                    setFile(event.dataTransfer.files?.[0] || null);
+                    setErrors({ ...errors, file: '' });
+                }}
+                className={clsx(
+                    "flex min-h-44 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center transition-colors",
+                    isSubmitting ? "cursor-not-allowed opacity-50 bg-slate-950/20" : "cursor-pointer hover:bg-cyan-300/[0.12]",
+                    errors.file ? "border-rose-500 bg-rose-500/[0.04]" : "border-cyan-300/30 bg-cyan-300/[0.08]"
+                )}
             >
-                <UploadCloud size={28} className="text-cyan-200" />
+                <UploadCloud size={28} className={errors.file ? "text-rose-400" : "text-cyan-200"} />
                 <span className="mt-3 font-black text-white">{file ? file.name : 'Drop archive here or browse'}</span>
                 <span className="mt-1 text-sm text-slate-400">Supported formats: .zip, .tar.gz</span>
-                <input type="file" accept=".zip,.tar.gz,.tgz" className="hidden" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+                <input
+                    type="file"
+                    accept=".zip,.tar.gz,.tgz"
+                    className="hidden"
+                    onChange={(event) => {
+                        setFile(event.target.files?.[0] || null);
+                        setErrors({ ...errors, file: '' });
+                    }}
+                    disabled={isSubmitting}
+                />
             </label>
+            {errors.file && <p className="text-xs font-semibold text-rose-400">{errors.file}</p>}
             <div className="h-2 overflow-hidden rounded-full bg-slate-950">
                 <div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${progress}%` }} />
             </div>
@@ -180,15 +382,49 @@ function UploadDeployForm() {
                 <span className={isValid ? 'text-emerald-200' : 'text-slate-500'}>{isValid ? 'Archive validated' : 'Waiting for a valid .zip or .tar.gz archive'}</span>
             </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <Field label="Project name"><input value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="my-service" className={inputClassName} /></Field>
-                <Field label="Deployment target">
-                    <select value={vpsId} onChange={(event) => setVpsId(event.target.value)} className={inputClassName}>
+                <Field label="Project name" error={errors.projectName}>
+                    <input
+                        ref={projectNameRef}
+                        value={projectName}
+                        onChange={(event) => {
+                            setProjectName(event.target.value);
+                            if (errors.projectName) setErrors({ ...errors, projectName: '' });
+                        }}
+                        placeholder="my-service"
+                        className={clsx(
+                            inputClassName,
+                            "transition-colors",
+                            errors.projectName ? "border-rose-500 focus:border-rose-400" : "border-white/10"
+                        )}
+                        disabled={isSubmitting}
+                    />
+                </Field>
+                <Field label="Deployment target" error={errors.vps}>
+                    <select
+                        ref={vpsRef}
+                        value={vpsId}
+                        onChange={(event) => {
+                            setVpsId(event.target.value);
+                            if (errors.vps) setErrors({ ...errors, vps: '' });
+                        }}
+                        className={clsx(
+                            inputClassName,
+                            "transition-colors",
+                            errors.vps ? "border-rose-500 focus:border-rose-400" : "border-white/10"
+                        )}
+                        disabled={isSubmitting}
+                    >
                         <option value="">Select VPS</option>
                         {vps.data.map((server) => <option key={server.id} value={server.id}>{server.name} ({server.ipAddress})</option>)}
                     </select>
                 </Field>
                 <Field label="Environment">
-                    <select value={environment} onChange={(event) => setEnvironment(event.target.value as EnvName)} className={inputClassName}>
+                    <select
+                        value={environment}
+                        onChange={(event) => setEnvironment(event.target.value as EnvName)}
+                        className={inputClassName}
+                        disabled={isSubmitting}
+                    >
                         <option value="production">Production</option>
                         <option value="development">Development</option>
                     </select>
@@ -206,6 +442,7 @@ function UploadDeployForm() {
                     domainName={domainName}
                     setDomainName={setDomainName}
                     ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP hosting'}
+                    error={errors.domain}
                 />
             ) : (
                 <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-400">
@@ -213,14 +450,22 @@ function UploadDeployForm() {
                     <p className="mt-1">Sandbox runs use direct ephemeral port access and skip Nginx/domain routing.</p>
                 </div>
             )}
-            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} />
-            <Button onClick={submit} loading={deploy.isPending} disabled={!isValid || !vpsId || (mode === 'production' && domainInvalid) || (useEnv && hasInvalidEnvRows(envRows))}><PackagePlus size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy upload'}</Button>
+            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} error={errors.env} />
+            <Button onClick={submit} loading={deploy.isPending} disabled={isSubmitting}>
+                <PackagePlus size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy upload'}
+            </Button>
         </Panel>
     );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-    return <label className="space-y-2"><span className="block text-xs font-black uppercase text-slate-500">{label}</span>{children}</label>;
+function Field({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) {
+    return (
+        <label className="space-y-2 block">
+            <span className="block text-xs font-black uppercase text-slate-500">{label}</span>
+            {children}
+            {error && <p className="text-xs font-semibold text-rose-400">{error}</p>}
+        </label>
+    );
 }
 
 function HostingConfiguration({
@@ -229,12 +474,14 @@ function HostingConfiguration({
     domainName,
     setDomainName,
     ipPreview,
+    error,
 }: {
     hostType: 'ip' | 'domain';
     setHostType: (value: 'ip' | 'domain') => void;
     domainName: string;
     setDomainName: (value: string) => void;
     ipPreview: string;
+    error?: string;
 }) {
     const domainInvalid = hostType === 'domain' && domainName.trim().length > 0 && !isValidDomainInput(domainName);
 
@@ -259,10 +506,14 @@ function HostingConfiguration({
                         onChange={(event) => setDomainName(event.target.value.trim().toLowerCase())}
                         disabled={hostType !== 'domain'}
                         placeholder="example.com or app.example.com"
-                        className={`${inputClassName} mt-3`}
+                        className={clsx(
+                            inputClassName,
+                            "mt-3 transition-colors",
+                            error ? "border-rose-500 focus:border-rose-400" : "border-white/10"
+                        )}
                     />
-                    <span className={domainInvalid ? 'mt-2 block text-sm text-rose-200' : 'mt-2 block text-sm text-slate-400'}>
-                        {domainInvalid ? 'Enter a valid domain without http://, spaces, or paths.' : domainName ? `http://${domainName}` : 'Root domains and subdomains are supported.'}
+                    <span className={clsx("mt-2 block text-sm", error ? "text-rose-400 font-semibold" : "text-slate-400")}>
+                        {error || (domainInvalid ? 'Enter a valid domain without http://, spaces, or paths.' : domainName ? `http://${domainName}` : 'Root domains and subdomains are supported.')}
                     </span>
                 </label>
             </div>
@@ -299,11 +550,13 @@ function EnvironmentVariablesEditor({
     setEnabled,
     rows,
     setRows,
+    error,
 }: {
     enabled: boolean;
     setEnabled: (value: boolean) => void;
     rows: EnvRow[];
     setRows: (rows: EnvRow[]) => void;
+    error?: string;
 }) {
     const invalid = enabled && hasInvalidEnvRows(rows);
 
@@ -345,7 +598,7 @@ function EnvironmentVariablesEditor({
                             ))}
                         </div>
                     )}
-                    {invalid ? <p className="text-xs font-bold text-rose-200">Keys must start with a letter or underscore and contain only letters, numbers, and underscores.</p> : null}
+                    {error ? <p className="text-xs font-bold text-rose-400">{error}</p> : invalid ? <p className="text-xs font-bold text-rose-200">Keys must start with a letter or underscore and contain only letters, numbers, and underscores.</p> : null}
                     <Button type="button" variant="secondary" onClick={addRow}><Plus size={16} /> Add row</Button>
                 </div>
             ) : null}

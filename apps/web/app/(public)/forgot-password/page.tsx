@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { Mail, ArrowLeft, Loader2, KeyRound, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Loader2, KeyRound, ArrowRight, CheckCircle2 } from 'lucide-react';
+import clsx from 'clsx';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 
@@ -12,14 +13,21 @@ export default function ForgotPasswordPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSent, setIsSent] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [emailError, setEmailError] = useState<string | null>(null);
+    const emailRef = useRef<HTMLInputElement>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setEmailError(null);
 
         if (!email.trim()) {
-            setError('Email address is required');
-            addToast({ title: 'Validation Error', description: 'Email address is required', severity: 'error' });
+            setEmailError('Email address is required');
+            emailRef.current?.focus();
+            return;
+        } else if (!/\S+@\S+\.\S+/.test(email)) {
+            setEmailError('Please enter a valid email address');
+            emailRef.current?.focus();
             return;
         }
 
@@ -83,14 +91,22 @@ export default function ForgotPasswordPage() {
                                 <label className="block">
                                     <span className="text-sm font-bold text-slate-300">Email address</span>
                                     <input
+                                        ref={emailRef}
                                         type="email"
                                         autoComplete="email"
-                                        required
                                         value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300 text-sm"
+                                        onChange={(e) => {
+                                            setEmail(e.target.value);
+                                            if (emailError) setEmailError(null);
+                                        }}
+                                        className={clsx(
+                                            "mt-2 h-12 w-full rounded-lg border bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 text-sm",
+                                            emailError ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                        )}
                                         placeholder="name@company.com"
+                                        disabled={isSubmitting}
                                     />
+                                    {emailError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{emailError}</p>}
                                 </label>
 
                                 {error ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p> : null}

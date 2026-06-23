@@ -21,6 +21,9 @@ interface User {
     isVerified?: boolean;
     role?: string;
     status?: string;
+    username?: string | null;
+    createdAt?: string;
+    lastLoginAt?: string | null;
 }
 
 interface AuthState {

@@ -1,12 +1,27 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { KeyRound, ArrowLeft, CheckCircle2, ShieldAlert, Loader2, Lock, ArrowRight } from 'lucide-react';
+import clsx from 'clsx';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 import { PasswordInput } from '@/components/ui';
+
+function validatePassword(pass: string): { valid: true } | { valid: false; message: string } {
+    if (pass.length < 12) {
+        return { valid: false, message: 'Password must be at least 12 characters long' };
+    }
+    const weakPasswords = new Set(['password', 'password123', 'password1234', 'qwerty123456', 'letmein123456', 'admin123456', 'deployforge123']);
+    if (weakPasswords.has(pass.toLowerCase()) || /(.)\1{5,}/.test(pass) || /^(?:1234567890|0987654321)/.test(pass)) {
+        return { valid: false, message: 'Password is too weak' };
+    }
+    if (!/[a-z]/.test(pass) || !/[A-Z]/.test(pass) || !/\d/.test(pass) || !/[^A-Za-z0-9]/.test(pass)) {
+        return { valid: false, message: 'Password must include uppercase, lowercase, number, and symbol characters' };
+    }
+    return { valid: true };
+}
 
 function ResetPasswordContent() {
     const addToast = useToastStore((state) => state.addToast);
@@ -19,9 +34,19 @@ function ResetPasswordContent() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Field-level errors
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
+
+    // Refs for focus management
+    const passwordRef = useRef<HTMLInputElement>(null);
+    const confirmPasswordRef = useRef<HTMLInputElement>(null);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setPasswordError(null);
+        setConfirmPasswordError(null);
 
         if (!token) {
             const msg = 'Reset token is missing from URL';
@@ -30,17 +55,30 @@ function ResetPasswordContent() {
             return;
         }
 
-        if (password.length < 8) {
-            const msg = 'Password must be at least 8 characters long';
-            setError(msg);
-            addToast({ title: 'Validation Error', description: msg, severity: 'error' });
-            return;
+        let isValid = true;
+        const passCheck = validatePassword(password);
+        if (!password) {
+            setPasswordError('Password is required');
+            isValid = false;
+        } else if (passCheck.valid === false) {
+            setPasswordError(passCheck.message);
+            isValid = false;
         }
 
-        if (password !== confirmPassword) {
-            const msg = 'Passwords do not match';
-            setError(msg);
-            addToast({ title: 'Validation Error', description: msg, severity: 'error' });
+        if (!confirmPassword) {
+            setConfirmPasswordError('Please confirm your new password');
+            isValid = false;
+        } else if (password !== confirmPassword) {
+            setConfirmPasswordError('Passwords do not match');
+            isValid = false;
+        }
+
+        if (!isValid) {
+            if (!password || !passCheck.valid) {
+                passwordRef.current?.focus();
+            } else if (!confirmPassword || password !== confirmPassword) {
+                confirmPasswordRef.current?.focus();
+            }
             return;
         }
 
@@ -108,27 +146,43 @@ function ResetPasswordContent() {
             <label className="block">
                 <span className="text-sm font-bold text-slate-300">New Password</span>
                 <PasswordInput
+                    ref={passwordRef}
                     autoComplete="new-password"
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) => {
+                        setPassword(event.target.value);
+                        if (passwordError) setPasswordError(null);
+                    }}
                     wrapperClassName="mt-2"
-                    className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300"
+                    className={clsx(
+                        "h-12 w-full rounded-lg border bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300",
+                        passwordError ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                    )}
                     placeholder="New Password"
-                    required
+                    disabled={isSubmitting}
                 />
+                {passwordError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{passwordError}</p>}
             </label>
 
             <label className="block">
                 <span className="text-sm font-bold text-slate-300">Confirm New Password</span>
                 <PasswordInput
+                    ref={confirmPasswordRef}
                     autoComplete="new-password"
                     value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    onChange={(event) => {
+                        setConfirmPassword(event.target.value);
+                        if (confirmPasswordError) setConfirmPasswordError(null);
+                    }}
                     wrapperClassName="mt-2"
-                    className="h-12 w-full rounded-lg border border-white/10 bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300"
+                    className={clsx(
+                        "h-12 w-full rounded-lg border bg-slate-950 px-4 text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300",
+                        confirmPasswordError ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                    )}
                     placeholder="Confirm Password"
-                    required
+                    disabled={isSubmitting}
                 />
+                {confirmPasswordError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{confirmPasswordError}</p>}
             </label>
 
             {error ? <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p> : null}

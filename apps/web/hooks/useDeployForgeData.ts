@@ -96,8 +96,8 @@ export function useMe(enabled = true) {
 }
 
 export function useAuthSession() {
-    const { hasHydrated, setUser, logout } = useAuthStore();
-    const me = useMe(hasHydrated);
+    const { user, isAuthenticated, hasHydrated, setUser, logout } = useAuthStore();
+    const me = useMe(hasHydrated && !user);
 
     useEffect(() => {
         if (me.data) setUser(me.data);
@@ -109,9 +109,9 @@ export function useAuthSession() {
     }, [logout, me.isError]);
 
     return {
-        user: me.data ?? null,
-        isAuthenticated: Boolean(me.data),
-        isLoading: !hasHydrated || me.isLoading,
+        user,
+        isAuthenticated,
+        isLoading: !hasHydrated || (me.isLoading && !user),
         isFetching: me.isFetching,
         isError: me.isError,
         refetch: me.refetch,

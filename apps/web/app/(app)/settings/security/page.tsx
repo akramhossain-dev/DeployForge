@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { KeyRound, Shield, RefreshCw, Monitor, Smartphone, Tablet, XCircle, LogOut } from 'lucide-react';
 import { Button, Panel } from '@/components/ui';
 import api from '@/lib/api/client';
@@ -29,11 +29,17 @@ interface Session {
 export default function SecurityPage() {
     const addToast = useToastStore((state) => state.addToast);
 
+    // Password Refs
+    const currentPasswordRef = useRef<HTMLInputElement>(null);
+    const newPasswordRef = useRef<HTMLInputElement>(null);
+    const confirmPasswordRef = useRef<HTMLInputElement>(null);
+
     // Password State
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
 
     // Sessions State
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -95,18 +101,45 @@ export default function SecurityPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const validatePasswordForm = (): boolean => {
+        const errors: Record<string, string> = {};
+        let isValid = true;
+
+        if (!currentPassword) {
+            errors.currentPassword = 'Current password is required';
+            isValid = false;
+        }
+
+        if (!newPassword) {
+            errors.newPassword = 'New password is required';
+            isValid = false;
+        } else if (newPassword.length < 8) {
+            errors.newPassword = 'New password must be at least 8 characters long';
+            isValid = false;
+        }
+
+        if (!confirmPassword) {
+            errors.confirmPassword = 'Please confirm your new password';
+            isValid = false;
+        } else if (newPassword !== confirmPassword) {
+            errors.confirmPassword = 'New passwords do not match';
+            isValid = false;
+        }
+
+        setPasswordErrors(errors);
+
+        if (!isValid) {
+            if (errors.currentPassword) currentPasswordRef.current?.focus();
+            else if (errors.newPassword) newPasswordRef.current?.focus();
+            else if (errors.confirmPassword) confirmPasswordRef.current?.focus();
+        }
+
+        return isValid;
+    };
+
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (newPassword.length < 8) {
-            addToast({ title: 'Validation Error', description: 'New password must be at least 8 characters long', severity: 'error' });
-            return;
-        }
-
-        if (newPassword !== confirmPassword) {
-            addToast({ title: 'Validation Error', description: 'New passwords do not match', severity: 'error' });
-            return;
-        }
+        if (!validatePasswordForm()) return;
 
         setIsUpdating(true);
         try {
@@ -118,6 +151,7 @@ export default function SecurityPage() {
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
+            setPasswordErrors({});
             await fetchAuditLogs(false);
         } catch (err: any) {
             addToast({ title: 'Error', description: err.message || 'Failed to update password', severity: 'error' });
@@ -194,34 +228,70 @@ export default function SecurityPage() {
                     <div>
                         <label className="block text-xs font-semibold text-slate-400 mb-1">Current Password</label>
                         <input
+                            ref={currentPasswordRef}
                             type="password"
                             value={currentPassword}
-                            onChange={(e) => setCurrentPassword(e.target.value)}
-                            className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                            onChange={(e) => {
+                                setCurrentPassword(e.target.value);
+                                if (passwordErrors.currentPassword) {
+                                    setPasswordErrors({ ...passwordErrors, currentPassword: '' });
+                                }
+                            }}
+                            className={`w-full bg-slate-950 border rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm transition-colors ${
+                                passwordErrors.currentPassword ? 'border-rose-500 focus:border-rose-400' : 'border-white/10'
+                            }`}
                             placeholder="••••••••"
+                            disabled={isUpdating}
                         />
+                        {passwordErrors.currentPassword && (
+                            <p className="mt-1 text-xs font-semibold text-rose-400">{passwordErrors.currentPassword}</p>
+                        )}
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div>
                             <label className="block text-xs font-semibold text-slate-400 mb-1">New Password</label>
                             <input
+                                ref={newPasswordRef}
                                 type="password"
                                 value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                                onChange={(e) => {
+                                    setNewPassword(e.target.value);
+                                    if (passwordErrors.newPassword) {
+                                        setPasswordErrors({ ...passwordErrors, newPassword: '' });
+                                    }
+                                }}
+                                className={`w-full bg-slate-950 border rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm transition-colors ${
+                                    passwordErrors.newPassword ? 'border-rose-500 focus:border-rose-400' : 'border-white/10'
+                                }`}
                                 placeholder="••••••••"
+                                disabled={isUpdating}
                             />
+                            {passwordErrors.newPassword && (
+                                <p className="mt-1 text-xs font-semibold text-rose-400">{passwordErrors.newPassword}</p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-400 mb-1">Confirm New Password</label>
                             <input
+                                ref={confirmPasswordRef}
                                 type="password"
                                 value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                                onChange={(e) => {
+                                    setConfirmPassword(e.target.value);
+                                    if (passwordErrors.confirmPassword) {
+                                        setPasswordErrors({ ...passwordErrors, confirmPassword: '' });
+                                    }
+                                }}
+                                className={`w-full bg-slate-950 border rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm transition-colors ${
+                                    passwordErrors.confirmPassword ? 'border-rose-500 focus:border-rose-400' : 'border-white/10'
+                                }`}
                                 placeholder="••••••••"
+                                disabled={isUpdating}
                             />
+                            {passwordErrors.confirmPassword && (
+                                <p className="mt-1 text-xs font-semibold text-rose-400">{passwordErrors.confirmPassword}</p>
+                            )}
                         </div>
                     </div>
 

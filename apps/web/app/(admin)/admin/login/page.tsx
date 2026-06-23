@@ -1,29 +1,68 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LockKeyhole, Rocket, ShieldCheck } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
 import api from '@/lib/api/client';
 import { Button, ErrorState, Panel, PasswordInput, inputClassName } from '@/components/ui';
 import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
 
 export default function AdminLoginPage() {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const { setAdminSession } = useAdminAuthStore();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
+    // Field error states
+    const [emailError, setEmailError] = useState<string | null>(null);
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+
+    // Refs for focus management
+    const emailRef = useRef<HTMLInputElement>(null);
+    const passwordRef = useRef<HTMLInputElement>(null);
+
     async function submit(event: FormEvent) {
         event.preventDefault();
         setError(null);
+        setEmailError(null);
+        setPasswordError(null);
+
+        let isValid = true;
+        if (!email.trim()) {
+            setEmailError('Admin email is required');
+            isValid = false;
+        } else if (!/\S+@\S+\.\S+/.test(email)) {
+            setEmailError('Please enter a valid email address');
+            isValid = false;
+        }
+
+        if (!password) {
+            setPasswordError('Password is required');
+            isValid = false;
+        }
+
+        if (!isValid) {
+            if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+                emailRef.current?.focus();
+            } else if (!password) {
+                passwordRef.current?.focus();
+            }
+            return;
+        }
+
         setLoading(true);
         try {
             const result = await api.post<{ admin: any }>('/admin/login', { email, password });
             setAdminSession(result);
-            router.replace('/admin');
+            queryClient.setQueryData(['admin', 'me'], result.admin);
+            const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/admin';
+            router.replace(redirectUrl.startsWith('/') ? redirectUrl : '/admin');
         } catch (err: any) {
             setError(err.message || 'Admin login failed');
         } finally {
@@ -73,26 +112,44 @@ export default function AdminLoginPage() {
                         <label className="block">
                             <span className="mb-2 block text-xs font-black uppercase text-slate-500">Admin email</span>
                             <input
-                                required
+                                ref={emailRef}
                                 type="email"
                                 value={email}
-                                onChange={(event) => setEmail(event.target.value)}
+                                onChange={(event) => {
+                                    setEmail(event.target.value);
+                                    if (emailError) setEmailError(null);
+                                }}
                                 autoComplete="email"
                                 placeholder="admin@example.com"
-                                className={`${inputClassName} h-12 px-4`}
+                                className={clsx(
+                                    inputClassName,
+                                    "h-12 px-4 transition-colors",
+                                    emailError ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                disabled={loading}
                             />
+                            {emailError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{emailError}</p>}
                         </label>
 
                         <label className="block">
                             <span className="mb-2 block text-xs font-black uppercase text-slate-500">Password</span>
                             <PasswordInput
-                                required
+                                ref={passwordRef}
                                 value={password}
-                                onChange={(event) => setPassword(event.target.value)}
+                                onChange={(event) => {
+                                    setPassword(event.target.value);
+                                    if (passwordError) setPasswordError(null);
+                                }}
                                 autoComplete="current-password"
                                 placeholder="Admin password"
-                                className={`${inputClassName} h-12 px-4`}
+                                className={clsx(
+                                    inputClassName,
+                                    "h-12 px-4 transition-colors",
+                                    passwordError ? "border-rose-500 focus:border-rose-400" : "border-white/10 focus:border-cyan-300"
+                                )}
+                                disabled={loading}
                             />
+                            {passwordError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{passwordError}</p>}
                         </label>
 
                         <Button type="submit" loading={loading} className="h-12 w-full">

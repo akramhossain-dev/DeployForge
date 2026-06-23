@@ -2,7 +2,7 @@
 
 import clsx from 'clsx';
 import { AlertCircle, Eye, EyeOff, Loader2, RefreshCw, X } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState, forwardRef } from 'react';
 
 export function PageHeader({
     title,
@@ -132,18 +132,18 @@ export function formatDate(value?: string) {
 
 export const inputClassName = 'w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-50';
 
-export function PasswordInput({
-    className,
-    wrapperClassName,
-    ...props
-}: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> & {
-    wrapperClassName?: string;
-}) {
+export const PasswordInput = forwardRef<
+    HTMLInputElement,
+    Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> & {
+        wrapperClassName?: string;
+    }
+>(({ className, wrapperClassName, ...props }, ref) => {
     const [showPassword, setShowPassword] = useState(false);
 
     return (
         <div className={clsx('relative', wrapperClassName)}>
             <input
+                ref={ref}
                 {...props}
                 type={showPassword ? 'text' : 'password'}
                 className={clsx(className || inputClassName, 'pr-12')}
@@ -158,7 +158,8 @@ export function PasswordInput({
             </button>
         </div>
     );
-}
+});
+PasswordInput.displayName = 'PasswordInput';
 
 export function SectionHeading({ icon, title, description }: { icon?: ReactNode; title: string; description?: string }) {
     return (

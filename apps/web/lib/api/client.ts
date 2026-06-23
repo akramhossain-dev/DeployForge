@@ -102,7 +102,7 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
         if (token) headers.set('X-CSRF-Token', token);
     }
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
         console.debug('[api:request]', { method, path });
     }
 
@@ -159,16 +159,18 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
             apiError.message = 'Internal Server Error';
         }
 
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
             console.error('[api:error]', { method, path, status: response.status, message: apiError.message, context: apiError.context });
         }
 
-        if (response.status === 401) handleUnauthorized(path);
+        if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/admin/login')) {
+            handleUnauthorized(path);
+        }
 
         throw new ApiError(apiError.message, response.status, apiError.context, apiError.errorCode);
     }
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
         console.debug('[api:response]', { method, path, status: response.status });
     }
 

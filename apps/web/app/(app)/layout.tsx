@@ -3,6 +3,7 @@
 import React, { ReactNode, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
     Activity,
     Github,
@@ -42,6 +43,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const activeItem = useMemo(() => navItems.find((item) => item.href === pathname) || navItems[0], [pathname]);
 
+    const queryClient = useQueryClient();
+
     React.useEffect(() => {
         if (!hasHydrated) return;
         if (me.isError) router.replace('/');
@@ -71,6 +74,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     async function signOut() {
         await api.post('/auth/logout').catch(() => null);
         logout();
+        queryClient.setQueryData(['auth', 'me'], null);
+        queryClient.clear();
         router.replace('/');
     }
 
