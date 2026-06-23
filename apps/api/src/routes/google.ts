@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { config } from '../config/env';
 import { GoogleService } from '../services/google.service';
 import { cookie } from '../utils/http';
+import { AccountService } from '../services/account.service';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
@@ -103,6 +104,7 @@ export default async function googleRoutes(fastify: FastifyInstance) {
             reply.header('Set-Cookie', [accessCookie, refreshCookie]);
 
             fastify.log.info({ userId: session.user.id }, 'Google OAuth login completed successfully');
+            await AccountService.logAudit(session.user.id, 'LOGIN_SUCCESS', 'User logged in successfully via Google OAuth.', request.ip, request.headers['user-agent']);
             return reply.redirect(`${config.app.appUrl}/google/callback`);
         } catch (err: any) {
             fastify.log.error({ err }, 'Google OAuth login failed');

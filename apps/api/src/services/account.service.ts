@@ -124,6 +124,7 @@ export class AccountService {
         });
 
         await CacheService.del(`user:profile:${userId}`);
+        await this.revokeAllSessions(userId, ip, ua);
 
         await this.logAudit(userId, 'PASSWORD_CHANGE', 'User password successfully changed.', ip, ua);
     }
@@ -192,6 +193,8 @@ export class AccountService {
             where: { id: resetTokenRecord.id },
             data: { usedAt: new Date() },
         });
+
+        await this.revokeAllSessions(resetTokenRecord.userId, ip, ua);
 
         await this.logAudit(resetTokenRecord.userId, 'PASSWORD_RESET_SUCCESS', 'Password reset completed via token.', ip, ua);
     }

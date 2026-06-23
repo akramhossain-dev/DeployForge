@@ -9,6 +9,15 @@ import { GitHubService } from '../services/github.service';
 import { CacheService } from '../services/cache.service';
 import { AdminService } from '../services/admin.service';
 import { apiError, cookie } from '../utils/http';
+import { BackupService } from '../services/backup.service';
+
+const restoreBackupSchema = z.object({
+    filename: z.string().min(1),
+});
+
+const pruneBackupSchema = z.object({
+    retentionCount: z.coerce.number().int().min(1).max(100).default(7),
+});
 
 const adminTokenService = new TokenService(config.auth.adminJwtSecret);
 
@@ -468,5 +477,41 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 app: { appUrl: config.app.appUrl, nodeEnv: config.app.env },
             },
         };
+    });
+
+    fastify.get('/backups', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+        const backups = await BackupService.listBackups();
+        return { success: true, data: backups };
+    });
+
+    fastify.post('/backups/create', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request) => {
+        const dbBackup = await BackupService.backupDatabase(request.admin.id, request.ip, request.headers['user-agent']);
+        const configBackup = await BackupService.backupConfiguration(request.admin.id, request.ip, request.headers['user-agent']);
+        await BackupService.pruneOldBackups(7);
+        await audit(request, 'CREATE_SYSTEM_BACKUP', { targetType: 'SYSTEM', targetId: dbBackup.filename });
+        return {
+            success: true,
+            data: {
+                dbBackup: { filename: dbBackup.filename, sizeBytes: dbBackup.sizeBytes },
+                configBackup: { filename: configBackup.filename, sizeBytes: configBackup.sizeBytes },
+            }
+        };
+    });
+
+    fastify.post('/backups/restore', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request, reply) => {
+        const { filename } = restoreBackupSchema.parse(request.body);
+        if (!filename.startsWith('db-backup-') || !filename.endsWith('.dump')) {
+            return error(reply, 400, 'Invalid backup filename for restore. Must be a database dump file.', 'INVALID_BACKUP_FILE');
+        }
+        await BackupService.restoreDatabase(filename, request.admin.id, request.ip, request.headers['user-agent']);
+        await audit(request, 'RESTORE_SYSTEM_BACKUP', { targetType: 'SYSTEM', targetId: filename });
+        return { success: true, data: { message: `Database successfully restored from ${filename}` } };
+    });
+
+    fastify.post('/backups/prune', { preHandler: [(fastify as any).requireSuperAdmin] }, async (request) => {
+        const { retentionCount } = pruneBackupSchema.parse(request.body);
+        const pruned = await BackupService.pruneOldBackups(retentionCount);
+        await audit(request, 'PRUNE_SYSTEM_BACKUPS', { targetType: 'SYSTEM', targetId: `retention-${retentionCount}` });
+        return { success: true, data: { prunedCount: pruned.length, prunedFiles: pruned } };
     });
 }

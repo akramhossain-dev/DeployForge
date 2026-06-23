@@ -2,6 +2,7 @@ import { buildApp } from './app';
 import { config } from './config/env';
 import './workers/deployment.worker';
 import { HardeningService } from './services/hardening.service';
+import { BackupService } from './services/backup.service';
 
 async function start() {
     const app = await buildApp();
@@ -14,6 +15,11 @@ async function start() {
         void HardeningService.runDataRetentionCleanup();
         setInterval(() => {
             void HardeningService.runDataRetentionCleanup();
+        }, 24 * 60 * 60 * 1000);
+
+        // Run automated backup every 24 hours
+        setInterval(() => {
+            void BackupService.runScheduledBackup();
         }, 24 * 60 * 60 * 1000);
     } catch (err) {
         app.log.error(err);

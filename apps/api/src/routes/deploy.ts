@@ -10,6 +10,7 @@ import { RollbackService } from '../services/rollback.service';
 import { TokenService } from '@deployforge/security';
 import { config } from '../config/env';
 import { formatDeploymentResponse, sanitizeDeployment } from '../utils/sanitizers';
+import { AccountService } from '../services/account.service';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
@@ -73,6 +74,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 env,
                 mode,
             });
+            await AccountService.logAudit(request.user.id, 'DEPLOYMENT_TRIGGERED', `GitHub deployment triggered for project: ${project.name} (branch: ${branch})`, request.ip, request.headers['user-agent']);
             return { success: true, data: sanitizeDeployment(deployment) };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
@@ -165,6 +167,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 mode,
             });
 
+            await AccountService.logAudit(request.user.id, 'DEPLOYMENT_TRIGGERED', `Zip upload deployment triggered for project: ${project.name}`, request.ip, request.headers['user-agent']);
             return { success: true, data: sanitizeDeployment(deployment) };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
@@ -281,6 +284,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
             const { id } = idParamsSchema.parse(request.params);
             const { historyId } = rollbackBodySchema.parse(request.body);
             const result = await RollbackService.rollback(request.user.id, id, historyId);
+            await AccountService.logAudit(request.user.id, 'DEPLOYMENT_ROLLED_BACK', `Deployment rollback requested for deployment ID: ${id} to history ID: ${historyId || 'previous'}`, request.ip, request.headers['user-agent']);
             return { success: true, data: result };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
@@ -295,6 +299,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         try {
             const { id } = idParamsSchema.parse(request.params);
             await DeploymentService.stopDeployment(request.user.id, id);
+            await AccountService.logAudit(request.user.id, 'DEPLOYMENT_STOPPED', `Deployment stop requested for deployment ID: ${id}`, request.ip, request.headers['user-agent']);
             return { success: true, data: { message: 'Deployment stopped' } };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
@@ -308,6 +313,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         try {
             const { id } = idParamsSchema.parse(request.params);
             await DeploymentService.startDeployment(request.user.id, id);
+            await AccountService.logAudit(request.user.id, 'DEPLOYMENT_STARTED', `Deployment start requested for deployment ID: ${id}`, request.ip, request.headers['user-agent']);
             return { success: true, data: { message: 'Deployment started' } };
         } catch (err: any) {
             return sendDeploymentError(reply, err);
@@ -319,30 +325,43 @@ async function readUploadMultipart(request: any) {
     const fields: Record<string, string> = {};
     let uploadPath = '';
     let safeName = '';
+    let createdUploadDir = '';
 
-    for await (const part of request.parts()) {
-        if (part.type === 'field') {
-            fields[part.fieldname] = String(part.value || '');
-            continue;
+    try {
+        for await (const part of request.parts()) {
+            if (part.type === 'field') {
+                fields[part.fieldname] = String(part.value || '');
+                continue;
+            }
+
+            if (part.type !== 'file') continue;
+            if (uploadPath) {
+                part.file.resume();
+                continue;
+            }
+
+            safeName = part.filename.replace(/[^A-Za-z0-9._-]/g, '');
+            if (safeName !== part.filename) {
+                part.file.resume();
+                throw new DeploymentError('uploading', 'Upload file name contains unsafe characters', 'UNSAFE_UPLOAD_NAME');
+            }
+
+            const uploadRoot = path.join(os.tmpdir(), 'deployforge', 'incoming');
+            await fs.promises.mkdir(uploadRoot, { recursive: true });
+            const uploadDir = await fs.promises.mkdtemp(path.join(uploadRoot, 'upload-'));
+            createdUploadDir = uploadDir;
+            uploadPath = path.join(uploadDir, safeName);
+            await pipeline(part.file, fs.createWriteStream(uploadPath, { flags: 'wx', mode: 0o600 }));
         }
-
-        if (part.type !== 'file') continue;
-        if (uploadPath) {
-            part.file.resume();
-            continue;
+    } catch (err) {
+        if (createdUploadDir) {
+            try {
+                await fs.promises.rm(createdUploadDir, { recursive: true, force: true });
+            } catch (rmErr) {
+                // ignore
+            }
         }
-
-        safeName = part.filename.replace(/[^A-Za-z0-9._-]/g, '');
-        if (safeName !== part.filename) {
-            part.file.resume();
-            throw new DeploymentError('uploading', 'Upload file name contains unsafe characters', 'UNSAFE_UPLOAD_NAME');
-        }
-
-        const uploadRoot = path.join(os.tmpdir(), 'deployforge', 'incoming');
-        await fs.promises.mkdir(uploadRoot, { recursive: true });
-        const uploadDir = await fs.promises.mkdtemp(path.join(uploadRoot, 'upload-'));
-        uploadPath = path.join(uploadDir, safeName);
-        await pipeline(part.file, fs.createWriteStream(uploadPath, { flags: 'wx', mode: 0o600 }));
+        throw err;
     }
 
     if (!uploadPath) return null;

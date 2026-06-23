@@ -3,6 +3,7 @@ import { z } from 'zod';
 import prisma from '@deployforge/database';
 import { VPSConnectionFailure, VPSService } from '../services/vps.service';
 import { sanitizeVps } from '../utils/sanitizers';
+import { AccountService } from '../services/account.service';
 
 const hostnamePattern = /^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$/;
 
@@ -78,6 +79,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
         try {
             const data = addVPSSchema.parse(request.body);
             const vps = await VPSService.validateAndAdd(request.user!.id, data);
+            await AccountService.logAudit(request.user!.id, 'VPS_ADD', `Added VPS: ${vps.name} (${vps.ipAddress})`, request.ip, request.headers['user-agent']);
             return { success: true, data: sanitizeVps(vps) };
         } catch (error) {
             return sendVpsError(reply, error);
@@ -149,6 +151,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
                     }
                 });
             }
+            await AccountService.logAudit(request.user!.id, 'VPS_UPDATE', `Updated VPS: ${vps.name} (${vps.ipAddress})`, request.ip, request.headers['user-agent']);
             return { success: true, data: sanitizeVps(vps) };
         } catch (error) {
             return sendVpsError(reply, error);
@@ -171,6 +174,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
                     }
                 });
             }
+            await AccountService.logAudit(request.user!.id, 'VPS_DELETE', `Deleted VPS ID: ${id}`, request.ip, request.headers['user-agent']);
             return { success: true, data: { message: 'VPS deleted' } };
         } catch (error) {
             return sendVpsError(reply, error);
@@ -207,6 +211,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
                 });
             }
             const health = await VPSService.performHealthCheck(id);
+            await AccountService.logAudit(request.user!.id, 'VPS_HEALTH_CHECK', `Triggered manual health check for VPS: ${vps.name}`, request.ip, request.headers['user-agent']);
             return { success: true, data: health };
         } catch (error) {
             return sendVpsError(reply, error);
@@ -234,12 +239,11 @@ function sendVpsError(reply: FastifyReply, error: unknown) {
             }
         });
     }
-    const message = error instanceof Error ? error.message : 'VPS request failed';
     return reply.status(500).send({
         success: false,
         error: {
             code: 'VPS_ERROR',
-            message
+            message: 'Internal Server Error'
         }
     });
 }

@@ -2,7 +2,7 @@ FROM node:20-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
-RUN apk add --no-cache openssl \
+RUN apk add --no-cache openssl postgresql-client \
     && corepack enable \
     && corepack prepare pnpm@8.15.4 --activate
 
@@ -61,6 +61,7 @@ COPY --from=builder --chown=node:node /app/packages/shared/dist ./packages/share
 COPY --from=builder --chown=node:node /app/packages/vps/dist ./packages/vps/dist
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 USER node
-EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 4000) + '/live').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+EXPOSE 3001
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/live').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 CMD ["node", "apps/api/dist/server.js"]
+

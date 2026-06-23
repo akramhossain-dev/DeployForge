@@ -7,6 +7,7 @@ import { config } from '../config/env';
 import { z } from 'zod';
 import { sanitizeGitHubAccount } from '../utils/sanitizers';
 import { cookie } from '../utils/http';
+import { AccountService } from '../services/account.service';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
@@ -168,6 +169,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
                 reply.header('Set-Cookie', [accessCookie, refreshCookie]);
 
                 fastify.log.info({ userId: session.user.id }, 'GitHub OAuth login completed successfully');
+                await AccountService.logAudit(session.user.id, 'LOGIN_SUCCESS', 'User logged in successfully via GitHub OAuth.', request.ip, request.headers['user-agent']);
                 return reply.redirect(`${config.app.appUrl}/github/callback`);
             } catch (err: any) {
                 fastify.log.error({ err }, 'GitHub OAuth login failed');
@@ -180,6 +182,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
             fastify.log.info({ userId }, 'Fetching profile and creating/updating GitHubAccount in DB');
             account = await GitHubService.syncUser(userId, accessToken);
             fastify.log.info({ userId, githubAccountId: account.id }, 'GitHubAccount and User session record updated successfully');
+            await AccountService.logAudit(userId, 'GITHUB_CONNECT', `Connected GitHub account: ${account.username}`, request.ip, request.headers['user-agent']);
         } catch (err: any) {
             fastify.log.error({ err, userId }, 'GitHub profile sync or database storage failed');
             const errMsg = err.message || 'Database storage failed';
@@ -246,6 +249,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         fastify.log.info({ userId: request.user.id }, 'Repository sync requested');
         const repositories = await GitHubService.syncRepos(request.user.id);
+        await AccountService.logAudit(request.user.id, 'GITHUB_SYNC', `Synced ${repositories.length} GitHub repositories.`, request.ip, request.headers['user-agent']);
         return { success: true, data: { count: repositories.length } };
     });
 
@@ -256,6 +260,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         const { repoFullName } = createWebhookSchema.parse(request.body);
         const result = await GitHubService.createWebhook(request.user.id, repoFullName);
+        await AccountService.logAudit(request.user.id, 'GITHUB_WEBHOOK_CREATE', `Created GitHub webhook for repo: ${repoFullName}`, request.ip, request.headers['user-agent']);
         return { success: true, data: result };
     });
 
@@ -273,6 +278,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         await prisma.repository.deleteMany({ where: { githubAccountId: account.id } });
         await prisma.gitHubAccount.delete({ where: { userId: request.user.id } });
         fastify.log.info({ userId: request.user.id, githubAccountId: account.id }, 'GitHub account disconnected');
+        await AccountService.logAudit(request.user.id, 'GITHUB_DISCONNECT', `Disconnected GitHub account: ${account.username}`, request.ip, request.headers['user-agent']);
         return { success: true, data: { message: 'GitHub disconnected' } };
     });
 }
