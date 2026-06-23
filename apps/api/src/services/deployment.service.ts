@@ -324,139 +324,152 @@ export class DeploymentService {
             await LoggingService.log(deploymentId, 'Analysing project and preparing build environment...', 'build');
             const hasEnv = await EnvironmentService.injectEnvironment(ssh, deploymentId, workDir, deployment.env);
             // (status is already BUILDING — set right after clone/extract above)
-            if (detected.deploymentType === 'STATIC') {
-                if (buildCacheHit) {
-                    await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Restoring built static files from cache', 'build');
-                    await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(path.dirname(staticDir))} && cp -a ${shellQuote(`${cacheDir}/builds/${buildCacheKey}/static`)} ${shellQuote(staticDir)}`);
-                } else {
-                    await LoggingService.log(deploymentId, 'Building static artifact without Docker', 'build');
-                    await BuildService.buildStaticArtifact(ssh, deploymentId, workDir, staticDir, detected, hasEnv);
-                    await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(`${cacheDir}/builds/${buildCacheKey}`)} && cp -a ${shellQuote(staticDir)} ${shellQuote(`${cacheDir}/builds/${buildCacheKey}/static`)}`).catch(() => undefined);
-                }
 
-                await this.setStatus(deploymentId, 'DEPLOYING');
-                await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(`${baseDir}/static`)} && ln -sfn ${shellQuote(staticDir)} ${shellQuote(currentStaticLink)}`);
-                await LoggingService.log(deploymentId, isSandbox ? 'Publishing sandbox static artifact' : 'Publishing static artifact through shared static hosting', 'system');
-                routingAttempted = true;
-                staticHosting = await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, staticDir, Boolean(domainName), vps.ipAddress);
-                if (domainName && staticHosting.domainActivated) {
-                    await this.persistDomainBinding(deploymentId, vps.id, domainName);
-                }
+            if (hasEnv) {
+                // Temporarily copy the secure environment variables file to the project build context
+                await runCommand(ssh, deploymentId, 'system', `cp ${shellQuote(EnvironmentService.getEnvPath(deploymentId))} ${shellQuote(`${workDir}/.env.deployforge`)}`);
+            }
 
-                // --- SUBPATH ASSET REWRITING ---
-                if (!staticHosting.domainActivated) {
-                    await LoggingService.log(deploymentId, `Subpath hosting active. Rewriting assets for subpath /site/${deploymentId}...`, 'build');
-                    await this.rewriteStaticAssets(ssh, deploymentId, staticDir, `/site/${deploymentId}`);
-                }
-                
-                // Static Health Check & Asset Validation with Retry
-                try {
-                    await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
-                    await ValidationService.validateStaticAssets(ssh, deploymentId, staticHosting, vps, domainName);
-                } catch (err) {
-                    await LoggingService.log(deploymentId, 'Static health check or asset validation failed. Retrying once...', 'system', 'warn');
-                    await new Promise((resolve) => setTimeout(resolve, 5000));
-                    try {
-                        await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
-                        await ValidationService.validateStaticAssets(ssh, deploymentId, staticHosting, vps, domainName);
-                    } catch (retryErr) {
-                        await LoggingService.log(deploymentId, 'Static health check or asset validation failed on second attempt. Rolling back...', 'system', 'error');
-                        if (!isSandbox) {
-                            const previousActiveDeployment = await prisma.deployment.findFirst({
-                                where: {
-                                    projectId: project.id,
-                                    status: 'RUNNING',
-                                    id: { not: deploymentId },
-                                },
-                                include: { vps: true, project: true },
-                            });
-                            if (previousActiveDeployment && previousActiveDeployment.lastStableVersion) {
-                                const prevStaticDir = this.staticArtifactDir(previousActiveDeployment, previousActiveDeployment.lastStableVersion);
-                                await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, prevStaticDir, Boolean(domainName), vps.ipAddress).catch(() => undefined);
-                            }
-                        }
-                        throw retryErr;
-                    }
-                }
-            } else {
-                const port = deployment.port || await this.getAvailablePort(deployment.vpsId, vps);
-                await prisma.deployment.update({ where: { id: deploymentId }, data: { port } });
-                deployment.port = port;
-                
-                try {
+            try {
+                if (detected.deploymentType === 'STATIC') {
                     if (buildCacheHit) {
-                        await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Re-tagging cached Docker image', 'build');
-                        await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)} ${shellQuote(imageTag)}`);
+                        await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Restoring built static files from cache', 'build');
+                        await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(path.dirname(staticDir))} && cp -a ${shellQuote(`${cacheDir}/builds/${buildCacheKey}/static`)} ${shellQuote(staticDir)}`);
                     } else {
-                        await LoggingService.log(deploymentId, 'Building deployment image', 'build');
-                        await BuildService.buildImage(ssh, deploymentId, workDir, imageTag, detected);
-                        await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(imageTag)} ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)}`).catch(() => undefined);
+                        await LoggingService.log(deploymentId, 'Building static artifact without Docker', 'build');
+                        await BuildService.buildStaticArtifact(ssh, deploymentId, workDir, staticDir, detected, hasEnv);
+                        await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(`${cacheDir}/builds/${buildCacheKey}`)} && cp -a ${shellQuote(staticDir)} ${shellQuote(`${cacheDir}/builds/${buildCacheKey}/static`)}`).catch(() => undefined);
                     }
 
                     await this.setStatus(deploymentId, 'DEPLOYING');
-                    await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
-                    await this.assertRemotePortAvailable(ssh, deploymentId, port);
-                    createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, port, detected.appPort, hasEnv, isSandbox);
-                    await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
-                    if (!isSandbox) {
-                        routingAttempted = true;
-                        await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, port, Boolean(domainName));
-                        if (domainName) {
-                            await this.persistDomainBinding(deploymentId, vps.id, domainName);
-                        }
-                    } else {
-                        await LoggingService.log(deploymentId, `Sandbox direct port mode active at http://${vps.ipAddress}:${port}`, 'system', 'warn');
+                    await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(`${baseDir}/static`)} && ln -sfn ${shellQuote(staticDir)} ${shellQuote(currentStaticLink)}`);
+                    await LoggingService.log(deploymentId, isSandbox ? 'Publishing sandbox static artifact' : 'Publishing static artifact through shared static hosting', 'system');
+                    routingAttempted = true;
+                    staticHosting = await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, staticDir, Boolean(domainName), vps.ipAddress);
+                    if (domainName && staticHosting.domainActivated) {
+                        await this.persistDomainBinding(deploymentId, vps.id, domainName);
                     }
 
-                    // Health check with 1 retry
+                    // --- SUBPATH ASSET REWRITING ---
+                    if (!staticHosting.domainActivated) {
+                        await LoggingService.log(deploymentId, `Subpath hosting active. Rewriting assets for subpath /site/${deploymentId}...`, 'build');
+                        await this.rewriteStaticAssets(ssh, deploymentId, staticDir, `/site/${deploymentId}`);
+                    }
+                    
+                    // Static Health Check & Asset Validation with Retry
                     try {
-                        await ValidationService.healthCheck(ssh, deploymentId, port);
+                        await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
+                        await ValidationService.validateStaticAssets(ssh, deploymentId, staticHosting, vps, domainName);
                     } catch (err) {
-                        await LoggingService.log(deploymentId, 'Health check failed. Retrying once...', 'system', 'warn');
+                        await LoggingService.log(deploymentId, 'Static health check or asset validation failed. Retrying once...', 'system', 'warn');
                         await new Promise((resolve) => setTimeout(resolve, 5000));
-                        await ValidationService.healthCheck(ssh, deploymentId, port);
-                    }
-                } catch (err: any) {
-                    if (isSandbox) {
-                        await LoggingService.log(deploymentId, `Sandbox Node deployment failed: ${err.message}. Falling back to static server.`, 'system', 'warn');
-                        if (createdContainerId) {
-                            await this.removeContainerQuietly(ssh, deploymentId, createdContainerId);
-                            createdContainerId = '';
-                        }
-                        
-                        detected.deploymentType = 'STATIC';
-                        detected.framework = 'STATIC';
-                        detected.buildCommand = '';
-                        detected.startCommand = 'nginx static mount';
-                        detected.appPort = 80;
-
-                        await BuildService.buildStaticArtifact(ssh, deploymentId, workDir, staticDir, detected, hasEnv);
-                        routingAttempted = true;
-                        staticHosting = await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, staticDir, Boolean(domainName), vps.ipAddress);
-                        
-                        // Health check with 1 retry for static fallback
                         try {
                             await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
-                        } catch (staticErr) {
-                            await LoggingService.log(deploymentId, 'Fallback static health check failed. Retrying once...', 'system', 'warn');
-                            await new Promise((resolve) => setTimeout(resolve, 5000));
-                            await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
-                        }
-                    } else {
-                        if (routingAttempted) {
-                            const previousActiveDeployment = await prisma.deployment.findFirst({
-                                where: {
-                                    projectId: project.id,
-                                    status: 'RUNNING',
-                                    id: { not: deploymentId },
-                                },
-                            });
-                            if (previousActiveDeployment && previousActiveDeployment.port) {
-                                await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, previousActiveDeployment.port, Boolean(domainName)).catch(() => undefined);
+                            await ValidationService.validateStaticAssets(ssh, deploymentId, staticHosting, vps, domainName);
+                        } catch (retryErr) {
+                            await LoggingService.log(deploymentId, 'Static health check or asset validation failed on second attempt. Rolling back...', 'system', 'error');
+                            if (!isSandbox) {
+                                const previousActiveDeployment = await prisma.deployment.findFirst({
+                                    where: {
+                                        projectId: project.id,
+                                        status: 'RUNNING',
+                                        id: { not: deploymentId },
+                                    },
+                                    include: { vps: true, project: true },
+                                });
+                                if (previousActiveDeployment && previousActiveDeployment.lastStableVersion) {
+                                    const prevStaticDir = this.staticArtifactDir(previousActiveDeployment, previousActiveDeployment.lastStableVersion);
+                                    await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, prevStaticDir, Boolean(domainName), vps.ipAddress).catch(() => undefined);
+                                }
                             }
+                            throw retryErr;
                         }
-                        throw err;
                     }
+                } else {
+                    const port = deployment.port || await this.getAvailablePort(deployment.vpsId, vps);
+                    await prisma.deployment.update({ where: { id: deploymentId }, data: { port } });
+                    deployment.port = port;
+                    
+                    try {
+                        if (buildCacheHit) {
+                            await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Re-tagging cached Docker image', 'build');
+                            await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)} ${shellQuote(imageTag)}`);
+                        } else {
+                            await LoggingService.log(deploymentId, 'Building deployment image', 'build');
+                            await BuildService.buildImage(ssh, deploymentId, workDir, imageTag, detected);
+                            await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(imageTag)} ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)}`).catch(() => undefined);
+                        }
+
+                        await this.setStatus(deploymentId, 'DEPLOYING');
+                        await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
+                        await this.assertRemotePortAvailable(ssh, deploymentId, port);
+                        createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, port, detected.appPort, hasEnv, isSandbox);
+                        await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
+                        if (!isSandbox) {
+                            routingAttempted = true;
+                            await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, port, Boolean(domainName));
+                            if (domainName) {
+                                await this.persistDomainBinding(deploymentId, vps.id, domainName);
+                            }
+                        } else {
+                            await LoggingService.log(deploymentId, `Sandbox direct port mode active at http://${vps.ipAddress}:${port}`, 'system', 'warn');
+                        }
+
+                        // Health check with 1 retry
+                        try {
+                            await ValidationService.healthCheck(ssh, deploymentId, port);
+                        } catch (err) {
+                            await LoggingService.log(deploymentId, 'Health check failed. Retrying once...', 'system', 'warn');
+                            await new Promise((resolve) => setTimeout(resolve, 5000));
+                            await ValidationService.healthCheck(ssh, deploymentId, port);
+                        }
+                    } catch (err: any) {
+                        if (isSandbox) {
+                            await LoggingService.log(deploymentId, `Sandbox Node deployment failed: ${err.message}. Falling back to static server.`, 'system', 'warn');
+                            if (createdContainerId) {
+                                await this.removeContainerQuietly(ssh, deploymentId, createdContainerId);
+                                createdContainerId = '';
+                            }
+                            
+                            detected.deploymentType = 'STATIC';
+                            detected.framework = 'STATIC';
+                            detected.buildCommand = '';
+                            detected.startCommand = 'nginx static mount';
+                            detected.appPort = 80;
+
+                            await BuildService.buildStaticArtifact(ssh, deploymentId, workDir, staticDir, detected, hasEnv);
+                            routingAttempted = true;
+                            staticHosting = await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, staticDir, Boolean(domainName), vps.ipAddress);
+                            
+                            // Health check with 1 retry for static fallback
+                            try {
+                                await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
+                            } catch (staticErr) {
+                                await LoggingService.log(deploymentId, 'Fallback static health check failed. Retrying once...', 'system', 'warn');
+                                await new Promise((resolve) => setTimeout(resolve, 5000));
+                                await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
+                            }
+                        } else {
+                            if (routingAttempted) {
+                                const previousActiveDeployment = await prisma.deployment.findFirst({
+                                    where: {
+                                        projectId: project.id,
+                                        status: 'RUNNING',
+                                        id: { not: deploymentId },
+                                    },
+                                });
+                                if (previousActiveDeployment && previousActiveDeployment.port) {
+                                    await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, previousActiveDeployment.port, Boolean(domainName)).catch(() => undefined);
+                                }
+                            }
+                            throw err;
+                        }
+                    }
+                }
+            } finally {
+                if (hasEnv) {
+                    // Always clean up the temporary build context environment file
+                    await ssh.execute(`rm -f ${shellQuote(`${workDir}/.env.deployforge`)}`).catch(() => undefined);
                 }
             }
 
@@ -1098,7 +1111,7 @@ for root, dirs, files in os.walk(directory):
 
     private static async deployContainer(ssh: SSHService, deploymentId: string, workDir: string, dockerName: string, imageTag: string, hostPort: number, appPort: number, hasEnv: boolean, isSandbox = false) {
         await this.removeContainerIfExists(ssh, deploymentId, dockerName, 'Removed previous container with matching Docker name', false);
-        const envFlag = hasEnv ? ` --env-file ${shellQuote(`${workDir}/.env.deployforge`)}` : '';
+        const envFlag = hasEnv ? ` --env-file ${shellQuote(EnvironmentService.getEnvPath(deploymentId))}` : '';
         const restartPolicy = isSandbox ? 'no' : 'unless-stopped';
         const createCommand = `docker create --name ${shellQuote(dockerName)} --restart ${restartPolicy} --read-only --tmpfs /tmp:rw,noexec,nosuid,size=128m --tmpfs /app/.next/cache:rw,noexec,nosuid,size=128m --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=64m --tmpfs /var/run:rw,noexec,nosuid,size=16m --security-opt no-new-privileges --cap-drop ALL -p ${hostPort}:${appPort}${envFlag} ${shellQuote(imageTag)}`;
         const { stdout } = await runCommand(ssh, deploymentId, 'system', createCommand, 'container_create', 'DOCKER_CREATE_FAILED');
@@ -1199,7 +1212,7 @@ for root, dirs, files in os.walk(directory):
         const baseDir = `/home/${shellPath(deployment.vps.username)}/deployforge/${safeProjectName}`;
         const releasePattern = `${baseDir}/releases/*-${deployment.id.slice(0, 8)}`;
         const staticPattern = `${baseDir}/static/*-${deployment.id.slice(0, 8)}`;
-        const command = `rm -rf ${releasePattern} ${staticPattern}; if [ -L ${shellQuote(`${baseDir}/current`)} ] && readlink ${shellQuote(`${baseDir}/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/current`)}; fi; if [ -L ${shellQuote(`${baseDir}/static/current`)} ] && readlink ${shellQuote(`${baseDir}/static/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/static/current`)}; fi`;
+        const command = `rm -rf ${releasePattern} ${staticPattern}; if [ -L ${shellQuote(`${baseDir}/current`)} ] && readlink ${shellQuote(`${baseDir}/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/current`)}; fi; if [ -L ${shellQuote(`${baseDir}/static/current`)} ] && readlink ${shellQuote(`${baseDir}/static/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/static/current`)}; fi; rm -f ${shellQuote(`/etc/deployforge/envs/${deployment.id}.env`)}`;
         await ssh.execute(command).catch(() => undefined);
     }
 

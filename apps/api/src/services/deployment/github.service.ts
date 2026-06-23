@@ -7,6 +7,7 @@ import { DeploymentError } from './error';
 import { GitHubDeploymentSource } from './types';
 import { runCommand } from './runner';
 import { shellQuote, extractRepoFullName } from './utils';
+import crypto from 'node:crypto';
 
 // Git clone/fetch timeout: 2 minutes. If git hangs longer than this the
 // deployment would be stuck at CLONING forever. 120s is generous enough
@@ -39,38 +40,48 @@ export class GitHubDeploymentService {
 
     static async prepareGithubSource(ssh: SSHService, deploymentId: string, source: GitHubDeploymentSource, repositoryUrl: string, workDir: string) {
         if (!source.accessToken) throw new DeploymentError('cloning', 'Missing GitHub access token', 'MISSING_GITHUB_TOKEN');
-        const repoUrl = repositoryUrl.replace(/^https:\/\//, `https://${encodeURIComponent(source.accessToken)}@`);
+        
+        // Hide access token by prepending x-access-token username to URL instead of the token itself.
+        // The token is fed dynamically via a temporary GIT_ASKPASS script to prevent exposure in .git/config.
+        const repoUrl = repositoryUrl.replace(/^https:\/\/(?:[^@]+@)?/, 'https://x-access-token@');
         await LoggingService.log(deploymentId, `Preparing repository source for branch ${source.branch}...`, 'build');
 
         const quotedWorkDir = shellQuote(workDir);
         const quotedBranch = shellQuote(source.branch);
         const quotedRepoUrl = shellQuote(repoUrl);
 
-        // GIT_HTTP_LOW_SPEED_LIMIT / GIT_HTTP_LOW_SPEED_TIME:
-        //   Abort if transfer rate stays below 1 KB/s for 30 s. Prevents git
-        //   from hanging silently on a broken or stalled connection.
-        const gitEnv =
-            `export GIT_TERMINAL_PROMPT=0 && ` +
-            `export GIT_HTTP_LOW_SPEED_LIMIT=1024 && ` +
-            `export GIT_HTTP_LOW_SPEED_TIME=30 && `;
+        const askpassId = crypto.randomUUID();
+        const askpassPath = `/tmp/git-askpass-${askpassId}.sh`;
+        const writeAskpassCmd = `cat > ${shellQuote(askpassPath)} <<'EOF'\n#!/bin/sh\necho ${shellQuote(source.accessToken)}\nEOF\nchmod 700 ${shellQuote(askpassPath)}`;
 
-        const command = gitEnv +
-            `if [ -d ${quotedWorkDir}/.git ] && cd ${quotedWorkDir} && ` +
-            `git remote set-url origin ${quotedRepoUrl} && ` +
-            `git fetch --depth 1 origin ${quotedBranch} && ` +
-            `git checkout -B ${quotedBranch} origin/${quotedBranch} && ` +
-            `git reset --hard origin/${quotedBranch} && ` +
-            `git clean -fdx -e node_modules -e .next/cache; then ` +
-            `echo "Incremental fetch successful. Reused cached repository."; ` +
-            `else ` +
-            `echo "Cache miss or update failed. Performing clean clone..."; ` +
-            `rm -rf ${quotedWorkDir} && ` +
-            `git clone --depth 1 -b ${quotedBranch} ${quotedRepoUrl} ${quotedWorkDir}; ` +
-            `fi`;
+        try {
+            await runCommand(ssh, deploymentId, 'system', writeAskpassCmd, 'cloning', 'GIT_ASKPASS_PREPARATION_FAILED');
 
-        // Use a dedicated timeout so a frozen network surfaces immediately
-        // as a CLONING error rather than blocking for the full 15-minute
-        // default ssh.execute() timeout.
-        await runCommand(ssh, deploymentId, 'build', command, 'cloning', 'GIT_CLONE_FAILED', GIT_TIMEOUT_MS);
+            const gitEnv =
+                `export GIT_TERMINAL_PROMPT=0 && ` +
+                `export GIT_ASKPASS=${shellQuote(askpassPath)} && ` +
+                `export GIT_HTTP_LOW_SPEED_LIMIT=1024 && ` +
+                `export GIT_HTTP_LOW_SPEED_TIME=30 && `;
+
+            const command = gitEnv +
+                `if [ -d ${quotedWorkDir}/.git ] && cd ${quotedWorkDir} && ` +
+                `git remote set-url origin ${quotedRepoUrl} && ` +
+                `git fetch --depth 1 origin ${quotedBranch} && ` +
+                `git checkout -B ${quotedBranch} origin/${quotedBranch} && ` +
+                `git reset --hard origin/${quotedBranch} && ` +
+                `git clean -fdx -e node_modules -e .next/cache; then ` +
+                `echo "Incremental fetch successful. Reused cached repository."; ` +
+                `else ` +
+                `echo "Cache miss or update failed. Performing clean clone..."; ` +
+                `rm -rf ${quotedWorkDir} && ` +
+                `git clone --depth 1 -b ${quotedBranch} ${quotedRepoUrl} ${quotedWorkDir}; ` +
+                `fi`;
+
+            await runCommand(ssh, deploymentId, 'build', command, 'cloning', 'GIT_CLONE_FAILED', GIT_TIMEOUT_MS);
+        } finally {
+            await ssh.execute(`rm -f ${shellQuote(askpassPath)}`).catch((err) => {
+                logger.warn({ err, askpassPath }, 'Failed to clean up temporary git-askpass script');
+            });
+        }
     }
 }

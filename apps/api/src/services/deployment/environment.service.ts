@@ -45,6 +45,10 @@ export class EnvironmentService {
         }
     }
 
+    static getEnvPath(deploymentId: string) {
+        return `/etc/deployforge/envs/${deploymentId}.env`;
+    }
+
     static async injectEnvironment(ssh: SSHService, deploymentId: string, workDir: string, encryptedEnv?: string | null) {
         if (!encryptedEnv) {
             return false;
@@ -63,8 +67,17 @@ export class EnvironmentService {
             return false;
         }
 
-        await runCommand(ssh, deploymentId, 'system', `cat > ${shellQuote(`${workDir}/.env.deployforge`)} <<'EOF'\n${lines.join('\n')}\nEOF\nchmod 600 ${shellQuote(`${workDir}/.env.deployforge`)}`);
-        await LoggingService.log(deploymentId, `Injected ${lines.length} environment variables`, 'system');
+        const envPath = this.getEnvPath(deploymentId);
+
+        // Ensure secure system directory exists and is restricted to owner-only
+        const setupSecureDir = `mkdir -p /etc/deployforge/envs && chmod 700 /etc/deployforge/envs`;
+        await runCommand(ssh, deploymentId, 'system', setupSecureDir);
+
+        // Write env securely using umask 077 and chmod 600
+        const writeEnvCmd = `umask 077 && cat > ${shellQuote(envPath)} <<'EOF'\n${lines.join('\n')}\nEOF\nchmod 600 ${shellQuote(envPath)}`;
+        await runCommand(ssh, deploymentId, 'system', writeEnvCmd);
+
+        await LoggingService.log(deploymentId, `Injected ${lines.length} environment variables to secure storage`, 'system');
         return true;
     }
 }
