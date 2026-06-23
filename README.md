@@ -2,72 +2,81 @@
 
 ### The Next-Gen Self-Hosted Deployment Platform
 
-**DeployForge** is a production-grade, self-hosted SaaS orchestrator designed to automate application deployment, monitoring, and maintenance on your own VPS instances. Think of it as your private Vercel or Railway, giving you full control over your infrastructure with the ease of modern DevOps workflows.
+**DeployForge** is a production-grade, self-hosted Platform-as-a-Service (PaaS) orchestrator designed to automate application building, deployment, and monitoring on your own target Virtual Private Servers (VPS). Think of it as a private, self-hosted Vercel or Railway, keeping you in full control of your costs and infrastructure while enjoying a modern developer experience (DX).
+
+```
+ ┌──────────────┐      ┌─────────────┐      ┌─────────────┐
+ │  Commit Push │ ───► │ DeployForge │ ───► │  Target VPS │
+ │  (GitHub WS) │      │ (Control)   │      │ (App Runs)  │
+ └──────────────┘      └─────────────┘      └─────────────┘
+```
 
 ---
 
 ## 🚀 Key Features
 
-- **Multi-Cloud/VPS**: Deploy to any VPS via SSH.
-- **GitHub Integration**: Automated deployments on git push with webhook tracking.
-- **Advanced Deployment Engine**: Support for Docker-based builds with framework auto-detection (Next.js, Node.js, Django, etc.).
-- **Security First**: AES-256-GCM encryption for secrets, Argon2 hashing, and JWT-based auth.
-- **Zero-Config SSL**: Automatic Let's Encrypt certificates via managed Nginx reverse proxy.
-- **Real-time Monitoring**: CPU, RAM, and Disk usage tracking with professional charts.
-- **Integrated Terminal**: Browser-based SSH terminal for direct server access.
+* **Agentless SSH Orchestration:** Connect any standard Ubuntu server. DeployForge communicates entirely over secure SSH connections—no proprietary agents or daemons required.
+* **Automated Git Workflows:** Sync with GitHub via OAuth. Pushing code to your branches triggers automated build pipelines via webhooks.
+* **Multi-Framework Build Engine:** Automatically detects and configures runtimes for Next.js, Node.js, Vite React/Vue, Astro, Python Django/FastAPI, and static HTML apps.
+* **Zero-Config SSL & Networking:** Dynamic Nginx reverse proxy routing. Automatic Let's Encrypt certificate issuance and renewal via Certbot.
+* **Blue-Green Deployments:** Deploys new builds in parallel, verifies container health, reloads Nginx dynamically, and tears down old containers for zero-downtime releases.
+* **Real-time Monitoring & SSH Terminal:** Track server resources (CPU, Memory, Disk) and open an interactive web SSH terminal session directly in the browser.
+* **Backup & Restore System:** Manual and scheduled backup exports with database dumps, configurations, and one-click restore capabilities.
+* **Enterprise Security Controls:** AES-256-GCM encryption for credentials, Argon2id password hashing, double-submit cookie CSRF prevention, Helmet headers protection, and Docker sandbox profiles.
 
 ---
 
 ## 🏗️ Repository Structure
 
+DeployForge is managed as a high-performance monorepo using Turborepo and `pnpm`:
+
 ```text
 DeployForge/
 ├── apps/
-│   ├── web/                # Next.js Frontend (shadcn/ui, Tailwind)
-│   └── api/                # Fastify Backend (TypeScript)
+│   ├── api/                  # Fastify REST & WebSocket Backend
+│   └── web/                  # Next.js App Router Frontend Dashboard
 ├── packages/
-│   ├── database/           # Prisma database client
-│   ├── mail/               # SMTP mail transport
-│   ├── vps/                # VPS management and SSH communication
-│   ├── security/           # AES-256-GCM & Argon2 utilities
-│   └── shared/             # Shared types, constants, and utilities
-├── prisma/                 # Database Schema (PostgreSQL)
-├── docker/                 # Deployment templates & system configs
-├── docs/                   # Full documentation (Phase 0)
-├── scripts/                # Setup and maintenance scripts
-└── package.json            # Monorepo root configuration (Turbo/pnpm)
+│   ├── database/             # Shared Prisma Client & PostgreSQL Client
+│   ├── mail/                 # SMTP Transporter & Verification Templates
+│   ├── security/             # AES-256-GCM Encryption & Argon2id Hashing
+│   ├── shared/               # Shared Schemas, Types, and Utilities
+│   └── vps/                  # SSH Connection Pools & SFTP Transfers
+├── prisma/                   # Database Schemas & Migrations
+└── docs/                     # Comprehensive Project Documentation
 ```
 
 ---
 
-## 📄 Documentation Index
+## 📄 Documentation Directory
 
-Explore the deep technical architecture and specifications:
+For deep technical specifications, design patterns, and guides, explore our documentation:
 
-1.  **[Architecture](./docs/ARCHITECTURE.md)**: High-level system design and data flow.
-2.  **[Technical Specification](./docs/SPECIFICATION.md)**: Core features and technical requirements.
-3.  **[Database Schema](./docs/DATABASE.md)**: Logic and ERD for PostgreSQL.
-4.  **[API Reference](./docs/API_REFERENCE.md)**: Detailed Fastify endpoint documentation.
-5.  **[Security Protocol](./docs/SECURITY.md)**: Encryption, Auth, and Sandboxing.
-6.  **[Deployment Engine](./docs/DEPLOYMENT_ENGINE.md)**: How builds and port management work.
-7.  **[UI/UX Design](./docs/UI_UX.md)**: Design system, theme, and wireframes.
-8.  **[Roadmap](./docs/ROADMAP.md)**: Future features and development phases.
-9.  **[Contributing](./docs/CONTRIBUTING.md)**: Guidelines for developers.
-10. **[Development Guide](./docs/DEVELOPMENT.md)**: Local setup and environment instructions.
+* 📋 **[Project Overview](docs/PROJECT_OVERVIEW.md):** Vision, architecture model, Control/Data Plane separation, and package blueprints.
+* 🚀 **[Setup & Installation Guide](docs/SETUP.md):** Local development quickstart, Docker Compose configurations, and production deployment scripts.
+* 🔌 **[API Specifications](docs/API.md):** Full REST endpoint inventory, query parameters, request payloads, response schemas, and WebSocket terminal handshakes.
+* 🏗️ **[Architectural Design](docs/ARCHITECTURE.md):** Technical design diagrams, module communications, and Blue-Green zero-downtime sequence flows.
+* 🌟 **[Platform Features](docs/FEATURES.md):** In-depth guides on VPS target onboarding, deployment strategies, network routing, custom domains, and backup management.
+* 🔐 **[Security Protocol](docs/SECURITY.md):** Cryptographic implementations, session tracking, token rotations, CSRF, and Docker security isolation.
 
 ---
 
 ## 🛠️ Technology Stack
 
-- **Frontend**: Next.js 14, TypeScript, Tailwind CSS, shadcn/ui
-- **Backend**: Fastify, TypeScript, BullMQ (Queue)
-- **Database**: PostgreSQL, Prisma, Redis (Cache/Queue)
-- **Infrastructure**: Docker, Dockerode (Management), SSH2 (Remote Access)
-- **Proxy**: Nginx, Certbot (SSL)
-- **Security**: JWT, Argon2, AES-256-GCM
+* **Frontend:** Next.js 14, Zustand State Manager, Tailwind CSS, shadcn/ui components
+* **Backend:** Fastify API, BullMQ Worker Pools, ioredis Client
+* **Database & Cache:** PostgreSQL DB, Prisma ORM, Redis Cache & Queue Broker
+* **Infrastructure:** SSH2 (Remote connections), SFTP (File Transfers), Docker (Sandboxes)
+* **Web Proxy:** Nginx, Certbot (SSL certificates)
+* **Security Primitives:** JWT (Access tokens), Argon2id (Credential hashing), AES-256-GCM (Secrets encryption)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read the guidelines in [CONTRIBUTING.md](CONTRIBUTING.md) to get started on submitting features, fixes, or documentation enhancements.
 
 ---
 
 ## ⚖️ License
 
-MIT License - Copyright DeployForge Team
+Distributed under the MIT License. See [LICENSE](LICENSE) for more details.

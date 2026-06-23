@@ -1,25 +1,83 @@
-# 📋 PROJECT_OVERVIEW.md
+# 📋 Project Overview — DeployForge
 
-## 1. Introduction
-DeployForge is a next-generation self-hosted PaaS (Platform-as-a-Service) and DevOps orchestrator. It allows developers to connect their own Virtual Private Servers (VPS) and deploy web applications on them agentlessly via SSH and Docker. DeployForge acts as a private, self-hosted alternative to platforms like Vercel, Railway, or Heroku, keeping users in control of their target infrastructure while offering a modern SaaS dashboard interface.
-
----
-
-## 2. Core Archetype & Design
-
-*   **Application Type:** Multi-tenant infrastructure management and app deployment orchestration dashboard.
-*   **Architecture Pattern:** Control Plane & Data Plane Separation.
-    *   **Control Plane:** The central Next.js frontend dashboard and Fastify backend API orchestrator.
-    *   **Data Plane:** Agentless target servers (VPS) that run deployed user applications containerized in Docker, fronted by an Nginx reverse proxy with SSL termination.
-*   **Communication Style:** SSH-mediated command execution and SFTP uploads. No agent is required to be installed on target servers; DeployForge manages everything via SSH and Docker Remote API port tunneling.
+DeployForge is a next-generation, self-hosted Platform-as-a-Service (PaaS) and DevOps orchestration platform. Designed to bridge the gap between complex raw cloud infrastructure and developer-friendly workflows, DeployForge allows you to transform any standard Ubuntu Virtual Private Server (VPS) into a fully managed, automated application hosting platform—equivalent to having a private Vercel, Railway, or Heroku.
 
 ---
 
-## 3. High-Level Feature Architecture
+## 1. Core Vision & Objectives
 
-*   **User Accounts & Auth:** Local email-password authentication with secure Argon2id password hashing, email OTP verification, and GitHub OAuth integration. Enforces session tracking and revocation checks on every API request.
-*   **VPS Targets Manager:** Target discovery, Docker/Nginx auto-detection, manual health-check triggers, and SSH credentials management (passwords/keys) encrypted via AES-256-GCM.
-*   **Project Build & Deploy Pipeline:** GitHub repository sync, webhook triggers, and archive upload deployments (.zip/.tar.gz). Supports dynamic framework detection (Next.js, Node.js, Vite React, Astro, Django, Laravel).
-*   **Networking & Custom Domains:** Automatic upstream reverse proxy allocation, custom domain attachment, Let's Encrypt SSL certificate issuance, and verification of DNS records.
-*   **Server Monitoring & Metrics:** Scheduled collection of CPU, Memory, Disk usage, and active container metrics, visualizable in dashboard graphs.
-*   **Active Session & Audit Logs:** Device, browser, and OS metadata tracking for current logins. A paginated, searchable database audit log of critical security events (logins, password changes, token revokes).
+* **Full Infrastructure Ownership:** Host your web apps, databases, and cron workers on your own hardware without paying cloud platform premiums.
+* **Modern Developer Experience (DX):** Push to GitHub to trigger automated build pipelines, check container health, stream live logs, and attach domains with one click.
+* **Production-Grade Architecture:** Decouple core platform logic (Control Plane) from user running environments (Data Plane) using secure agentless SSH orchestration and Docker isolation.
+* **Security & Isolation:** Enforce industry standards like AES-256-GCM for host secrets, Argon2id for authentication, strict Content Security Policies (CSP), double-submit cookie CSRF protection, and Docker sandbox profiles (`no-new-privileges` and dropped kernel capabilities).
+
+---
+
+## 2. Platform Architecture Model
+
+DeployForge uses a **Control Plane & Data Plane Separation** model:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                      CONTROL PLANE                       │
+│                                                          │
+│  ┌─────────────────┐       ┌──────────────────────────┐  │
+│  │   Next.js App   │ ◄───► │  Fastify API Orchestrator│  │
+│  │  (Dashboard UI) │       │      (apps/api)          │  │
+│  └─────────────────┘       └──────┬─────────────┬─────┘  │
+│                                   │             │        │
+│                                   ▼             ▼        │
+│                              ┌──────────┐  ┌──────────┐  │
+│                              │PostgreSQL│  │  Redis   │  │
+│                              └──────────┘  └────┬─────┘  │
+│                                                 │        │
+│                                                 ▼        │
+│                                            ┌──────────┐  │
+│                                            │  BullMQ  │  │
+│                                            │  Worker  │  │
+│                                            └────┬─────┘  │
+└─────────────────────────────────────────────────┼────────┘
+                                                  │
+                                   SSH SSH Tunnel │ (Agentless)
+                                                  ▼
+┌──────────────────────────────────────────────────────────┐
+│                DATA PLANE (Target VPS Hosts)             │
+│                                                          │
+│     ┌──────────────────────────────────────────────┐     │
+│     │               Nginx Reverse Proxy            │     │
+│     │          (SSL via Let's Encrypt Certbot)     │     │
+│     └──────────────────────┬───────────────────────┘     │
+│                            │ (Internal Port mapping)     │
+│                            ▼                             │
+│     ┌──────────────────────────────────────────────┐     │
+│     │             Docker Container Sandbox         │     │
+│     │ ┌───────────────┐ ┌───────────────┐          │     │
+│     │ │ App Container │ │ App Container │ ...      │     │
+│     │ └───────────────┘ └───────────────┘          │     │
+│     └──────────────────────────────────────────────┘     │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 2.1 The Control Plane (Central Orchestrator)
+The central engine coordinates cluster configuration, stores meta-state, syncs git integrations, monitors server load, and schedules deployment tasks.
+* **Dashboard App (`apps/web`):** A Next.js single-page application configured with clean styling and micro-animations. Contains distinct portals for standard users and platform administrators.
+* **Orchestrator Backend (`apps/api`):** A Fastify server processing domain validation, VPS health verification, project builds, and terminal sessions.
+* **Workers & Cache (`Redis` & `BullMQ`):** Fastify publishes async tasks (like server setups, application builds, and metrics polls) to BullMQ queues processed by isolated background threads.
+* **Metadata Store (`PostgreSQL` + `Prisma`):** Houses user accounts, active sessions, VPS credentials, webhook events, deployment history, custom domains, and security logs.
+
+### 2.2 The Data Plane (Application Target Servers)
+The remote environments where user applications run and interface with the public web.
+* **Agentless Design:** Target VPS nodes do not run any custom daemon. All container provisioning, health validations, log streams, and web proxy changes are executed remotely over secure SSH channels.
+* **Docker Sandboxed Runtimes:** Every application is containerized under an unprivileged user space. Containers are hardened with strict capability dropping and prevent privilege escalation.
+* **Traffic Routing (Nginx & Certbot):** A central Nginx instance on each target VPS manages public ports `80` & `443`, mapping incoming custom domains to active internal container ports. SSL certificates are issued and renewed automatically via Certbot.
+
+---
+
+## 3. Core Packages Map
+
+The repository is built as a highly structured Turborepo monorepo:
+* **`packages/security`:** Pure cryptographic routines. Manages user passwords via Argon2id, creates and checks JWTs, generates random OTPs, and encrypts server credentials using AES-256-GCM.
+* **`packages/vps`:** Coordinates secure remote shell operations. Establishes SSH connection pools, handles command logging, stream management, and folder transfers.
+* **`packages/database`:** Configures and exports the shared Prisma client and PostgreSQL schema.
+* **`packages/mail`:** Manages transactional notifications, verification emails, and OTP deliveries.
+* **`packages/shared`:** Houses API contracts, input validation schemas, unified errors, and shared utility functions.
