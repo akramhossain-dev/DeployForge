@@ -342,6 +342,29 @@ export default function VpsPage() {
                                     })}
                                 </div>
 
+                                {health?.dockerInstalled && (
+                                    <div className="mt-5 border-t border-white/[0.05] pt-4">
+                                        <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+                                            <span>Running Containers</span>
+                                            <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-300">
+                                                {health?.runningContainers?.length || 0} active
+                                            </span>
+                                        </div>
+                                        {health?.runningContainers && health.runningContainers.length > 0 ? (
+                                            <div className="mt-2 max-h-24 overflow-y-auto rounded bg-slate-950/40 p-2 text-xs font-mono text-slate-300 space-y-1 custom-scrollbar">
+                                                {health.runningContainers.map((container, idx) => (
+                                                    <div key={idx} className="flex items-center gap-1.5 truncate">
+                                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                                                        <span className="truncate" title={container}>{container}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="mt-2 text-xs text-slate-500 italic">No active containers found.</p>
+                                        )}
+                                    </div>
+                                )}
+
                                 <div className="mt-5 flex items-center justify-between gap-3 text-xs text-slate-500">
                                     <span>Last checked {formatDate(lastChecked)}</span>
                                     <span>{health?.dockerInstalled ? 'Docker ready' : 'Docker unknown'}</span>

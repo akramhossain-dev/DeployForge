@@ -53,8 +53,9 @@ export class SandboxService {
             const hasRequirements = files.includes('requirements.txt');
             const hasComposer = files.includes('composer.json');
             const hasDockerfile = files.includes('Dockerfile');
+            const hasCompose = files.includes('docker-compose.yml') || files.includes('docker-compose.yaml');
 
-            if (!hasPackageJson && !hasRequirements && !hasComposer && !hasDockerfile) {
+            if (!hasPackageJson && !hasRequirements && !hasComposer && !hasDockerfile && !hasCompose) {
                 issues.push('No valid project structure found (missing package.json, requirements.txt, etc.)');
                 score -= 20;
             }

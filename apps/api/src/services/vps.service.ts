@@ -137,13 +137,19 @@ export class VPSService {
             privateKey: vps.encryptedPrivateKey ? this.decrypt(vps.encryptedPrivateKey) : undefined,
         });
 
-        await prisma.vPS.update({
-            where: { id: vps.id },
-            data: {
-                status: result.success ? 'active' : 'failed',
-                lastCheckedAt: new Date(),
-            },
-        });
+        if (result.success) {
+            await this.performHealthCheck(vps.id).catch((error) => {
+                logger.warn({ vpsId: vps.id, err: error }, 'VPS health check after connection test failed');
+            });
+        } else {
+            await prisma.vPS.update({
+                where: { id: vps.id },
+                data: {
+                    status: 'failed',
+                    lastCheckedAt: new Date(),
+                },
+            });
+        }
 
         return result;
     }
@@ -242,12 +248,22 @@ export class VPSService {
                 ...buildStoredAuth(vps),
             });
 
-            const { stdout: cpu } = await ssh.execute("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'");
-            const { stdout: mem } = await ssh.execute("free | grep Mem | awk '{print $3/$2 * 100.0}'");
-            const { stdout: disk } = await ssh.execute("df / | tail -1 | awk '{print $5}' | sed 's/%//'");
+            const { stdout: cpu } = await ssh.execute(`top -bn1 | grep "Cpu(s)" | awk '{for(i=1;i<=NF;i++){if($i~/id/){print 100-$(i-1)}}}'`);
+            const { stdout: mem } = await ssh.execute(`free | grep Mem | awk '{print $3/$2 * 100.0}'`);
+            const { stdout: disk } = await ssh.execute(`df / | tail -1 | awk '{print int($5)}'`);
             const { stdout: uptime } = await ssh.execute("cat /proc/uptime | awk '{print $1}'");
             const { code: dockerCode } = await ssh.execute('docker --version');
             const { code: nginxCode } = await ssh.execute('nginx -v');
+
+            let runningContainers: string[] = [];
+            if (dockerCode === 0) {
+                try {
+                    const { stdout: containersOut } = await ssh.execute("docker ps --format '{{.Names}}'");
+                    runningContainers = containersOut.split('\n').map(name => name.trim()).filter(Boolean);
+                } catch (err) {
+                    logger.warn({ vpsId, err }, 'Failed to query running Docker containers');
+                }
+            }
 
             const health = await prisma.vPSHealth.create({
                 data: {
@@ -258,6 +274,7 @@ export class VPSService {
                     uptime: Math.floor(parseFloat(uptime.trim())) || 0,
                     dockerInstalled: dockerCode === 0,
                     nginxInstalled: nginxCode === 0,
+                    runningContainers,
                 },
             });
 
@@ -275,6 +292,33 @@ export class VPSService {
             throw err;
         } finally {
             ssh.disconnect();
+        }
+    }
+
+    static startScheduledHealthChecks() {
+        // Run health check on startup for all active VPS
+        this.runAllHealthChecks().catch(() => undefined);
+
+        // Run every 5 minutes
+        setInterval(() => {
+            this.runAllHealthChecks().catch(() => undefined);
+        }, 5 * 60 * 1000);
+    }
+
+    private static async runAllHealthChecks() {
+        try {
+            const activeVpss = await prisma.vPS.findMany({ where: { status: 'active' } });
+            await Promise.allSettled(
+                activeVpss.map(async (vps) => {
+                    try {
+                        await this.performHealthCheck(vps.id);
+                    } catch (e) {
+                        logger.warn({ vpsId: vps.id, err: e }, 'Scheduled health check failed');
+                    }
+                })
+            );
+        } catch (err) {
+            logger.error({ err }, 'Error in runAllHealthChecks');
         }
     }
 

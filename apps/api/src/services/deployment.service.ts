@@ -1,25 +1,11 @@
 import prisma from '@deployforge/database';
 import { SSHService } from '@deployforge/vps';
-import { config } from '../config/env';
 import { deploymentQueue } from '../utils/queue';
-import { LoggingService, LogType } from './logging.service';
+import { LoggingService } from './logging.service';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { logger } from '../utils/logger';
 import { CacheService } from './cache.service';
-
-// Re-export public types for backward compatibility
-export { DeploymentError } from './deployment/error';
-export {
-    DeploymentSource,
-    GitHubDeploymentSource,
-    UploadedFileDeploymentSource,
-    DeploymentStatus,
-    StaticHostingResult,
-    DetectedProject,
-    DeploymentMode
-} from './deployment/types';
 
 import { DeploymentError } from './deployment/error';
 import { GitHubDeploymentService } from './deployment/github.service';
@@ -42,8 +28,21 @@ import {
     UploadedFileDeploymentSource,
     DeploymentStatus,
     StaticHostingResult,
-    DetectedProject
+    DetectedProject,
+    DeploymentMode
 } from './deployment/types';
+
+// Re-export public types for backward compatibility
+export {
+    DeploymentError,
+    DeploymentSource,
+    GitHubDeploymentSource,
+    UploadedFileDeploymentSource,
+    DeploymentStatus,
+    StaticHostingResult,
+    DetectedProject,
+    DeploymentMode
+};
 
 export class DeploymentService {
     static async deployProject(userId: string, source: DeploymentSource) {
@@ -339,7 +338,8 @@ export class DeploymentService {
 
             if (hasEnv) {
                 // Temporarily copy the secure environment variables file to the project build context
-                await runCommand(ssh, deploymentId, 'system', `cp ${shellQuote(EnvironmentService.getEnvPath(deploymentId))} ${shellQuote(`${workDir}/.env.deployforge`)}`);
+                const envTarget = detected.framework === ('DOCKER_COMPOSE' as any) ? '.env' : '.env.deployforge';
+                await runCommand(ssh, deploymentId, 'system', `cp ${shellQuote(EnvironmentService.getEnvPath(deploymentId))} ${shellQuote(`${workDir}/${envTarget}`)}`);
             }
 
             try {
@@ -398,28 +398,77 @@ export class DeploymentService {
                         }
                     }
                 } else {
-                    const port = deployment.port || await this.getAvailablePort(deployment.vpsId, vps);
-                    await prisma.deployment.update({ where: { id: deploymentId }, data: { port } });
-                    deployment.port = port;
+                    const isCompose = detected.framework === ('DOCKER_COMPOSE' as any);
+                    let port = deployment.port;
+                    if (!isCompose) {
+                        port = port || await this.getAvailablePort(deployment.vpsId, vps);
+                        await prisma.deployment.update({ where: { id: deploymentId }, data: { port } });
+                        deployment.port = port;
+                    }
+
+                    if (isCompose) {
+                        const previousActiveDeployment = await prisma.deployment.findFirst({
+                            where: {
+                                projectId: project.id,
+                                status: 'RUNNING',
+                                id: { not: deploymentId },
+                            },
+                        });
+                        if (previousActiveDeployment) {
+                            await LoggingService.log(deploymentId, 'Stopping previous active deployment to free ports...', 'system');
+                            if (previousActiveDeployment.containerId) {
+                                await this.stopContainerIfExists(ssh, deploymentId, previousActiveDeployment.containerId);
+                                await this.removeContainerIfExists(ssh, deploymentId, previousActiveDeployment.containerId, 'Removed superseded compose containers', false);
+                            }
+                            await this.cleanupNginx(ssh, previousActiveDeployment.id, previousActiveDeployment.domain ? [previousActiveDeployment.domain] : []).catch(() => undefined);
+                            await prisma.deployment.update({
+                                where: { id: previousActiveDeployment.id },
+                                data: { status: 'STOPPED', containerId: null },
+                            });
+                        }
+
+                        // Now verify that the compose ports are free
+                        const composeFile = detected.lockfile || 'docker-compose.yml';
+                        await this.verifyComposePorts(ssh, deploymentId, workDir, composeFile);
+                    }
                     
                     try {
-                        if (buildCacheHit) {
-                            await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Re-tagging cached Docker image', 'build');
-                            await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)} ${shellQuote(imageTag)}`);
+                        if (isCompose) {
+                            await LoggingService.log(deploymentId, 'Building Docker Compose services...', 'build');
+                            const composeFile = detected.lockfile || 'docker-compose.yml';
+                            await runCommand(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && docker compose -f ${shellQuote(composeFile)} build`, 'building', 'DOCKER_COMPOSE_BUILD_FAILED');
                         } else {
-                            await LoggingService.log(deploymentId, 'Building deployment image', 'build');
-                            await BuildService.buildImage(ssh, deploymentId, workDir, imageTag, detected);
-                            await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(imageTag)} ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)}`).catch(() => undefined);
+                            if (buildCacheHit) {
+                                await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Re-tagging cached Docker image', 'build');
+                                await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)} ${shellQuote(imageTag)}`);
+                            } else {
+                                await LoggingService.log(deploymentId, 'Building deployment image', 'build');
+                                await BuildService.buildImage(ssh, deploymentId, workDir, imageTag, detected);
+                                await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(imageTag)} ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)}`).catch(() => undefined);
+                            }
                         }
 
                         await this.setStatus(deploymentId, 'DEPLOYING');
-                        await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
-                        await this.assertRemotePortAvailable(ssh, deploymentId, port);
-                        createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, port, detected.appPort, hasEnv, isSandbox);
-                        await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
+                        
+                        if (isCompose) {
+                            await LoggingService.log(deploymentId, isSandbox ? 'Starting sandbox Docker Compose stack' : 'Starting deployment Docker Compose stack', 'system');
+                            const composeFile = detected.lockfile || 'docker-compose.yml';
+                            createdContainerId = await this.deployCompose(ssh, deploymentId, workDir, composeFile, dockerName);
+                            
+                            port = await this.detectComposeRoutingPort(ssh, deploymentId, workDir, composeFile);
+                            await prisma.deployment.update({ where: { id: deploymentId }, data: { port } });
+                            deployment.port = port;
+                            await LoggingService.log(deploymentId, `Detected active service host port: ${port}`, 'system');
+                        } else {
+                            await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
+                            await this.assertRemotePortAvailable(ssh, deploymentId, port!);
+                            createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, port!, detected.appPort, hasEnv, isSandbox);
+                            await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
+                        }
+
                         if (!isSandbox) {
                             routingAttempted = true;
-                            await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, port, Boolean(domainName));
+                            await this.configureNginx(ssh, deploymentId, domainName || vps.ipAddress, port!, Boolean(domainName));
                             if (domainName) {
                                 await this.persistDomainBinding(deploymentId, vps.id, domainName);
                             }
@@ -429,11 +478,11 @@ export class DeploymentService {
 
                         // Health check with 1 retry
                         try {
-                            await ValidationService.healthCheck(ssh, deploymentId, port);
+                            await ValidationService.healthCheck(ssh, deploymentId, port!);
                         } catch (err) {
                             await LoggingService.log(deploymentId, 'Health check failed. Retrying once...', 'system', 'warn');
                             await new Promise((resolve) => setTimeout(resolve, 5000));
-                            await ValidationService.healthCheck(ssh, deploymentId, port);
+                            await ValidationService.healthCheck(ssh, deploymentId, port!);
                         }
                     } catch (err: any) {
                         if (isSandbox) {
@@ -481,7 +530,8 @@ export class DeploymentService {
             } finally {
                 if (hasEnv) {
                     // Always clean up the temporary build context environment file
-                    await ssh.execute(`rm -f ${shellQuote(`${workDir}/.env.deployforge`)}`).catch(() => undefined);
+                    const envTarget = detected.framework === ('DOCKER_COMPOSE' as any) ? '.env' : '.env.deployforge';
+                    await ssh.execute(`rm -f ${shellQuote(`${workDir}/${envTarget}`)}`).catch(() => undefined);
                 }
             }
 
@@ -583,13 +633,6 @@ export class DeploymentService {
         throw new DeploymentError('port_alloc', 'No available ports in range 3000-9000', 'NO_AVAILABLE_PORT');
     }
 
-    static async detectFramework(files: string[]) {
-        if (files.includes('Dockerfile')) return { framework: 'DOCKER', build: 'docker build', start: 'docker run' };
-        if (files.includes('next.config.js') || files.includes('next.config.mjs') || files.includes('next.config.ts')) return { framework: 'NEXTJS', build: 'npm ci && npm run build', start: 'npm run start' };
-        if (files.includes('package.json')) return { framework: 'NODEJS', build: 'npm ci || npm install', start: 'npm start' };
-        if (files.includes('index.html')) return { framework: 'STATIC', build: '', start: 'nginx' };
-        return { framework: 'STATIC', build: '', start: 'nginx' };
-    }
 
     static async stopDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
@@ -1121,6 +1164,207 @@ for root, dirs, files in os.walk(directory):
         await runCommand(ssh, deploymentId, 'build', `python3 - <<'PY'\n${rewriteScript}\nPY`, 'building', 'ASSET_REWRITE_FAILED');
     }
 
+    private static async detectComposeRoutingPort(ssh: SSHService, deploymentId: string, workDir: string, composeFile: string): Promise<number> {
+        const getRoutingPortScript = `
+import sys
+try:
+    with open(sys.argv[1], 'r') as f:
+        content = f.read()
+except Exception as e:
+    sys.exit(1)
+
+services = {}
+current_service = None
+in_services = False
+services_indent = -1
+in_ports = False
+ports_indent = -1
+
+for line in content.splitlines():
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    indent = len(line) - len(line.lstrip())
+    
+    if in_services and indent <= services_indent:
+        in_services = False
+        current_service = None
+        
+    if stripped == 'services:':
+        in_services = True
+        services_indent = indent
+        continue
+        
+    if in_services:
+        if in_ports and indent <= ports_indent:
+            in_ports = False
+            
+        if in_ports:
+            if stripped.startswith('-'):
+                port_val = stripped.lstrip('-').strip().strip('"').strip("'")
+                parts = port_val.split(':')
+                host_port = None
+                if len(parts) >= 2:
+                    host_port = parts[-2].split('/')[-1]
+                    host_port = ''.join(c for c in host_port if c.isdigit())
+                else:
+                    p_val = ''.join(c for c in parts[0] if c.isdigit())
+                    if p_val:
+                        host_port = p_val
+                if host_port and current_service:
+                    services[current_service].append(int(host_port))
+            continue
+            
+        if stripped == 'ports:':
+            in_ports = True
+            ports_indent = indent
+            continue
+            
+        if indent == services_indent + 2 or (services_indent == -1 and indent == 2):
+            if stripped.endswith(':'):
+                current_service = stripped[:-1].strip()
+                services[current_service] = []
+
+target_port = None
+for sname in services:
+    if any(k in sname.lower() for k in ['client', 'frontend', 'web', 'app']):
+        if services[sname]:
+            target_port = services[sname][0]
+            break
+
+if not target_port:
+    for sname in services:
+        if services[sname]:
+            if not any(k in sname.lower() for k in ['db', 'mongo', 'postgres', 'redis', 'mysql', 'broker', 'queue', 'mariadb', 'elasticsearch', 'memcached', 'influx', 'prometheus', 'grafana']):
+                target_port = services[sname][0]
+                break
+
+if not target_port:
+    for sname in services:
+        if services[sname]:
+            target_port = services[sname][0]
+            break
+
+if target_port:
+    print(target_port)
+else:
+    print("80")
+`;
+        const remoteScriptPath = `/tmp/get_routing_port_${deploymentId}.py`;
+        await ssh.execute(`cat > ${shellQuote(remoteScriptPath)} <<'EOF'\n${getRoutingPortScript}\nEOF`).catch(() => undefined);
+        const { stdout, code } = await ssh.execute(`python3 ${shellQuote(remoteScriptPath)} ${shellQuote(`${workDir}/${composeFile}`)}`).catch(() => ({ stdout: '', code: 1 }));
+        await ssh.execute(`rm -f ${shellQuote(remoteScriptPath)}`).catch(() => undefined);
+
+        if (code === 0 && stdout.trim()) {
+            const parsed = parseInt(stdout.trim(), 10);
+            if (parsed && !isNaN(parsed)) {
+                return parsed;
+            }
+        }
+        return 80;
+    }
+
+    private static async verifyComposePorts(ssh: SSHService, deploymentId: string, workDir: string, composeFile: string) {
+        const getPortsScript = `
+import sys, re
+try:
+    with open(sys.argv[1], 'r') as f:
+        content = f.read()
+except Exception as e:
+    sys.exit(1)
+
+ports = []
+in_ports = False
+ports_indent = -1
+
+for line in content.splitlines():
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    indent = len(line) - len(line.lstrip())
+    if in_ports:
+        if indent <= ports_indent:
+            in_ports = False
+        elif stripped.startswith('-'):
+            port_val = stripped.lstrip('-').strip().strip('"').strip("'")
+            parts = port_val.split(':')
+            if len(parts) >= 2:
+                host_port = parts[-2].split('/')[-1]
+                host_port = ''.join(c for c in host_port if c.isdigit())
+                if host_port:
+                    ports.append(int(host_port))
+            else:
+                port_val = ''.join(c for c in parts[0] if c.isdigit())
+                if port_val:
+                    ports.append(int(port_val))
+            continue
+    if stripped == 'ports:':
+        in_ports = True
+        ports_indent = indent
+
+print(' '.join(map(str, sorted(list(set(ports))))))
+`;
+        const remoteScriptPath = `/tmp/get_compose_ports_${deploymentId}.py`;
+        await ssh.execute(`cat > ${shellQuote(remoteScriptPath)} <<'EOF'\n${getPortsScript}\nEOF`);
+        const { stdout: portsOut, code } = await ssh.execute(`python3 ${shellQuote(remoteScriptPath)} ${shellQuote(`${workDir}/${composeFile}`)}`);
+        await ssh.execute(`rm -f ${shellQuote(remoteScriptPath)}`).catch(() => undefined);
+
+        if (code !== 0) {
+            await LoggingService.log(deploymentId, 'Failed to parse docker-compose.yml ports', 'system', 'warn');
+            return;
+        }
+
+        const ports = portsOut.trim().split(/\s+/).map(p => parseInt(p, 10)).filter(p => !isNaN(p));
+        await LoggingService.log(deploymentId, `Detected ports from compose file: ${ports.join(', ')}`, 'system');
+
+        for (const port of ports) {
+            const checkCmd = `if command -v ss >/dev/null 2>&1; then ss -ltn "( sport = :${port} )" | tail -n +2 | grep -q .; else netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '[:.]${port}$'; fi`;
+            const checkRes = await ssh.execute(checkCmd);
+            if (checkRes.code === 0) {
+                throw new DeploymentError('port_alloc', `Port ${port} is already in use on the target server. Please free this port before deploying.`, 'PORT_IN_USE');
+            }
+        }
+        await LoggingService.log(deploymentId, 'All docker-compose ports are verified free', 'system');
+    }
+
+    private static async deployCompose(ssh: SSHService, deploymentId: string, workDir: string, composeFile: string, projectName: string) {
+        await runCommand(ssh, deploymentId, 'system', `docker compose -p ${shellQuote(projectName)} -f ${shellQuote(`${workDir}/${composeFile}`)} down -v >/dev/null 2>&1 || true`);
+        await LoggingService.log(deploymentId, 'Starting Docker Compose stack...', 'system');
+        const startCommand = `cd ${shellQuote(workDir)} && docker compose -p ${shellQuote(projectName)} -f ${shellQuote(composeFile)} up -d`;
+
+        let retries = 5;
+        while (retries > 0) {
+            try {
+                await runCommand(ssh, deploymentId, 'system', startCommand, 'container_create', 'DOCKER_COMPOSE_UP_FAILED');
+                break;
+            } catch (error: any) {
+                const errorMsg = error?.message || '';
+                if (/Conflict\..*container.*already in use/i.test(errorMsg)) {
+                    const conflictMatch = errorMsg.match(/already in use by container "([a-f0-9]+)"/i)
+                        || errorMsg.match(/The container name "\/?([^"]+)" is already in use/i);
+
+                    if (conflictMatch) {
+                        const offendingIdOrName = conflictMatch[1];
+                        await LoggingService.log(deploymentId, `Detected container name conflict for: "${offendingIdOrName}". Automatically removing conflicting container...`, 'system', 'warn');
+                        await ssh.execute(`docker rm -f ${shellQuote(offendingIdOrName)}`).catch(() => undefined);
+                        retries--;
+                        continue;
+                    }
+                }
+                throw error;
+            }
+        }
+
+        const { stdout: psOut } = await runCommand(ssh, deploymentId, 'system', `docker compose -p ${shellQuote(projectName)} -f ${shellQuote(`${workDir}/${composeFile}`)} ps -q`, 'container_create', 'DOCKER_COMPOSE_PS_FAILED');
+        const containerIds = psOut.trim().split('\n').map(id => id.trim()).filter(Boolean);
+        if (containerIds.length === 0) {
+            throw new DeploymentError('container_create', 'Docker Compose did not start any containers', 'DOCKER_COMPOSE_NO_CONTAINERS');
+        }
+
+        await LoggingService.log(deploymentId, `Docker Compose started ${containerIds.length} containers`, 'system');
+        return `compose:${projectName}`;
+    }
+
     private static async deployContainer(ssh: SSHService, deploymentId: string, workDir: string, dockerName: string, imageTag: string, hostPort: number, appPort: number, hasEnv: boolean, isSandbox = false) {
         await this.removeContainerIfExists(ssh, deploymentId, dockerName, 'Removed previous container with matching Docker name', false);
         const envFlag = hasEnv ? ` --env-file ${shellQuote(EnvironmentService.getEnvPath(deploymentId))}` : '';
@@ -1171,6 +1415,23 @@ for root, dirs, files in os.walk(directory):
 
     private static async captureContainerLogs(ssh: SSHService, deploymentId: string, containerId: string) {
         if (!containerId) return;
+        if (containerId.startsWith('compose:')) {
+            const projectName = containerId.replace('compose:', '');
+            const result = await ssh.execute(`docker ps -a --filter "label=com.docker.compose.project=${projectName}" --format "{{.ID}} ({{.Names}})"`).catch(() => null);
+            if (result && result.code === 0) {
+                const lines = result.stdout.trim().split('\n').filter(Boolean);
+                for (const line of lines) {
+                    const parts = line.split(' ');
+                    const cId = parts[0];
+                    const cName = parts.slice(1).join(' ');
+                    const logsRes = await ssh.execute(`docker logs --tail 60 ${shellQuote(cId)} 2>&1 || true`).catch(() => null);
+                    if (logsRes && logsRes.stdout.trim()) {
+                        await LoggingService.log(deploymentId, `Logs for container ${cName}:\n${logsRes.stdout.trim()}`, 'system');
+                    }
+                }
+            }
+            return;
+        }
         const result = await ssh.execute(`docker logs --tail 120 ${shellQuote(containerId)} 2>&1 || true`).catch(() => null);
         const output = result?.stdout?.trim() || result?.stderr?.trim();
         if (output) {
@@ -1184,6 +1445,12 @@ for root, dirs, files in os.walk(directory):
     }
 
     private static async stopContainerIfExists(ssh: SSHService, deploymentId: string, containerId: string) {
+        if (containerId.startsWith('compose:')) {
+            const projectName = containerId.replace('compose:', '');
+            await LoggingService.log(deploymentId, `Stopping Docker Compose stack ${projectName}...`, 'system');
+            await runCommand(ssh, deploymentId, 'system', `docker ps --filter "label=com.docker.compose.project=${projectName}" -q | xargs -r docker stop`, 'deploying', 'CONTAINER_STOP_FAILED');
+            return;
+        }
         if (!(await this.containerExists(ssh, containerId))) {
             await LoggingService.log(deploymentId, 'Container already absent; marked deployment stopped', 'system');
             return;
@@ -1192,6 +1459,13 @@ for root, dirs, files in os.walk(directory):
     }
 
     private static async removeContainerIfExists(ssh: SSHService, deploymentId: string, containerIdOrName: string, message: string, warn = false) {
+        if (containerIdOrName.startsWith('compose:')) {
+            const projectName = containerIdOrName.replace('compose:', '');
+            if (!(await this.containerExists(ssh, containerIdOrName))) return false;
+            await runCommand(ssh, deploymentId, 'system', `docker ps -a --filter "label=com.docker.compose.project=${projectName}" -q | xargs -r docker rm -f`, 'delete', 'CONTAINER_DELETE_FAILED');
+            await LoggingService.log(deploymentId, message, 'system', warn ? 'warn' : 'info').catch(() => undefined);
+            return true;
+        }
         if (!(await this.containerExists(ssh, containerIdOrName))) return false;
         await runCommand(ssh, deploymentId, 'system', `docker rm -f ${shellQuote(containerIdOrName)} >/dev/null`, 'delete', 'CONTAINER_DELETE_FAILED');
         await LoggingService.log(deploymentId, message, 'system', warn ? 'warn' : 'info').catch(() => undefined);
@@ -1200,6 +1474,11 @@ for root, dirs, files in os.walk(directory):
 
     private static async containerExists(ssh: SSHService, containerIdOrName: string) {
         if (!containerIdOrName) return false;
+        if (containerIdOrName.startsWith('compose:')) {
+            const projectName = containerIdOrName.replace('compose:', '');
+            const result = await ssh.execute(`docker ps --filter "label=com.docker.compose.project=${projectName}" -q`);
+            return result.code === 0 && result.stdout.trim().length > 0;
+        }
         const inspect = await ssh.execute(`docker inspect ${shellQuote(containerIdOrName)} >/dev/null 2>&1`).catch(() => null);
         return inspect?.code === 0;
     }
@@ -1239,6 +1518,14 @@ for root, dirs, files in os.walk(directory):
     }
 
     private static async verifyContainerRunningOnly(ssh: SSHService, deploymentId: string, containerId: string) {
+        if (containerId.startsWith('compose:')) {
+            const projectName = containerId.replace('compose:', '');
+            const { stdout: runningCount } = await runCommand(ssh, deploymentId, 'system', `docker ps --filter "label=com.docker.compose.project=${projectName}" --filter "status=running" -q | wc -l`, 'deploying', 'CONTAINER_START_FAILED');
+            if (parseInt(runningCount.trim() || '0', 10) === 0) {
+                throw new DeploymentError('deploying', 'No running containers found for the Docker Compose stack', 'CONTAINER_START_FAILED');
+            }
+            return;
+        }
         const { stdout: state } = await runCommand(ssh, deploymentId, 'system', `docker inspect --format '{{.State.Running}} {{.State.Restarting}} {{.State.Status}}' ${shellQuote(containerId)}`, 'deploying', 'CONTAINER_START_FAILED');
         const [running, restarting, status] = state.trim().split(/\s+/);
         if (running !== 'true' || restarting === 'true' || status === 'restarting') {

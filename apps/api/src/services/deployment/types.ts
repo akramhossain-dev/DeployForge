@@ -1,5 +1,5 @@
 export type DeploymentStatus = 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'PAUSED' | 'DELETING' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED';
-export type ProjectKind = 'DOCKER' | 'NEXTJS' | 'ASTRO' | 'VITE_REACT' | 'NODE_API' | 'NODEJS' | 'STATIC';
+export type ProjectKind = 'DOCKER' | 'DOCKER_COMPOSE' | 'NEXTJS' | 'ASTRO' | 'VITE_REACT' | 'NODE_API' | 'NODEJS' | 'STATIC';
 export type SourceType = 'github' | 'upload';
 export type DeploymentMode = 'production' | 'sandbox';
 export type DeploymentRuntimeType = 'STATIC' | 'SERVER' | 'FULLSTACK';

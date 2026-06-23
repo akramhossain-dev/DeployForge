@@ -52,6 +52,7 @@ export type VpsHealth = {
     uptime?: number;
     dockerInstalled?: boolean;
     nginxInstalled?: boolean;
+    runningContainers?: string[];
     checkedAt?: string;
 };
 

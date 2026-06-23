@@ -376,16 +376,17 @@ model VPS {
 }
 
 model VPSHealth {
-  id              String   @id @default(uuid())
-  vpsId           String
-  vps             VPS      @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  cpuUsage        Float
-  memoryUsage     Float
-  diskUsage       Float
-  uptime          Int
-  dockerInstalled Boolean
-  nginxInstalled  Boolean
-  checkedAt       DateTime @default(now())
+  id                String   @id @default(uuid())
+  vpsId             String
+  vps               VPS      @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  cpuUsage          Float
+  memoryUsage       Float
+  diskUsage         Float
+  uptime            Int
+  dockerInstalled   Boolean
+  nginxInstalled    Boolean
+  runningContainers String[] @default([])
+  checkedAt         DateTime @default(now())
 
   @@index([vpsId])
   @@index([checkedAt])

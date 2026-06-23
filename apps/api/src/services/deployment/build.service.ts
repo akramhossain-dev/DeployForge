@@ -38,8 +38,15 @@ export class BuildService {
         const rootFiles = files.filter((file) => !file.includes('/'));
         const rootFileSet = new Set(rootFiles);
         const hasDockerfile = rootFiles.includes('Dockerfile');
+        const hasCompose = rootFileSet.has('docker-compose.yml') || rootFileSet.has('docker-compose.yaml');
         const hasPackageJson = rootFileSet.has('package.json');
         const hasNextConfig = rootFiles.some((file) => /^next\.config\./.test(file));
+
+        if (hasCompose) {
+            await LoggingService.log(deploymentId, 'Detected Docker Compose project', 'build');
+            const composeFile = rootFileSet.has('docker-compose.yml') ? 'docker-compose.yml' : 'docker-compose.yaml';
+            return { framework: 'DOCKER_COMPOSE', deploymentType: 'SERVER', buildCommand: `docker compose -f ${composeFile} build`, startCommand: `docker compose -f ${composeFile} up -d`, appPort: 3000, dockerfileAlreadyPresent: true, installCommand: 'npm install', lockfile: composeFile };
+        }
 
         if (hasDockerfile) {
             await LoggingService.log(deploymentId, 'Detected Docker project', 'build');
