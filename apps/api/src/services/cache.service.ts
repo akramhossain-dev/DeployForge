@@ -1,5 +1,6 @@
 import IORedis from 'ioredis';
 import { config } from '../config/env';
+import crypto from 'node:crypto';
 
 export class CacheService {
     private static redis = config.redis.enabled ? new IORedis(config.redis.url) : null;
@@ -59,5 +60,47 @@ export class CacheService {
         if (keys.length > 0) {
             await this.redis.del(...keys);
         }
+    }
+
+    /**
+     * Acquires a distributed lock using Redis.
+     * Returns a function to release the lock if successful, or null if the lock is already held.
+     */
+    static async acquireLock(key: string, ttlMs: number = 30000): Promise<(() => Promise<void>) | null> {
+        if (!this.redis) {
+            const lockKey = `lock:${key}`;
+            const existing = this.memory.get(lockKey);
+            if (existing && (existing.expiresAt === null || existing.expiresAt > Date.now())) {
+                return null;
+            }
+            this.memory.set(lockKey, {
+                value: 'locked',
+                expiresAt: Date.now() + ttlMs,
+            });
+            return async () => {
+                this.memory.delete(lockKey);
+            };
+        }
+
+        const lockKey = `lock:${key}`;
+        const lockValue = crypto.randomUUID();
+        
+        // SET key value PX ttlMs NX
+        const result = await this.redis.set(lockKey, lockValue, 'PX', ttlMs, 'NX');
+        if (result !== 'OK') {
+            return null;
+        }
+
+        return async () => {
+            if (!this.redis) return;
+            const luaScript = `
+                if redis.call("get", KEYS[1]) == ARGV[1] then
+                    return redis.call("del", KEYS[1])
+                else
+                    return 0
+                end
+            `;
+            await this.redis.eval(luaScript, 1, lockKey, lockValue);
+        };
     }
 }

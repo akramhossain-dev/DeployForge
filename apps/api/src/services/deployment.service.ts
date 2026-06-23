@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { logger } from '../utils/logger';
+import { CacheService } from './cache.service';
 
 // Re-export public types for backward compatibility
 export { DeploymentError } from './deployment/error';
@@ -46,24 +47,35 @@ import {
 
 export class DeploymentService {
     static async deployProject(userId: string, source: DeploymentSource) {
-        if (source.type === 'github_repo') {
-            return this.deployFromGithub(userId, source.projectId, source.vpsId, source.branch, {
-                commitHash: source.commitHash,
-                commitMessage: source.commitMessage,
-                skipWebhookRegistration: source.skipWebhookRegistration,
+        const projectId = source.projectId;
+        const lockKey = `project-deploy:${projectId}`;
+        const release = await CacheService.acquireLock(lockKey, 300000);
+        if (!release) {
+            throw new Error('A deployment is already running for this project. Please wait.');
+        }
+
+        try {
+            if (source.type === 'github_repo') {
+                return await this.deployFromGithub(userId, source.projectId, source.vpsId, source.branch, {
+                    commitHash: source.commitHash,
+                    commitMessage: source.commitMessage,
+                    skipWebhookRegistration: source.skipWebhookRegistration,
+                    domainName: source.domainName,
+                    env: source.env,
+                    mode: source.mode,
+                });
+            }
+
+            return await this.deployFromUpload(userId, source.projectId, source.vpsId, {
+                uploadPath: source.uploadPath,
+                originalFileName: source.originalFileName,
                 domainName: source.domainName,
                 env: source.env,
                 mode: source.mode,
             });
+        } finally {
+            await release();
         }
-
-        return this.deployFromUpload(userId, source.projectId, source.vpsId, {
-            uploadPath: source.uploadPath,
-            originalFileName: source.originalFileName,
-            domainName: source.domainName,
-            env: source.env,
-            mode: source.mode,
-        });
     }
 
     static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: Record<string, string>; mode?: string } = {}) {

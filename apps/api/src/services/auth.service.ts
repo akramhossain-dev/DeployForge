@@ -7,6 +7,7 @@ import { AccountService } from './account.service';
 import { sha256, timingSafeEqualString } from '../utils/http';
 import { parseUserAgent } from '../utils/user-agent';
 import { logger } from '../utils/logger';
+import { CacheService } from './cache.service';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 const mailService = new MailService({
@@ -57,21 +58,30 @@ export class AuthService {
         const hashedRefreshToken = refreshTokenHash(refreshToken);
 
         const { browser, device, os } = parseUserAgent(userAgent);
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+        const activeSession = {
+            id: sessionId,
+            userId: user.id,
+            refreshToken: hashedRefreshToken,
+            authProvider,
+            userAgent,
+            device,
+            browser,
+            os,
+            ipAddress,
+            expiresAt,
+        };
 
         await prisma.session.create({
-            data: {
-                id: sessionId,
-                userId: user.id,
-                refreshToken: hashedRefreshToken,
-                authProvider,
-                userAgent,
-                device,
-                browser,
-                os,
-                ipAddress,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            },
+            data: activeSession,
         });
+
+        // Warm Redis cache
+        const cacheKey = `user-session:${user.id}:${sessionId}`;
+        const { passwordHash, ...safeUser } = user;
+        const ttlSeconds = 7 * 24 * 60 * 60; // 7 days
+        await CacheService.set(cacheKey, { activeSession, user: safeUser }, ttlSeconds);
 
         return { user, accessToken, refreshToken };
     }
@@ -211,6 +221,7 @@ export class AuthService {
         if (replayedToken && new Date() <= replayedToken.expiresAt) {
             const userId = replayedToken.userId;
             await prisma.session.deleteMany({ where: { userId } });
+            await CacheService.clearPattern(`user-session:${userId}:*`);
             await AccountService.logAudit(userId, 'REFRESH_TOKEN_REPLAY', 'Replay attack detected on refresh token. Revoking all sessions.', undefined, undefined);
             throw publicError('Invalid refresh token', 401);
         }
@@ -223,6 +234,7 @@ export class AuthService {
         if (!session || new Date() > session.expiresAt) {
             if (session) {
                 await prisma.session.delete({ where: { id: session.id } });
+                await CacheService.del(`user-session:${session.userId}:${session.id}`);
             }
             throw publicError('Invalid refresh token', 401);
         }
@@ -251,6 +263,8 @@ export class AuthService {
             }),
         ]);
 
+        await CacheService.del(`user-session:${session.userId}:${session.id}`);
+
         await prisma.refreshTokenReplay.deleteMany({ where: { expiresAt: { lt: new Date() } } });
 
         const accessToken = tokenService.generateAccessToken({
@@ -270,11 +284,12 @@ export class AuthService {
         const hashedToken = refreshTokenHash(refreshToken);
         const session = await prisma.session.findUnique({
             where: { refreshToken: hashedToken },
-            select: { userId: true }
+            select: { id: true, userId: true }
         });
         if (session) {
             await AccountService.logAudit(session.userId, 'LOGOUT', 'User logged out successfully.', ip, ua);
             await prisma.session.deleteMany({ where: { refreshToken: hashedToken } });
+            await CacheService.del(`user-session:${session.userId}:${session.id}`);
         }
     }
 }

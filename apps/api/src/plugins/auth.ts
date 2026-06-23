@@ -5,6 +5,7 @@ import { config } from '../config/env';
 import prisma from '@deployforge/database';
 import crypto from 'crypto';
 import { apiError, parseCookies } from '../utils/http';
+import { CacheService } from '../services/cache.service';
 
 declare module 'fastify' {
     interface FastifyRequest {
@@ -55,39 +56,57 @@ const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
                 return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             }
 
-            const activeSession = await prisma.session.findUnique({
-                where: { id: payload.sessionId },
-            });
-            if (!activeSession || new Date() > activeSession.expiresAt) {
-                return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+            const cacheKey = `user-session:${payload.userId}:${payload.sessionId}`;
+            const cachedData = await CacheService.get<any>(cacheKey);
+
+            let activeSession;
+            let user;
+
+            if (cachedData) {
+                if (cachedData.revoked) {
+                    return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                }
+                activeSession = cachedData.activeSession;
+                user = cachedData.user;
+            } else {
+                activeSession = await prisma.session.findUnique({
+                    where: { id: payload.sessionId },
+                });
+                if (!activeSession || new Date() > new Date(activeSession.expiresAt)) {
+                    await CacheService.set(cacheKey, { revoked: true }, 60);
+                    return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+                }
+
+                user = await prisma.user.findUnique({
+                    where: { id: payload.userId },
+                    select: {
+                        id: true,
+                        email: true,
+                        username: true,
+                        name: true,
+                        isVerified: true,
+                        githubId: true,
+                        githubUsername: true,
+                        githubAvatar: true,
+                        googleId: true,
+                        googleEmail: true,
+                        googleAvatar: true,
+                        avatarUrl: true,
+                        provider: true,
+                        authProvider: true,
+                        role: true,
+                        status: true,
+                        passwordHash: true,
+                        createdAt: true,
+                        lastLoginAt: true,
+                    },
+                });
+
+                if (!user) return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
+
+                const ttlSeconds = Math.max(0, Math.floor((new Date(activeSession.expiresAt).getTime() - Date.now()) / 1000));
+                await CacheService.set(cacheKey, { activeSession, user }, ttlSeconds);
             }
-
-            const user = await prisma.user.findUnique({
-                where: { id: payload.userId },
-                select: {
-                    id: true,
-                    email: true,
-                    username: true,
-                    name: true,
-                    isVerified: true,
-                    githubId: true,
-                    githubUsername: true,
-                    githubAvatar: true,
-                    googleId: true,
-                    googleEmail: true,
-                    googleAvatar: true,
-                    avatarUrl: true,
-                    provider: true,
-                    authProvider: true,
-                    role: true,
-                    status: true,
-                    passwordHash: true,
-                    createdAt: true,
-                    lastLoginAt: true,
-                },
-            });
-
-            if (!user) return apiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
             if (user.status === 'SUSPENDED' || user.status === 'DISABLED') return apiError(reply, 403, 'FORBIDDEN', 'Forbidden');
 
             const { passwordHash, ...safeUser } = user;

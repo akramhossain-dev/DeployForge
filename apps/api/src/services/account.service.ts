@@ -281,6 +281,7 @@ export class AccountService {
         if (!session) throw new Error('Session not found');
 
         await prisma.session.delete({ where: { id: sessionId } });
+        await CacheService.del(`user-session:${userId}:${sessionId}`);
 
         await this.logAudit(userId, 'SESSION_REVOKED', `Session ID ${sessionId} (IP: ${session.ipAddress || 'unknown'}) was revoked.`, ip, ua);
     }
@@ -292,12 +293,14 @@ export class AccountService {
                 NOT: { id: currentSessionId },
             },
         });
+        await CacheService.clearPattern(`user-session:${userId}:*`);
 
         await this.logAudit(userId, 'LOGOUT_ALL_SESSIONS', 'Other active sessions were successfully logged out.', ip, ua);
     }
 
     static async revokeAllSessions(userId: string, ip?: string, ua?: string) {
         await prisma.session.deleteMany({ where: { userId } });
+        await CacheService.clearPattern(`user-session:${userId}:*`);
 
         await this.logAudit(userId, 'LOGOUT_ALL_SESSIONS', 'All active sessions were successfully logged out.', ip, ua);
     }

@@ -454,6 +454,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         const { id } = idParamsSchema.parse(request.params);
         const { status } = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED']) }).parse(request.body);
         const user = await prisma.user.update({ where: { id }, data: { status: status as any } });
+        if (status === 'SUSPENDED') {
+            await CacheService.clearPattern(`user-session:${id}:*`);
+        }
         await audit(request, status === 'SUSPENDED' ? 'SUSPEND_PLATFORM_USER' : 'ACTIVATE_PLATFORM_USER', { targetUserId: id, targetType: 'USER', targetId: id });
         return { success: true, data: user };
     });
