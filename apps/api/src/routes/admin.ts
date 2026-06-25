@@ -196,7 +196,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         };
     });
 
-    fastify.post('/logout', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+    fastify.post('/logout', { preHandler: [(fastify as any).requireModerator] }, async (request, reply) => {
         if (request.adminSessionId) {
             await prisma.adminSession.update({ where: { id: request.adminSessionId }, data: { revokedAt: new Date() } });
         }
@@ -205,7 +205,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: { message: 'Admin logged out' } };
     });
 
-    fastify.get('/me', { preHandler: [(fastify as any).requireAdmin] }, async (request) => {
+    fastify.get('/me', { preHandler: [(fastify as any).requireModerator] }, async (request) => {
         return { success: true, data: request.admin };
     });
 
@@ -231,7 +231,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: admin };
     });
 
-    fastify.get('/users', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+    fastify.get('/users', { preHandler: [(fastify as any).requireModerator] }, async () => {
         const admins = await prisma.adminUser.findMany({
             select: { id: true, email: true, name: true, role: true, createdById: true, lastLoginAt: true, createdAt: true, updatedAt: true },
             orderBy: { createdAt: 'desc' },
@@ -361,7 +361,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: { message: 'Admin user deleted' } };
     });
 
-    fastify.get('/overview', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+    fastify.get('/overview', { preHandler: [(fastify as any).requireModerator] }, async () => {
         const [
             totalUsers,
             totalAdmins,
@@ -421,7 +421,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         };
     });
 
-    fastify.get('/platform-users', { preHandler: [(fastify as any).requireAdmin] }, async (request) => {
+    fastify.get('/platform-users', { preHandler: [(fastify as any).requireModerator] }, async (request) => {
         const query = userQuerySchema.parse(request.query);
         const users = await prisma.user.findMany({
             where: {
@@ -434,7 +434,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: users };
     });
 
-    fastify.get('/platform-users/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+    fastify.get('/platform-users/:id', { preHandler: [(fastify as any).requireModerator] }, async (request, reply) => {
         const { id } = idParamsSchema.parse(request.params);
         const user = await prisma.user.findUnique({
             where: { id },
@@ -449,7 +449,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: user };
     });
 
-    fastify.patch('/platform-users/:id/status', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+    fastify.patch('/platform-users/:id/status', { preHandler: [(fastify as any).requireModerator] }, async (request, reply) => {
         if (!canManagePlatform(request.admin.role)) return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
         const { status } = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED']) }).parse(request.body);
@@ -468,7 +468,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: { message: 'User deleted' } };
     });
 
-    fastify.get('/deployments', { preHandler: [(fastify as any).requireAdmin] }, async (request) => {
+    fastify.get('/deployments', { preHandler: [(fastify as any).requireModerator] }, async (request) => {
         const query = deploymentQuerySchema.parse(request.query);
         const deployments = await prisma.deployment.findMany({
             where: { ...(query.status ? { status: query.status as any } : {}), ...(query.userId ? { userId: query.userId } : {}) },
@@ -478,20 +478,19 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: deployments };
     });
 
-    fastify.get('/deployments/:id/logs', { preHandler: [(fastify as any).requireAdmin] }, async (request) => {
+    fastify.get('/deployments/:id/logs', { preHandler: [(fastify as any).requireModerator] }, async (request) => {
         const { id } = idParamsSchema.parse(request.params);
         const logs = await prisma.deploymentLog.findMany({ where: { deploymentId: id }, orderBy: { createdAt: 'desc' }, take: 200 });
         return { success: true, data: logs };
     });
 
-    fastify.get('/deployments/:id/history', { preHandler: [(fastify as any).requireAdmin] }, async (request) => {
+    fastify.get('/deployments/:id/history', { preHandler: [(fastify as any).requireModerator] }, async (request) => {
         const { id } = idParamsSchema.parse(request.params);
         const history = await prisma.deploymentHistory.findMany({ where: { deploymentId: id }, orderBy: { createdAt: 'desc' } });
         return { success: true, data: history };
     });
 
     fastify.post('/deployments/:id/stop', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
-        if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
         const deployment = await prisma.deployment.findUnique({ where: { id }, select: { userId: true } });
         if (!deployment) return error(reply, 404, 'Deployment not found', 'NOT_FOUND');
@@ -501,7 +500,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/deployments/:id/restart', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
-        if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
         const deployment = await prisma.deployment.findUnique({ where: { id }, select: { userId: true } });
         if (!deployment) return error(reply, 404, 'Deployment not found', 'NOT_FOUND');
@@ -511,14 +509,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     });
 
     fastify.delete('/deployments/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
-        if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
         await AdminService.deleteDeploymentCascade(id);
         await audit(request, 'DELETE_DEPLOYMENT', { targetType: 'DEPLOYMENT', targetId: id });
         return { success: true, data: { message: 'Deployment deleted' } };
     });
 
-    fastify.get('/vps', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+    fastify.get('/vps', { preHandler: [(fastify as any).requireModerator] }, async () => {
         const servers = await prisma.vPS.findMany({
             include: { user: { select: { id: true, email: true, name: true } }, healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } }, systemMetrics: { take: 1, orderBy: { timestamp: 'desc' } }, _count: { select: { deployments: true } } },
             orderBy: { createdAt: 'desc' },
@@ -527,20 +524,18 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     });
 
     fastify.delete('/vps/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
-        if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
         await AdminService.deleteVpsCascade(id);
         await audit(request, 'DELETE_VPS', { targetType: 'VPS', targetId: id });
         return { success: true, data: { message: 'VPS removed' } };
     });
 
-    fastify.get('/github/accounts', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+    fastify.get('/github/accounts', { preHandler: [(fastify as any).requireModerator] }, async () => {
         const accounts = await prisma.gitHubAccount.findMany({ include: { user: { select: { id: true, email: true, name: true } }, repositories: { orderBy: { updatedAt: 'desc' } } }, orderBy: { connectedAt: 'desc' } });
         return { success: true, data: accounts };
     });
 
     fastify.post('/github/accounts/:userId/sync', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
-        if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { userId } = userIdParamsSchema.parse(request.params);
         const repos = await GitHubService.syncRepos(userId);
         await audit(request, 'FORCE_REPOSITORY_SYNC', { targetUserId: userId, targetType: 'GITHUB_ACCOUNT', targetId: userId });
@@ -548,7 +543,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     });
 
     fastify.delete('/github/accounts/:userId', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
-        if (request.admin.role === 'MODERATOR') return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { userId } = userIdParamsSchema.parse(request.params);
         const account = await prisma.gitHubAccount.findUnique({ where: { userId } });
         if (!account) return error(reply, 404, 'GitHub account not found', 'NOT_FOUND');
@@ -558,7 +552,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: { message: 'GitHub connection removed' } };
     });
 
-    fastify.get('/monitoring', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+    fastify.get('/monitoring', { preHandler: [(fastify as any).requireModerator] }, async () => {
         const [health, metrics, deployments, jobs] = await Promise.all([
             prisma.vPSHealth.findMany({ take: 100, orderBy: { checkedAt: 'desc' } }),
             prisma.systemMetrics.findMany({ take: 100, orderBy: { timestamp: 'desc' } }),
@@ -584,7 +578,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         };
     });
 
-    fastify.get('/logs', { preHandler: [(fastify as any).requireAdmin] }, async (request) => {
+    fastify.get('/logs', { preHandler: [(fastify as any).requireModerator] }, async (request) => {
         const query = logQuerySchema.parse(request.query);
         const createdAt = { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) };
         const [deploymentLogs, webhookLogs, adminLogs] = await Promise.all([
@@ -602,7 +596,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         };
     });
 
-    fastify.get('/settings', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+    fastify.get('/settings', { preHandler: [(fastify as any).requireModerator] }, async () => {
         return {
             success: true,
             data: {
@@ -616,7 +610,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         };
     });
 
-    fastify.get('/backups', { preHandler: [(fastify as any).requireAdmin] }, async () => {
+    fastify.get('/backups', { preHandler: [(fastify as any).requireModerator] }, async () => {
         const backups = await BackupService.listBackups();
         return { success: true, data: backups };
     });

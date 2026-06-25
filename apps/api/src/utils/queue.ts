@@ -1,10 +1,8 @@
 import { Queue } from 'bullmq';
-import { config } from '../config/env';
-import IORedis from 'ioredis';
+import { createQueueConnection } from './redis';
 
-export const redisConnection = new IORedis(config.redis.url, {
-    maxRetriesPerRequest: null,
-});
+// H-4: Shared connection — BullMQ requires maxRetriesPerRequest: null
+export const redisConnection = createQueueConnection();
 
 export const deploymentQueue = new Queue('deployment-queue', {
     connection: redisConnection as any,

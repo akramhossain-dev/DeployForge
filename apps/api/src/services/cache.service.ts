@@ -1,10 +1,11 @@
-import IORedis from 'ioredis';
 import { config } from '../config/env';
 import crypto from 'node:crypto';
 import { logger } from '../utils/logger';
+import { createCacheConnection } from '../utils/redis';
 
 export class CacheService {
-    private static redis = config.redis.enabled ? new IORedis(config.redis.url) : null;
+    // H-4: Use shared Redis factory — avoids creating a separate connection pool
+    private static redis = config.redis.enabled ? createCacheConnection() : null;
     private static memory = new Map<string, { value: string; expiresAt: number | null }>();
 
     static async set(key: string, value: any, ttlSeconds: number = 3600) {
@@ -64,12 +65,24 @@ export class CacheService {
         this.memory.delete(key);
     }
 
+    // H-5: Use SCAN instead of KEYS — KEYS is O(N) and blocks Redis during keyspace iteration.
+    // SCAN iterates in batches without blocking, safe for large production keyspaces.
     static async clearPattern(pattern: string) {
         if (this.redis) {
             try {
-                const keys = await this.redis.keys(pattern);
+                const keys: string[] = [];
+                let cursor = '0';
+                do {
+                    const [nextCursor, batch] = await this.redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+                    cursor = nextCursor;
+                    keys.push(...batch);
+                } while (cursor !== '0');
+
                 if (keys.length > 0) {
-                    await this.redis.del(...keys);
+                    // DEL accepts multiple keys — batch in chunks of 500 to avoid huge commands
+                    for (let i = 0; i < keys.length; i += 500) {
+                        await this.redis.del(...keys.slice(i, i + 500));
+                    }
                 }
                 return;
             } catch (err) {
