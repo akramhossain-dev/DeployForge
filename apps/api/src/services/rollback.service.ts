@@ -17,10 +17,9 @@ export class RollbackService {
     }
 
     static async rollback(userId: string, deploymentId: string, historyId?: string) {
-        // Enforce ownership using helper
+        
         await verifyDeploymentOwnership(userId, deploymentId);
 
-        // Fetch deployment with relations
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId, userId },
             include: { vps: true, project: true },
@@ -79,7 +78,6 @@ export class RollbackService {
 
                 await LoggingService.log(deploymentId, `Starting rollback to version ${history.version}`, 'system');
 
-                // 1. Stop current container
                 if (deployment.containerId) {
                     await removeContainerIfExists(ssh, deployment.containerId);
                 }
@@ -89,7 +87,6 @@ export class RollbackService {
                 await removeContainerIfExists(ssh, containerName);
                 const { stdout: newContainerId } = await ssh.execute(`docker run -d --name ${shellQuote(containerName)} --restart unless-stopped --security-opt no-new-privileges --cap-drop ALL -p ${deployment.port}:${appPort} ${shellQuote(history.imageTag)}`);
 
-                // 3. Update DB
                 await prisma.deployment.update({
                     where: { id: deploymentId },
                     data: {

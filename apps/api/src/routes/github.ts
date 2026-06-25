@@ -27,10 +27,10 @@ function sessionCookie(name: 'accessToken' | 'refreshToken', value: string, maxA
 }
 
 export default async function githubRoutes(fastify: FastifyInstance) {
-    // 0. Login/Register with GitHub (OAuth start)
+    
     fastify.get('/', {
         config: {
-            rateLimit: { max: 10, timeWindow: '1 minute' }, // OAuth rate limit: 10/min
+            rateLimit: { max: 10, timeWindow: '1 minute' }, 
         },
     }, async (_request, reply) => {
         try {
@@ -48,7 +48,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // 1. Connect GitHub (OAuth start)
     fastify.get('/connect', {
         preHandler: [(fastify as any).authGuard],
         config: {
@@ -78,7 +77,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // 2. Callback (Callback received)
     fastify.get('/callback', {
         config: {
             rateLimit: { max: 10, timeWindow: '1 minute' },
@@ -211,7 +209,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         return reply.redirect(`${config.app.appUrl}/settings?github=connected`);
     });
 
-    // 3. Profile
     fastify.get('/profile', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
@@ -223,7 +220,6 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         return { success: true, data: sanitizeGitHubAccount(account) };
     });
 
-    // 4. Repositories
     fastify.get('/repos', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
@@ -242,10 +238,9 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         return { success: true, data: account.repositories };
     });
 
-    // 5. Sync Repositories
     fastify.post('/repos/sync', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         fastify.log.info({ userId: request.user.id }, 'Repository sync requested');
         const repositories = await GitHubService.syncRepos(request.user.id);
@@ -253,10 +248,9 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         return { success: true, data: { count: repositories.length } };
     });
 
-    // 6. Create Webhook
     fastify.post('/webhooks/create', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { repoFullName } = createWebhookSchema.parse(request.body);
         const result = await GitHubService.createWebhook(request.user.id, repoFullName);
@@ -264,10 +258,9 @@ export default async function githubRoutes(fastify: FastifyInstance) {
         return { success: true, data: result };
     });
 
-    // 7. Disconnect GitHub
     fastify.delete('/disconnect', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const account = await prisma.gitHubAccount.findUnique({ where: { userId: request.user.id } });
         if (!account) {

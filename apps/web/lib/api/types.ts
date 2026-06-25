@@ -254,8 +254,6 @@ export type AdminLog = {
     createdAt: string;
 };
 
-// ─── File Manager Types ────────────────────────────────────────────────────────
-
 export type FileEntry = {
     name: string;
     path: string;

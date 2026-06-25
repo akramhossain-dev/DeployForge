@@ -29,26 +29,22 @@ interface Session {
 export default function SecurityPage() {
     const addToast = useToastStore((state) => state.addToast);
 
-    // Password Refs
     const currentPasswordRef = useRef<HTMLInputElement>(null);
     const newPasswordRef = useRef<HTMLInputElement>(null);
     const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
-    // Password State
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
 
-    // Sessions State
     const [sessions, setSessions] = useState<Session[]>([]);
     const [isLoadingSessions, setIsLoadingSessions] = useState(true);
     const [isRevoking, setIsRevoking] = useState<string | null>(null);
     const [isRevokingOthers, setIsRevokingOthers] = useState(false);
     const [isRevokingAll, setIsRevokingAll] = useState(false);
 
-    // Audit Log State
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(true);
 
@@ -217,7 +213,7 @@ export default function SecurityPage() {
 
     return (
         <div className="space-y-6">
-            {/* Change Password Panel */}
+            {}
             <Panel>
                 <div className="flex items-center gap-2 mb-4">
                     <KeyRound className="text-cyan-400" size={18} />
@@ -303,7 +299,7 @@ export default function SecurityPage() {
                 </form>
             </Panel>
 
-            {/* Active Sessions Panel */}
+            {}
             <Panel>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -389,7 +385,7 @@ export default function SecurityPage() {
                 )}
             </Panel>
 
-            {/* Audit Logs Preview Panel */}
+            {}
             <Panel>
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">

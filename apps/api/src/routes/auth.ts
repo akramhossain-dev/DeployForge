@@ -34,14 +34,12 @@ const loginSchema = z.object({
     password: z.string().min(1),
 });
 
-// API-2: Strict validation for refresh token format, type, and length
 const refreshSchema = z.object({
     refreshToken: z.string()
         .length(80, { message: 'Refresh token must be exactly 80 characters' })
         .regex(/^[0-9a-f]{80}$/i, { message: 'Invalid refresh token format' }),
 });
 
-// API-3: Strict validation for logout payloads
 const logoutSchema = z.object({
     refreshToken: z.string()
         .length(80, { message: 'Refresh token must be exactly 80 characters' })

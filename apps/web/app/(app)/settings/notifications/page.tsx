@@ -11,7 +11,6 @@ export default function NotificationsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Preference checkbox states
     const [deployNotifications, setDeployNotifications] = useState(true);
     const [buildNotifications, setBuildNotifications] = useState(true);
     const [domainNotifications, setDomainNotifications] = useState(true);

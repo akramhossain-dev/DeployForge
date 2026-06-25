@@ -11,7 +11,7 @@ export class EncryptionService {
     private readonly key: Buffer;
 
     constructor(masterKey: string) {
-        // masterKey should be 32 bytes
+        
         this.key = Buffer.from(masterKey, 'hex');
         if (this.key.length !== 32) {
             throw new Error('Master key must be 32 bytes (64 hex characters)');

@@ -39,12 +39,12 @@ ${rawError}
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-            {/* Backdrop click closer */}
+            {}
             <div className="absolute inset-0" onClick={closeErrorDrawer} />
 
-            {/* Drawer container */}
+            {}
             <div className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-white/10 bg-slate-950 p-6 shadow-2xl animate-slide-left overflow-y-auto">
-                {/* Header */}
+                {}
                 <div className="flex items-center justify-between border-b border-white/10 pb-4">
                     <div className="flex items-center gap-2.5">
                         <AlertOctagon className="text-rose-400" size={22} />
@@ -62,9 +62,9 @@ ${rawError}
                     </button>
                 </div>
 
-                {/* Content */}
+                {}
                 <div className="flex-1 space-y-6 py-6">
-                    {/* Category & Code badge */}
+                    {}
                     <div className="flex flex-wrap gap-2 items-center">
                         <span className="text-xs font-black uppercase text-slate-500">Category:</span>
                         <StatusBadge status={category} />
@@ -73,13 +73,13 @@ ${rawError}
                         </span>
                     </div>
 
-                    {/* Human Explanation */}
+                    {}
                     <div className="rounded-lg border border-rose-400/20 bg-rose-500/10 p-4">
                         <p className="text-xs font-black uppercase text-rose-300 tracking-wider">What happened</p>
                         <p className="mt-2 text-sm leading-6 font-semibold text-rose-100 whitespace-pre-line">{explanation}</p>
                     </div>
 
-                    {/* Suggested Fixes */}
+                    {}
                     <div>
                         <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Suggested Fixes</h3>
                         <ul className="mt-3 space-y-2.5">
@@ -92,7 +92,7 @@ ${rawError}
                         </ul>
                     </div>
 
-                    {/* Technical Output / Raw Error */}
+                    {}
                     <div>
                         <div className="flex items-center justify-between mb-2">
                             <h3 className="flex items-center gap-1.5 text-xs font-black uppercase text-slate-400 tracking-wider">
@@ -112,7 +112,7 @@ ${rawError}
                         </div>
                     </div>
 
-                    {/* Deployment Metadata */}
+                    {}
                     <div className="grid grid-cols-2 gap-4 rounded-lg border border-white/10 bg-slate-900/40 p-4 text-xs font-mono">
                         <div>
                             <p className="text-slate-500 uppercase font-black">Deployment ID</p>
@@ -125,7 +125,7 @@ ${rawError}
                     </div>
                 </div>
 
-                {/* Footer Action buttons */}
+                {}
                 <div className="border-t border-white/10 pt-4 flex gap-3">
                     <button
                         type="button"

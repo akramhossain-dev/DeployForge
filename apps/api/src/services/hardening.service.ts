@@ -2,12 +2,9 @@ import prisma from '@deployforge/database';
 import { logger } from '../utils/logger';
 
 export class HardeningService {
-    /**
-     * Standardizes webhook payload size limits (DB-5).
-     * Truncates payloads exceeding 50KB to protect database from bloat.
-     */
+    
     static limitWebhookPayload(payload: string): string {
-        const maxBytes = 50 * 1024; // 50KB
+        const maxBytes = 50 * 1024; 
         if (payload.length > maxBytes) {
             logger.warn({ originalBytes: payload.length, maxBytes }, 'Webhook payload exceeded storage limit; truncating');
             return payload.slice(0, maxBytes) + '\n...[TRUNCATED BY WEBHOOK STORAGE POLICY]...';
@@ -15,12 +12,8 @@ export class HardeningService {
         return payload;
     }
 
-    /**
-     * Standardizes terminal command output size limits (DB-6).
-     * Truncates command outputs exceeding 50KB to protect database from bloat.
-     */
     static limitTerminalOutput(output: string): string {
-        const maxBytes = 50 * 1024; // 50KB
+        const maxBytes = 50 * 1024; 
         if (output.length > maxBytes) {
             logger.warn({ originalBytes: output.length, maxBytes }, 'Terminal output exceeded storage limit; truncating');
             return output.slice(0, maxBytes) + '\n...[TRUNCATED BY TERMINAL LOG POLICY]...';
@@ -28,9 +21,6 @@ export class HardeningService {
         return output;
     }
 
-    /**
-     * Helper to log terminal commands safely with truncation rules (DB-6).
-     */
     static async logTerminalCommand(sessionId: string, command: string, output: string) {
         const truncatedOutput = this.limitTerminalOutput(output);
         const truncatedCommand = command.length > 1000 ? command.slice(0, 1000) + '...' : command;
@@ -47,9 +37,6 @@ export class HardeningService {
         }
     }
 
-    /**
-     * Performs database-level data retention cleanup based on predefined retention windows (DB-10).
-     */
     static async runDataRetentionCleanup() {
         const getPastDate = (days: number) => {
             const date = new Date();
@@ -57,11 +44,10 @@ export class HardeningService {
             return date;
         };
 
-        // Enforce policies (days)
-        const auditCutoff = getPastDate(90);        // Audit logs: 90 days
-        const logCutoff = getPastDate(7);           // Build/Deployment/Terminal logs: 7 days
-        const metricsCutoff = getPastDate(7);       // System & Health metrics: 7 days
-        const verifyTokenCutoff = getPastDate(14);  // Password Reset & Email verification tokens: 14 days
+        const auditCutoff = getPastDate(90);        
+        const logCutoff = getPastDate(7);           
+        const metricsCutoff = getPastDate(7);       
+        const verifyTokenCutoff = getPastDate(14);  
 
         try {
             logger.info({ audit: true, event: 'retention_cleanup_started' }, 'Database retention cleanup job started');
@@ -120,16 +106,10 @@ export class HardeningService {
         }
     }
 
-    /**
-     * Backward-compatible wrapper delegating to comprehensive cleanup.
-     */
     static async rotateLogs() {
         await this.runDataRetentionCleanup();
     }
 
-    /**
-     * Validates if a user is exceeding deployment limits.
-     */
     static async checkDeploymentLimit(userId: string) {
         const activeDeployments = await prisma.deployment.count({
             where: {
@@ -143,9 +123,6 @@ export class HardeningService {
         }
     }
 
-    /**
-     * Sanitize input strings to prevent common injection patterns.
-     */
     static sanitize(input: string): string {
         return input.replace(/[<>]/g, '').trim();
     }

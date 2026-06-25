@@ -54,7 +54,7 @@ export default async function profileRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/change-password', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request) => {
         const body = changePasswordSchema.parse(request.body);
         await AccountService.changePassword(request.user.id, body, request.ip, request.headers['user-agent']);
@@ -90,7 +90,7 @@ export default async function profileRoutes(fastify: FastifyInstance) {
     });
 
     fastify.delete('/', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { passwordConfirm } = deleteAccountSchema.parse(request.body);
         await AccountService.deleteAccount(request.user.id, passwordConfirm, request.ip, request.headers['user-agent']);

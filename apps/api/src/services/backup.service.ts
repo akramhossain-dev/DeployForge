@@ -5,10 +5,6 @@ import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import { AccountService } from './account.service';
 
-/**
- * Spawns a child process with the given args (NO shell expansion — safe from injection).
- * Collects stderr for error messages and resolves/rejects on process close.
- */
 function execSafe(command: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
         const proc = spawn(command, args, { stdio: 'pipe' });
@@ -41,16 +37,10 @@ export interface BackupMetadata {
 export class BackupService {
     private static backupDir = path.join(process.cwd(), 'backups');
 
-    /**
-     * Gets the current backup directory path
-     */
     static getBackupDirectory() {
         return this.backupDir;
     }
 
-    /**
-     * Helper to sanitize database URL in log messages
-     */
     private static sanitizeUrl(url: string): string {
         try {
             const parsed = new URL(url);
@@ -63,18 +53,12 @@ export class BackupService {
         }
     }
 
-    /**
-     * Prepares the backup directory structure
-     */
     private static async ensureDirectories() {
         await fs.mkdir(this.backupDir, { recursive: true });
         await fs.mkdir(path.join(this.backupDir, 'db'), { recursive: true });
         await fs.mkdir(path.join(this.backupDir, 'config'), { recursive: true });
     }
 
-    /**
-     * Performs a database backup using pg_dump
-     */
     static async backupDatabase(adminUserId?: string, ipAddress?: string, userAgent?: string): Promise<BackupMetadata> {
         await this.ensureDirectories();
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -85,10 +69,9 @@ export class BackupService {
         logger.info(`Starting database backup to ${filename}...`);
 
         try {
-            // Run pg_dump in custom archive format (-F c) — arguments passed as array (no shell injection)
+            
             await execSafe('pg_dump', ['--dbname', databaseUrl, '-Fc', '-f', filePath]);
 
-            // Validate integrity immediately
             const isValid = await this.validateBackup(filePath, 'db');
             if (!isValid) {
                 throw new Error('Backup file generated but failed integrity verification.');
@@ -107,7 +90,7 @@ export class BackupService {
             logger.info({ backup: filename, size: stat.size }, 'Database backup completed and verified successfully.');
 
             if (adminUserId) {
-                // If triggered by admin, we can log it
+                
                 await AccountService.logAudit(adminUserId, 'DATABASE_BACKUP_SUCCESS', `Database backup created successfully: ${filename}`, ipAddress, userAgent);
             }
 
@@ -123,9 +106,6 @@ export class BackupService {
         }
     }
 
-    /**
-     * Backs up system configuration (.env config fields mapped to JSON)
-     */
     static async backupConfiguration(adminUserId?: string, ipAddress?: string, userAgent?: string): Promise<BackupMetadata> {
         await this.ensureDirectories();
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -135,7 +115,7 @@ export class BackupService {
         logger.info(`Starting config backup to ${filename}...`);
 
         try {
-            // Backup non-sensitive properties of config
+            
             const configBackup = {
                 app: {
                     env: config.app.env,
@@ -189,9 +169,6 @@ export class BackupService {
         }
     }
 
-    /**
-     * Validates integrity of a backup file
-     */
     static async validateBackup(filePath: string, type: 'db' | 'config'): Promise<boolean> {
         try {
             const stat = await fs.stat(filePath);
@@ -202,7 +179,7 @@ export class BackupService {
 
             const fd = await fs.open(filePath, 'r');
             if (type === 'db') {
-                // A PostgreSQL custom format dump file (-F c) always starts with the magic string "PGDMP" (first 5 bytes)
+                
                 const buffer = Buffer.alloc(5);
                 await fd.read(buffer, 0, 5, 0);
                 await fd.close();
@@ -213,7 +190,7 @@ export class BackupService {
                     return false;
                 }
             } else {
-                // Validate JSON parsing for configuration backup
+                
                 const content = await fs.readFile(filePath, 'utf-8');
                 JSON.parse(content);
                 await fd.close();
@@ -226,9 +203,6 @@ export class BackupService {
         }
     }
 
-    /**
-     * Restores a database backup using pg_restore
-     */
     static async restoreDatabase(filename: string, adminUserId?: string, ipAddress?: string, userAgent?: string): Promise<boolean> {
         const filePath = path.join(this.backupDir, 'db', filename);
         const databaseUrl = config.database.url;
@@ -236,15 +210,12 @@ export class BackupService {
         logger.info(`Starting database restore from ${filename}...`);
 
         try {
-            // First validate the backup file exists and is valid
+            
             const isValid = await this.validateBackup(filePath, 'db');
             if (!isValid) {
                 throw new Error(`Backup file ${filename} failed integrity validation or is missing.`);
             }
 
-            // Run pg_restore — arguments passed as an array (no shell injection)
-            // --clean drops database objects before recreating them
-            // --no-owner skips setting ownership of objects to match the original database
             await execSafe('pg_restore', ['--clean', '--no-owner', '--dbname', databaseUrl, filePath]);
 
             logger.info({ restoredFile: filename }, 'Database restore completed successfully.');
@@ -264,9 +235,6 @@ export class BackupService {
         }
     }
 
-    /**
-     * Lists all database and configuration backups
-     */
     static async listBackups(): Promise<BackupMetadata[]> {
         await this.ensureDirectories();
         const list: BackupMetadata[] = [];
@@ -288,7 +256,7 @@ export class BackupService {
                         type: sub,
                     });
                 } catch {
-                    // Ignore individual file reading errors
+                    
                 }
             }
         };
@@ -297,9 +265,6 @@ export class BackupService {
         return list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     }
 
-    /**
-     * Prunes old backups based on a retention count policy (keeps last N backups of each type)
-     */
     static async pruneOldBackups(retentionCount = 7): Promise<string[]> {
         logger.info(`Pruning backups. Keeping last ${retentionCount} backups of each type.`);
         const allBackups = await this.listBackups();
@@ -327,9 +292,6 @@ export class BackupService {
         return deletedFiles;
     }
 
-    /**
-     * Run an automated backup job (intended for cron/schedulers)
-     */
     static async runScheduledBackup() {
         logger.info('Scheduled automated backup started.');
         try {

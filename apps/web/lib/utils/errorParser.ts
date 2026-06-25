@@ -25,7 +25,6 @@ export function maskSensitiveData(text: string): string {
     if (!text) return text;
     let sanitized = text;
     
-    // 1. Key-value pairs (e.g., database_url=xyz, secret: password)
     const keyValuePattern = /(db_password|database_url|ssh_password|github_token|jwt_secret|api_key|secret|password|token|private_key|privatekey)(.*?)(=|:|is)\s*([^\s;'"\n\r]+)/gi;
     sanitized = sanitized.replace(keyValuePattern, (match, p1, p2, p3, p4) => {
         return `${p1}${p2}${p3}********`;
@@ -148,7 +147,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 8. Missing Env Variables
     if (/environment variable missing/i.test(masked) || /required env var/i.test(masked) || /process\.env\..*is undefined/i.test(masked) || /missing.*variable/i.test(masked)) {
         return {
             category: 'Environment Variable Error',
@@ -163,7 +161,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 9. Docker Service Errors
     if (/cannot connect to the Docker daemon/i.test(masked) || /docker daemon not running/i.test(masked) || /docker: command not found/i.test(masked)) {
         return {
             category: 'Docker Error',
@@ -178,7 +175,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 10. SSH Connectivity Errors
     if (/ssh connection failed/i.test(masked) || /All configured authentication methods failed/i.test(masked) || /ssh: connect to host/i.test(masked) || /timed out connecting/i.test(masked)) {
         return {
             category: 'SSH Error',
@@ -193,7 +189,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 11. Permission Denied Errors
     if (/permission denied/i.test(masked) || /EACCES/i.test(masked) || /permission denied \(os error 13\)/i.test(masked)) {
         return {
             category: 'Permission Error',
@@ -207,7 +202,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 12. Network / Package Registry Timeout
     if (/network is unreachable/i.test(masked) || /connection timed out/i.test(masked) || /fetch failed/i.test(masked) || /npm ERR! network/i.test(masked)) {
         return {
             category: 'Network Error',
@@ -222,7 +216,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 13. Asset Validation Failures
     if (/asset validation failed/i.test(masked) || /INVALID_VALIDATION_URL/i.test(masked) || /static asset validation failed/i.test(masked)) {
         return {
             category: 'Validation Error',
@@ -237,7 +230,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 14. Default Generic Error
     return {
         category: 'Unknown Error',
         code: 'DF-UNK-999',

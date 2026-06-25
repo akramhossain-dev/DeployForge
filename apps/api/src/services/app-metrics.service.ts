@@ -16,14 +16,12 @@ export class AppMetricsService {
 
     private static MAX_WINDOW_SIZE = 100;
 
-    // CPU tracking helpers
     private static lastCpuUsage = process.cpuUsage();
     private static lastCpuTime = Date.now();
 
-    // Cache for deployment counts to keep it lightweight
     private static cachedDeploymentStats: Record<string, number> = {};
     private static lastDeploymentStatsFetch = 0;
-    private static CACHE_TTL_MS = 10000; // 10 seconds cache
+    private static CACHE_TTL_MS = 10000; 
 
     public static recordRequest(method: string, path: string, statusCode: number, responseTimeMs: number) {
         this.stats.totalRequests++;
@@ -31,7 +29,6 @@ export class AppMetricsService {
         const codeStr = String(statusCode);
         this.stats.statusCodes[codeStr] = (this.stats.statusCodes[codeStr] || 0) + 1;
 
-        // Sliding window for average response times
         this.stats.responseTimeWindow.push(responseTimeMs);
         if (this.stats.responseTimeWindow.length > this.MAX_WINDOW_SIZE) {
             this.stats.responseTimeWindow.shift();
@@ -51,7 +48,7 @@ export class AppMetricsService {
         if (timeDiff === 0) return 0;
         const cpus = require('os').cpus().length || 1;
         const percentage = ((userMS + systemMS) / timeDiff) * 100;
-        // Cap to 100% or divide by cores if needed. We'll return percentage/cpus
+        
         return parseFloat((percentage / cpus).toFixed(2));
     }
 
@@ -86,13 +83,11 @@ export class AppMetricsService {
         const uptime = process.uptime();
         const cpu = this.getCpuUsage();
 
-        // Calculate average response time
         const respWindow = this.stats.responseTimeWindow;
         const avgResponseTimeMs = respWindow.length > 0
             ? parseFloat((respWindow.reduce((a, b) => a + b, 0) / respWindow.length).toFixed(2))
             : 0;
 
-        // Check database connection
         let databaseStatus = 'error';
         let dbLatencyMs = 0;
         const dbStart = Date.now();

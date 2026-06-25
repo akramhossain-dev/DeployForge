@@ -1,7 +1,6 @@
 import { Queue } from 'bullmq';
 import { createQueueConnection } from './redis';
 
-// H-4: Shared connection — BullMQ requires maxRetriesPerRequest: null
 export const redisConnection = createQueueConnection();
 
 export const deploymentQueue = new Queue('deployment-queue', {

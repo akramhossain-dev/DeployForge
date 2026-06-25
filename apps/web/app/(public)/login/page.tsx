@@ -19,11 +19,9 @@ export default function LoginPage() {
     const [githubLoading, setGithubLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    // Field-level error states
     const [emailError, setEmailError] = useState<string | null>(null);
     const [passwordError, setPasswordError] = useState<string | null>(null);
 
-    // Refs for focus management
     const emailRef = useRef<HTMLInputElement>(null);
     const passwordRef = useRef<HTMLInputElement>(null);
 

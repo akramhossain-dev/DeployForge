@@ -19,7 +19,6 @@ export function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
         })),
     ];
 
-    // If path is deep, only show last 4 segments
     const visible = segments.length > 5
         ? [segments[0], { label: '…', path: '' }, ...segments.slice(-3)]
         : segments;

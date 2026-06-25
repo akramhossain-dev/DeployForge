@@ -10,9 +10,8 @@ const sandboxParamsSchema = z.object({
 export default async function sandboxRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    // 1. Analyze Deployment
     fastify.post('/analyze/:deploymentId', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { deploymentId } = sandboxParamsSchema.parse(request.params);
         const deployment = await verifyDeploymentOwnership(request.user.id, deploymentId, request);
@@ -21,7 +20,6 @@ export default async function sandboxRoutes(fastify: FastifyInstance) {
         return { success: true, data: result };
     });
 
-    // 2. Get Sandbox Result
     fastify.get('/:deploymentId/result', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -30,9 +28,8 @@ export default async function sandboxRoutes(fastify: FastifyInstance) {
         return { success: true, data: result };
     });
 
-    // 3. Validate and Auto-Deploy Trigger
     fastify.post('/validate-deploy/:deploymentId', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { deploymentId } = sandboxParamsSchema.parse(request.params);
         const deployment = await verifyDeploymentOwnership(request.user.id, deploymentId, request);

@@ -1,6 +1,5 @@
 import type { FileEntry } from '@/lib/api/types';
 
-// ─── File size formatter ───────────────────────────────────────────────────────
 export function formatSize(bytes: number): string {
     if (bytes === 0) return '—';
     if (bytes < 1024) return `${bytes} B`;
@@ -9,7 +8,6 @@ export function formatSize(bytes: number): string {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-// ─── Date formatter ───────────────────────────────────────────────────────────
 export function formatDate(value?: string): string {
     if (!value) return '—';
     try {
@@ -21,7 +19,6 @@ export function formatDate(value?: string): string {
     }
 }
 
-// ─── Path helpers ─────────────────────────────────────────────────────────────
 export function joinPath(...parts: string[]): string {
     return parts
         .join('/')
@@ -40,7 +37,6 @@ export function basename(p: string): string {
     return p.replace(/\/+$/, '').split('/').pop() || p;
 }
 
-// ─── File type helpers ────────────────────────────────────────────────────────
 export function isImage(entry: FileEntry): boolean {
     return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp'].includes(entry.extension?.toLowerCase());
 }
@@ -66,7 +62,6 @@ export function isPreviewable(entry: FileEntry): boolean {
     return entry.type === 'file' && (isImage(entry) || isText(entry));
 }
 
-// ─── Language mapping for syntax highlighting ─────────────────────────────────
 export function getLanguage(name: string): string {
     const ext = name.split('.').pop()?.toLowerCase() || '';
     const map: Record<string, string> = {
@@ -90,7 +85,6 @@ export function getLanguage(name: string): string {
     return map[ext] || 'plaintext';
 }
 
-// ─── File icon color ──────────────────────────────────────────────────────────
 export function getFileColor(entry: FileEntry): string {
     if (entry.type === 'directory') return 'text-cyan-300';
     const ext = entry.extension?.toLowerCase();
@@ -113,7 +107,6 @@ export function getFileColor(entry: FileEntry): string {
     return 'text-slate-400';
 }
 
-// ─── Validate names ───────────────────────────────────────────────────────────
 export function validateName(name: string): string | null {
     if (!name.trim()) return 'Name cannot be empty';
     if (name.length > 255) return 'Name is too long (max 255 chars)';

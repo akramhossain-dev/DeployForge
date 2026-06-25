@@ -2,7 +2,7 @@
 
 import React from 'react';
 import {
-    File, Folder, FolderOpen, Image, Code, FileText, FileCode,
+    File, Folder, FolderOpen, Image as ImageIcon, Code, FileText, FileCode,
     Archive, Music, Video, Database,
 } from 'lucide-react';
 import type { FileEntry } from '@/lib/api/types';
@@ -28,8 +28,7 @@ export function FileIcon({ entry, isOpen = false, size = 18, className = '' }: F
     const ext = entry.extension?.toLowerCase();
 
     if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp'].includes(ext)) {
-        // eslint-disable-next-line @next/next/no-img-element
-        return <Image size={size} className={cls} aria-hidden="true" />;
+        return <ImageIcon size={size} className={cls} />;
     }
     if (['js', 'ts', 'jsx', 'tsx', 'py', 'go', 'rs', 'java', 'cs', 'php', 'rb', 'sh', 'bash'].includes(ext)) {
         return <Code size={size} className={cls} />;

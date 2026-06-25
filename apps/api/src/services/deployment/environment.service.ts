@@ -69,11 +69,9 @@ export class EnvironmentService {
 
         const envPath = this.getEnvPath(deploymentId);
 
-        // Ensure secure system directory exists and is restricted to owner-only
         const setupSecureDir = `mkdir -p /etc/deployforge/envs && chmod 700 /etc/deployforge/envs`;
         await runCommand(ssh, deploymentId, 'system', setupSecureDir);
 
-        // Write env securely using umask 077 and chmod 600
         const writeEnvCmd = `umask 077 && cat > ${shellQuote(envPath)} <<'EOF'\n${lines.join('\n')}\nEOF\nchmod 600 ${shellQuote(envPath)}`;
         await runCommand(ssh, deploymentId, 'system', writeEnvCmd);
 

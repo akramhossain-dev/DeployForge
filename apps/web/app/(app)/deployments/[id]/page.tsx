@@ -61,10 +61,10 @@ export default function DeploymentDetailsPage() {
     const failedStepIndex = useMemo(() => {
         if (current?.status !== 'FAILED') return -1;
         const logText = logs.map(l => (l.message || l.output || '').toLowerCase()).join('\n');
-        if (logText.includes('clone') || logText.includes('repository')) return 1; // CLONING
-        if (logText.includes('extract') || logText.includes('upload')) return 3; // EXTRACTING / UPLOADING
-        if (logText.includes('build') || logText.includes('install') || logText.includes('npm') || logText.includes('yarn') || logText.includes('pnpm') || logText.includes('bun')) return 4; // BUILDING
-        return 5; // DEPLOYING
+        if (logText.includes('clone') || logText.includes('repository')) return 1; 
+        if (logText.includes('extract') || logText.includes('upload')) return 3; 
+        if (logText.includes('build') || logText.includes('install') || logText.includes('npm') || logText.includes('yarn') || logText.includes('pnpm') || logText.includes('bun')) return 4; 
+        return 5; 
     }, [current?.status, logs]);
 
     async function confirmDelete() {

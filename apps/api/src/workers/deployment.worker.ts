@@ -16,7 +16,6 @@ export const deploymentWorker = new Worker(
             return;
         }
 
-        // Create a job record in DB
         const jobRecord = await prisma.deploymentJob.create({
             data: {
                 deploymentId,
@@ -46,12 +45,12 @@ export const deploymentWorker = new Worker(
                     retryCount: job.attemptsMade,
                 },
             });
-            throw err; // Allow BullMQ to retry
+            throw err; 
         }
     },
     {
         connection: redisConnection as any,
-        concurrency: 5, // Limit concurrent deployments
+        concurrency: 5, 
     }
 );
 

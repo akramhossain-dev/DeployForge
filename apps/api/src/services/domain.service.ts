@@ -101,7 +101,7 @@ export class DomainService {
     }
 
     static async issueSSL(userId: string, domainId: string) {
-        // Ownership validation through relations
+        
         const domain = await prisma.domain.findFirst({
             where: {
                 id: domainId,
@@ -113,7 +113,7 @@ export class DomainService {
         });
 
         if (!domain) {
-            // Verify via helper to throw correct 403 / 404
+            
             await verifyDomainOwnership(userId, domainId);
             throw new Error('Domain not found');
         }
@@ -132,7 +132,6 @@ export class DomainService {
                 ...auth,
             });
 
-            // Run Certbot
             const { code } = await ssh.execute(`certbot --nginx -d ${domain.domainName} --non-interactive --agree-tos --email admin@${domain.domainName}`);
 
             if (code === 0) {

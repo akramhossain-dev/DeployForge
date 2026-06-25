@@ -15,7 +15,7 @@ export class GitHubService {
             const escaped = config.oauth.github.clientSecret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             sanitized = sanitized.replace(new RegExp(escaped, 'g'), '[REDACTED]');
         }
-        // Redact any GitHub personal access tokens or OAuth tokens (ghp_, gho_, etc.)
+        
         sanitized = sanitized.replace(/gh[pos]_[a-zA-Z0-9]{36,255}/g, '[REDACTED]');
         return sanitized;
     }
@@ -311,7 +311,6 @@ export class GitHubService {
                 username: githubAccount.username,
             }, 'GitHub account persisted');
 
-            // Update the user record to link GitHub ID and sync avatar (updates user session)
             await prisma.user.update({
                 where: { id: userId },
                 data: {

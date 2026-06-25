@@ -46,7 +46,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/rollback', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         const { historyId } = rollbackBodySchema.parse(request.body);
@@ -60,7 +60,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/restart', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -73,7 +73,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/start', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -85,7 +85,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/stop', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -97,7 +97,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/pause', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -109,7 +109,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/resume', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -121,7 +121,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.delete('/:id', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {

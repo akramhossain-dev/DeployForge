@@ -28,13 +28,13 @@ describe('PasswordService', () => {
         });
 
         it('should reject passwords missing complexity requirements', () => {
-            // Missing uppercase
+            
             expect(PasswordService.validate('abc12!').valid).toBe(false);
-            // Missing lowercase
+            
             expect(PasswordService.validate('ABC12!').valid).toBe(false);
-            // Missing numbers
+            
             expect(PasswordService.validate('Abcdef!').valid).toBe(false);
-            // Missing symbols
+            
             expect(PasswordService.validate('Abcde12').valid).toBe(false);
         });
 

@@ -91,14 +91,12 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     const isError = showSearch ? search.isError : listing.isError;
     const isFetching = showSearch ? search.isFetching : listing.isFetching;
 
-    // Sync currentPath when URL path parameter changes (e.g. back button)
     useEffect(() => {
         if (pathParam && pathParam !== currentPath) {
             setCurrentPath(pathParam);
         }
-    }, [pathParam]);
+    }, [pathParam, currentPath]);
 
-    // Sync currentPath with the resolved absolute path from the server
     useEffect(() => {
         if (listing.data?.path && currentPath !== listing.data.path) {
             setCurrentPath(listing.data.path);
@@ -124,8 +122,6 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         return sortEntries(raw, sortKey, sortDir);
     }, [listing.data, search.data, showSearch, sortKey, sortDir]);
 
-    // Keyboard shortcuts — intentionally uses closure over latest state
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             if (rename || newItemType) return;
@@ -143,6 +139,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [entries, selected, clipboard, rename, newItemType]);
 
     useEffect(() => { setSelected(new Set()); setOpeningFile(null); }, [currentPath]);
@@ -153,7 +150,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         setCurrentPath(path);
         setSelected(new Set());
         setShowSearch(false);
-        // Update URL query parameters to reflect directory navigation
+        
         router.replace(`/file-manager/${vpsId}?path=${encodeURIComponent(path)}`);
     };
     const navigateUp = () => navigate(parentPath(currentPath));
@@ -313,9 +310,9 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
 
     return (
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-2xl">
-            {/* ── Toolbar ── */}
+            {}
             <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-white/10 bg-slate-900/80 px-3 py-2">
-                {/* Nav buttons */}
+                {}
                 <div className="flex items-center gap-1 rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5">
                     <button onClick={navigateUp} disabled={currentPath === '/'} title="Up" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200 disabled:opacity-25 disabled:cursor-not-allowed">
                         <ArrowUp size={14} />
@@ -325,12 +322,12 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                     </button>
                 </div>
 
-                {/* Breadcrumb bar */}
+                {}
                 <div className="flex flex-1 min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 font-mono">
                     <Breadcrumb path={currentPath} onNavigate={navigate} />
                 </div>
 
-                {/* Action group */}
+                {}
                 <div className="flex items-center gap-1">
                     <button onClick={() => setShowSearch((v) => !v)} title="Search" className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${showSearch ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-300' : 'border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200'}`}>
                         <Search size={13} />
@@ -346,7 +343,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                     </button>
                 </div>
 
-                {/* Selection actions */}
+                {}
                 {selected.size > 0 && (
                     <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-0.5">
                         <button onClick={() => setClipboard({ paths: Array.from(selected), operation: 'copy' })} title="Copy" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors"><Copy size={13} /></button>
@@ -380,7 +377,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                     </button>
                 )}
 
-                {/* Right side */}
+                {}
                 <div className="flex items-center gap-1 ml-auto">
                     <button onClick={() => refetch()} title="Refresh" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200 transition-colors">
                         <RefreshCw size={12} className={isFetching ? 'animate-spin text-cyan-300' : ''} />
@@ -392,7 +389,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 </div>
             </div>
 
-            {/* ── Status bar ── */}
+            {}
             <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-slate-950/60 px-4 py-0.5 font-mono text-[10px]">
                 <span className="text-slate-700">{entries.length} item{entries.length !== 1 ? 's' : ''}</span>
                 {selected.size > 0 && <><span className="text-slate-800">·</span><span className="text-cyan-500/60">{selected.size} selected</span></>}
@@ -402,7 +399,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 {isFetching && <Loader2 size={9} className="animate-spin text-cyan-500 shrink-0" />}
             </div>
 
-            {/* ── Search bar ── */}
+            {}
             {showSearch && (
                 <div className="flex shrink-0 items-center gap-3 border-b border-white/10 bg-slate-900/50 px-4 py-2 font-mono">
                     <span className="text-cyan-400/60 text-xs select-none">~$</span>
@@ -418,7 +415,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 </div>
             )}
 
-            {/* ── New item input ── */}
+            {}
             {newItemType && (
                 <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.07] bg-black/20 px-4 py-2 font-mono">
                     <span className="text-cyan-400/60 text-xs select-none">{newItemType === 'directory' ? 'mkdir' : 'touch'}</span>
@@ -437,7 +434,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 </div>
             )}
 
-            {/* ── Compress input ── */}
+            {}
             {compressInput && (
                 <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.07] bg-black/20 px-4 py-2 font-mono">
                     <span className="text-cyan-400/60 text-xs select-none">zip -r</span>
@@ -459,10 +456,10 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 </div>
             )}
 
-            {/* ── Main content area ── */}
+            {}
             <div className="flex min-h-0 flex-1 overflow-hidden">
-                {/* File list panel */}
-                {/* File list panel */}
+                {}
+                {}
                 <div className="flex flex-col flex-1 min-h-0 overflow-y-auto terminal-scrollbar">
                     {isLoading ? (
                         <div className="flex flex-1 items-center justify-center p-12">
@@ -518,7 +515,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                         />
                     )}
 
-                    {/* Rename dialog */}
+                    {}
                     {rename && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
                             <div className="w-80 rounded-xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
@@ -541,7 +538,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 </div>
             </div>
 
-            {/* ── Context menu ── */}
+            {}
             {contextMenu && (
                 <ContextMenu
                     x={contextMenu.x}
@@ -551,7 +548,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 />
             )}
 
-            {/* ── Upload modal ── */}
+            {}
             {showUpload && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
                     <div className="w-full max-w-lg rounded-xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
@@ -567,7 +564,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 </div>
             )}
 
-            {/* ── Properties modal ── */}
+            {}
             {showProps && (
                 <PropertiesDialog
                     vpsId={vpsId}
@@ -577,7 +574,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 />
             )}
 
-            {/* ── Confirm dialog ── */}
+            {}
             {confirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
                     <div className="w-full max-w-sm rounded-xl border border-rose-400/20 bg-slate-900 p-5 shadow-2xl">

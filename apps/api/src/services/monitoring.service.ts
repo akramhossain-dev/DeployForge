@@ -24,16 +24,12 @@ export class MonitoringService {
                 ...auth,
             });
 
-            // 1. CPU Usage
             const { stdout: cpu } = await ssh.execute("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'");
 
-            // 2. Memory Usage
             const { stdout: mem } = await ssh.execute("free | grep Mem | awk '{print $3/$2 * 100.0}'");
 
-            // 3. Disk Usage
             const { stdout: disk } = await ssh.execute("df / | tail -1 | awk '{print $5}' | sed 's/%//'");
 
-            // 4. Active Containers
             const { stdout: containers } = await ssh.execute("docker ps -q | wc -l");
 
             return await prisma.systemMetrics.create({

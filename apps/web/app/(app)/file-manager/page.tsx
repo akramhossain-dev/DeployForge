@@ -52,7 +52,7 @@ export default function FileManagerIndexPage() {
 
     return (
         <div className="flex h-full flex-col overflow-y-auto terminal-scrollbar bg-slate-950 text-slate-200">
-            {/* ── Top header bar ── */}
+            {}
             <div className="border-b border-white/10 px-6 py-4">
                 <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10">
@@ -69,7 +69,7 @@ export default function FileManagerIndexPage() {
             </div>
 
             <div className="flex flex-1 flex-col gap-5 p-6">
-                {/* Search */}
+                {}
                 <div className="relative max-w-xs">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[10px] text-cyan-300/40 select-none">~/</span>
                     <input
@@ -85,7 +85,7 @@ export default function FileManagerIndexPage() {
                     )}
                 </div>
 
-                {/* VPS grid */}
+                {}
                 {isLoading ? (
                     <div className="flex flex-1 items-center justify-center">
                         <div className="flex flex-col items-center gap-3">
@@ -111,7 +111,7 @@ export default function FileManagerIndexPage() {
                                 onClick={() => router.push(`/file-manager/${vps.id}`)}
                                 className="group relative flex flex-col gap-4 rounded-xl border border-white/10 bg-slate-900/40 p-4 text-left transition-all duration-200 hover:border-cyan-300/30 hover:bg-slate-800/60 hover:shadow-lg hover:shadow-cyan-950/20"
                             >
-                                {/* Top row */}
+                                {}
                                 <div className="flex items-start justify-between">
                                     <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-600 transition-colors group-hover:border-cyan-300/25 group-hover:text-cyan-300">
                                         <Server size={14} />
@@ -119,7 +119,7 @@ export default function FileManagerIndexPage() {
                                     <ArrowRight size={13} className="mt-1 shrink-0 text-slate-700 transition-all group-hover:translate-x-0.5 group-hover:text-cyan-300" />
                                 </div>
 
-                                {/* Info */}
+                                {}
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 mb-0.5">
                                         <StatusDot status={vps.status} />
@@ -130,7 +130,7 @@ export default function FileManagerIndexPage() {
                                     </p>
                                 </div>
 
-                                {/* Footer */}
+                                {}
                                 <div className="flex items-center justify-between">
                                     <StatusBadge status={vps.status} />
                                     <span className="flex items-center gap-1 font-mono text-[9px] text-slate-800">
@@ -138,7 +138,7 @@ export default function FileManagerIndexPage() {
                                     </span>
                                 </div>
 
-                                {/* Active glow */}
+                                {}
                                 {vps.status === 'active' && (
                                     <div className="absolute inset-x-0 bottom-0 h-px rounded-b-xl bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                                 )}

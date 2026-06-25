@@ -8,7 +8,7 @@ const encryptionService = new EncryptionService(config.encryption.key);
 
 export class SandboxService {
     static async analyze(userId: string, deploymentId: string) {
-        // Ownership validation through relations
+        
         const deployment = await prisma.deployment.findFirst({
             where: {
                 id: deploymentId,
@@ -18,12 +18,11 @@ export class SandboxService {
         });
 
         if (!deployment) {
-            // Verify using helper to trigger correct 403 / 404
+            
             await verifyDeploymentOwnership(userId, deploymentId);
             throw new Error('Deployment not found');
         }
 
-        // Verify VPS ownership
         await verifyVpsOwnership(userId, deployment.vpsId);
 
         const ssh = new SSHService();
@@ -45,7 +44,6 @@ export class SandboxService {
 
             const workDir = `/home/${vps.username}/deployments/${deployment.project.name}`;
 
-            // 1. Structure Validation (20 points)
             const { stdout: fileList } = await ssh.execute(`ls -F ${workDir}`);
             const files = fileList.split('\n').map(f => f.trim().replace('*', '').replace('/', ''));
 
@@ -60,15 +58,12 @@ export class SandboxService {
                 score -= 20;
             }
 
-            // 2. Security Scan (25 points)
             const { stdout: dangerousCode } = await ssh.execute(`grep -rnE "eval\\(|exec\\(|child_process|rm -rf" ${workDir} --exclude-dir=node_modules || true`);
             if (dangerousCode.trim()) {
                 issues.push('Dangerous code patterns detected (eval, exec, or rm -rf)');
                 score -= 25;
             }
 
-            // 3. Resource Estimation (20 points)
-            // Basic heuristic: check current VPS load
             const { stdout: memFree } = await ssh.execute("free -m | grep Mem | awk '{print $4}'");
             const freeMB = parseInt(memFree.trim());
             if (freeMB < 512) {
@@ -76,7 +71,6 @@ export class SandboxService {
                 score -= 10;
             }
 
-            // 4. Port Analysis
             const port = deployment.port || 3000;
             const { stdout: portCheck } = await ssh.execute(`netstat -tuln | grep :${port} || true`);
             if (portCheck.trim()) {
@@ -92,7 +86,7 @@ export class SandboxService {
                     score,
                     status,
                     issues,
-                    estimatedCPU: 0.5, // Mock data for now
+                    estimatedCPU: 0.5, 
                     estimatedRAM: 256.0,
                     estimatedDisk: 1024.0,
                 },

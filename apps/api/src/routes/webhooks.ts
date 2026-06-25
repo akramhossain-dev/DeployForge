@@ -52,7 +52,6 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
 
         const body = (request as any).rawBody || JSON.stringify(request.body || {});
 
-        // Strict 1MB size limit check
         if (body.length > 1024 * 1024) {
             fastify.log.warn({ deliveryId }, 'Webhook payload exceeds size limit');
             return reply.status(413).send({
@@ -64,7 +63,6 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
             });
         }
 
-        // Timing-safe signature validation
         if (!signature || !GitHubService.verifySignature(body, signature)) {
             fastify.log.warn({ deliveryId }, 'Invalid webhook signature');
             return reply.status(401).send({
@@ -79,7 +77,6 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
         const payload = request.body as any;
         const repoId = payload?.repository?.id?.toString?.() || 'unknown';
 
-        // Replay Protection: Unique constraint on WebhookEvent.id
         let webhookEvent;
         try {
             webhookEvent = await prisma.webhookEvent.create({
@@ -121,7 +118,6 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
                 return { success: true, data: { received: true, ignored: `unsupported event ${event}` } };
             }
 
-            // Payload validation with Zod
             const parsed = githubPushPayloadSchema.parse(payload);
 
             const branch = parsed.ref.replace('refs/heads/', '');

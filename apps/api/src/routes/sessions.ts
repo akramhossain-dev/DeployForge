@@ -10,7 +10,6 @@ const sessionParamsSchema = z.object({
 export default async function sessionsRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    // GET /api/sessions
     fastify.get('/', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -22,9 +21,8 @@ export default async function sessionsRoutes(fastify: FastifyInstance) {
         return apiSuccess(mapped);
     });
 
-    // DELETE /api/sessions/logout-others
     fastify.delete('/logout-others', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const currentSessionId = request.user.sessionId;
         if (!currentSessionId) {
@@ -34,17 +32,15 @@ export default async function sessionsRoutes(fastify: FastifyInstance) {
         return apiMessage('Other sessions revoked successfully');
     });
 
-    // DELETE /api/sessions/logout-all
     fastify.delete('/logout-all', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request) => {
         await AccountService.revokeAllSessions(request.user.id, request.ip, request.headers['user-agent']);
         return apiMessage('All sessions revoked successfully');
     });
 
-    // DELETE /api/sessions/:id
     fastify.delete('/:id', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { id } = sessionParamsSchema.parse(request.params);
         

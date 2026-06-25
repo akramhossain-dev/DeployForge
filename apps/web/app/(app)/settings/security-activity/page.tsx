@@ -49,13 +49,11 @@ interface ApiResponseShape {
 export default function SecurityActivityPage() {
     const addToast = useToastStore((state) => state.addToast);
 
-    // Filter, Search, Pagination state
     const [search, setSearch] = useState('');
     const [category, setCategory] = useState('all');
     const [page, setPage] = useState(1);
     const [limit] = useState(10);
 
-    // Data state
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [pagination, setPagination] = useState<Pagination | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -70,7 +68,6 @@ export default function SecurityActivityPage() {
                 ...(search && { search })
             });
 
-            // api.get automatically unwraps response.data
             const response = await api.get<ApiResponseShape>(`/profile/audit-logs?${queryParams.toString()}`);
 
             setLogs(response.logs || []);
@@ -95,13 +92,11 @@ export default function SecurityActivityPage() {
         }
     };
 
-    // Refetch when page, category, or search filters change
     useEffect(() => {
         fetchLogs(false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, category]);
 
-    // Handle search submit
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setPage(1);
@@ -172,7 +167,7 @@ export default function SecurityActivityPage() {
                     Audit log of the security-relevant events, logins, session changes, and credential updates for your account.
                 </p>
 
-                {/* Filter and Search Bar */}
+                {}
                 <div className="grid gap-4 md:grid-cols-12 mb-6">
                     <form onSubmit={handleSearchSubmit} className="relative md:col-span-7 flex">
                         <input
@@ -259,7 +254,7 @@ export default function SecurityActivityPage() {
                             </table>
                         </div>
 
-                        {/* Pagination controls */}
+                        {}
                         {pagination && pagination.totalPages > 1 && (
                             <div className="flex items-center justify-between pt-4 border-t border-white/5">
                                 <div className="text-xs text-slate-400">

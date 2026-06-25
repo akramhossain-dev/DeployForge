@@ -37,7 +37,6 @@ export const useToastStore = create<ToastState>((set) => ({
         const newToast = { ...toast, id };
         set((state) => ({ toasts: [...state.toasts, newToast] }));
         
-        // Auto-remove toast
         const duration = toast.duration !== undefined ? toast.duration : 6000;
         if (duration > 0) {
             setTimeout(() => {

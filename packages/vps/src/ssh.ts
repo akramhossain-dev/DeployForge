@@ -32,9 +32,9 @@ interface PooledConnection {
 }
 
 export class SSHService {
-    // Static connection pool shared across all SSHService instances
+    
     private static pool = new Map<string, PooledConnection>();
-    private static IDLE_TIMEOUT_MS = 60000; // 60 seconds idle timeout
+    private static IDLE_TIMEOUT_MS = 60000; 
 
     private client: Client | null = null;
     private poolKey: string | null = null;
@@ -45,13 +45,13 @@ export class SSHService {
         const hostStr = config.host.trim();
         const portNum = config.port || 22;
         const userStr = config.username || 'root';
-        // Unique key for the host connection configuration
+        
         const key = `${hostStr}:${portNum}:${userStr}:${config.privateKey ? 'key' : 'password'}`;
 
         let pooled = SSHService.pool.get(key);
 
         if (pooled) {
-            // Cancel any pending idle timeout
+            
             if (pooled.idleTimeout) {
                 clearTimeout(pooled.idleTimeout);
                 pooled.idleTimeout = undefined;
@@ -200,7 +200,7 @@ export class SSHService {
             conn.refCount--;
             if (conn.refCount <= 0) {
                 conn.refCount = 0;
-                // Start idle timeout to disconnect the client if not used within the threshold
+                
                 if (!conn.idleTimeout) {
                     conn.idleTimeout = setTimeout(() => {
                         conn.client.end();

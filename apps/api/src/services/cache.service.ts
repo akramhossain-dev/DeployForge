@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import { createCacheConnection } from '../utils/redis';
 
 export class CacheService {
-    // H-4: Use shared Redis factory — avoids creating a separate connection pool
+    
     private static redis = config.redis.enabled ? createCacheConnection() : null;
     private static memory = new Map<string, { value: string; expiresAt: number | null }>();
 
@@ -65,8 +65,6 @@ export class CacheService {
         this.memory.delete(key);
     }
 
-    // H-5: Use SCAN instead of KEYS — KEYS is O(N) and blocks Redis during keyspace iteration.
-    // SCAN iterates in batches without blocking, safe for large production keyspaces.
     static async clearPattern(pattern: string) {
         if (this.redis) {
             try {
@@ -79,7 +77,7 @@ export class CacheService {
                 } while (cursor !== '0');
 
                 if (keys.length > 0) {
-                    // DEL accepts multiple keys — batch in chunks of 500 to avoid huge commands
+                    
                     for (let i = 0; i < keys.length; i += 500) {
                         await this.redis.del(...keys.slice(i, i + 500));
                     }
@@ -96,10 +94,6 @@ export class CacheService {
         }
     }
 
-    /**
-     * Acquires a distributed lock using Redis.
-     * Returns a function to release the lock if successful, or null if the lock is already held.
-     */
     static async acquireLock(key: string, ttlMs: number = 30000): Promise<(() => Promise<void>) | null> {
         const lockKey = `lock:${key}`;
 
@@ -107,7 +101,6 @@ export class CacheService {
             try {
                 const lockValue = crypto.randomUUID();
                 
-                // SET key value PX ttlMs NX
                 const result = await this.redis.set(lockKey, lockValue, 'PX', ttlMs, 'NX');
                 if (result !== 'OK') {
                     return null;
@@ -147,4 +140,3 @@ export class CacheService {
         };
     }
 }
-

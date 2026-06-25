@@ -30,8 +30,6 @@ export class FileManagerError extends Error {
     }
 }
 
-// ─── MIME types ────────────────────────────────────────────────────────────────
-
 function getMimeType(name: string): string {
     const ext = path.extname(name).toLowerCase().slice(1);
     const map: Record<string, string> = {
@@ -68,23 +66,17 @@ function isImageFile(name: string): boolean {
     return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp'].includes(ext);
 }
 
-// ─── Path safety ───────────────────────────────────────────────────────────────
-// We ONLY block traversal sequences. The root is `/` — full VPS access.
-// Never allow path to escape to `..` tricks.
-
 export function safePath(clientPath: string): string {
-    // Normalize: remove null bytes, collapse slashes, strip traversal
+    
     let p = clientPath
-        .replace(/\0/g, '')           // null bytes
-        .replace(/\.\.\//g, '')       // ../
-        .replace(/\/\.\./g, '')       // /..
-        .replace(/^\.\.$/g, '')       // standalone ..
-        .replace(/\/\/+/g, '/');      // double slashes
+        .replace(/\0/g, '')           
+        .replace(/\.\.\//g, '')       
+        .replace(/\/\.\./g, '')       
+        .replace(/^\.\.$/g, '')       
+        .replace(/\/\/+/g, '/');      
 
-    // Always absolute
     if (!p.startsWith('/') && !p.startsWith('~')) p = '/' + p;
 
-    // Collapse again after modifications
     return p.replace(/\/\/+/g, '/') || '/';
 }
 
@@ -102,8 +94,6 @@ export async function resolvePath(ssh: SSHService, clientPath: string): Promise<
     return safePath(clientPath);
 }
 
-// ─── VPS connection helper ─────────────────────────────────────────────────────
-
 async function connectToVps(userId: string, vpsId: string): Promise<{ ssh: SSHService; vps: any }> {
     const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
     if (!vps) throw new FileManagerError('VPS not found or access denied', 'VPS_NOT_FOUND', 404);
@@ -117,8 +107,6 @@ async function connectToVps(userId: string, vpsId: string): Promise<{ ssh: SSHSe
     });
     return { ssh, vps };
 }
-
-// ─── Service ───────────────────────────────────────────────────────────────────
 
 export class FileManagerService {
 
@@ -460,4 +448,3 @@ export class FileManagerService {
         return vps;
     }
 }
-

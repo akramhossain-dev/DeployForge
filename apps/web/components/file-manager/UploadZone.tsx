@@ -17,7 +17,7 @@ interface UploadZoneProps {
     onClose: () => void;
 }
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; 
 
 export function UploadZone({ vpsId, currentPath, onClose }: UploadZoneProps) {
     const [items, setItems] = useState<UploadItem[]>([]);
@@ -69,7 +69,7 @@ export function UploadZone({ vpsId, currentPath, onClose }: UploadZoneProps) {
 
     return (
         <div className="flex flex-col gap-4">
-            {/* Drop zone */}
+            {}
             <div
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
@@ -99,7 +99,7 @@ export function UploadZone({ vpsId, currentPath, onClose }: UploadZoneProps) {
                 />
             </div>
 
-            {/* File list */}
+            {}
             {items.length > 0 && (
                 <div className="max-h-56 space-y-1.5 overflow-y-auto terminal-scrollbar">
                     {items.map((item, idx) => (
@@ -134,7 +134,7 @@ export function UploadZone({ vpsId, currentPath, onClose }: UploadZoneProps) {
                 </div>
             )}
 
-            {/* Actions */}
+            {}
             <div className="flex justify-end gap-2">
                 <button
                     onClick={onClose}

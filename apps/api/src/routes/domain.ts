@@ -25,9 +25,8 @@ const verifyDnsQuerySchema = z.object({
 export default async function domainRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    // 1. Attach Domain
     fastify.post('/attach', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
             const { deploymentId, domainName } = attachDomainSchema.parse(request.body);
@@ -46,9 +45,8 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // 2. Issue SSL
     fastify.post('/ssl/issue/:domainId', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { domainId } = sslIssueParamsSchema.parse(request.params);
         await verifyDomainOwnership(request.user.id, domainId, request);
@@ -56,7 +54,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         return { success: true, data: { message: 'SSL issuance triggered' } };
     });
 
-    // 3. List Domains
     fastify.get('/list', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -68,7 +65,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         return { success: true, data: domains.map(sanitizeDomain).filter(Boolean) };
     });
 
-    // 4. Verify DNS Status
     fastify.get('/verify-dns/:domainName', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {

@@ -243,7 +243,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         const { id } = idParamsSchema.parse(request.params);
         const { role } = z.object({ role: z.enum(['ADMIN', 'MODERATOR', 'USER']) }).parse(request.body);
 
-        // 1. Try to find the user in the AdminUser table
         const adminUser = await prisma.adminUser.findUnique({ where: { id } });
         if (adminUser) {
             if (adminUser.role === 'SUPER_ADMIN') {
@@ -251,8 +250,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             }
 
             if (role === 'USER') {
-                // Demote ADMIN/MODERATOR -> USER
-                // Ensure they have a record in the User table
+                
                 let userRecord = await prisma.user.findUnique({ where: { email: adminUser.email } });
                 if (!userRecord) {
                     userRecord = await prisma.user.create({
@@ -271,7 +269,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     });
                 }
 
-                // Delete admin-specific records
                 await prisma.adminSession.deleteMany({ where: { adminId: id } });
                 await prisma.adminActivity.deleteMany({ where: { adminId: id } });
                 await prisma.adminUser.delete({ where: { id } });
@@ -279,14 +276,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 await audit(request, 'DEMOTE_ADMIN_TO_USER', { targetUserId: userRecord.id, targetRole: 'USER', targetType: 'USER', targetId: userRecord.id });
                 return { success: true, data: { id: userRecord.id, email: userRecord.email, role: 'USER' } };
             } else {
-                // Update role in AdminUser table
+                
                 const updatedAdmin = await prisma.adminUser.update({
                     where: { id },
                     data: { role },
                     select: { id: true, email: true, role: true, name: true, updatedAt: true }
                 });
 
-                // Also update User table role if they exist there
                 const userRecord = await prisma.user.findUnique({ where: { email: adminUser.email } });
                 if (userRecord) {
                     await prisma.user.update({
@@ -300,7 +296,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             }
         }
 
-        // 2. Try to find the user in the regular User table
         const regularUser = await prisma.user.findUnique({ where: { id } });
         if (regularUser) {
             if (role === 'USER') {
@@ -313,7 +308,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
             const email = regularUser.email;
 
-            // Promote USER -> ADMIN/MODERATOR
             let adminRecord = await prisma.adminUser.findUnique({ where: { email } });
             if (!adminRecord) {
                 const passwordHash = regularUser.passwordHash || await PasswordService.hash(crypto.randomBytes(16).toString('hex'));
@@ -333,7 +327,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 });
             }
 
-            // Update role in User table
             await prisma.user.update({
                 where: { id },
                 data: { role }

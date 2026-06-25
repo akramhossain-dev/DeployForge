@@ -1,13 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-/**
- * M-2: Decodes a JWT payload without verifying the signature.
- * We cannot verify the signature in Edge middleware (no access to the secret),
- * but we CAN check the `exp` claim to catch obviously expired tokens and
- * clear stale cookies rather than letting users sit on dead sessions.
- * The API enforces full cryptographic verification on every request.
- */
 function isTokenExpired(token: string): boolean {
     try {
         const [, payloadB64] = token.split('.');
@@ -16,7 +9,7 @@ function isTokenExpired(token: string): boolean {
         );
         return typeof payload.exp === 'number' && payload.exp < Math.floor(Date.now() / 1000);
     } catch {
-        // Malformed token — treat as expired
+        
         return true;
     }
 }
@@ -35,18 +28,16 @@ function clearAdminCookies(response: NextResponse): NextResponse {
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // 1. Admin routes - protect all /admin/* pages except login
     if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
         const adminToken = request.cookies.get('adminAccessToken')?.value;
         if (!adminToken || isTokenExpired(adminToken)) {
             const redirect = NextResponse.redirect(new URL('/admin/login', request.url));
-            // Clear expired token cookie so it doesn't loop
+            
             if (adminToken) clearAdminCookies(redirect);
             return redirect;
         }
     }
 
-    // 2. Admin login page - redirect to admin dashboard if already logged in
     if (pathname === '/admin/login') {
         const adminToken = request.cookies.get('adminAccessToken')?.value;
         if (adminToken && !isTokenExpired(adminToken)) {
@@ -54,7 +45,6 @@ export function middleware(request: NextRequest) {
         }
     }
 
-    // 3. User protected routes
     const userProtectedPaths = [
         '/dashboard',
         '/deployments',
@@ -74,12 +64,11 @@ export function middleware(request: NextRequest) {
 
         if (!accessValid && !hasRefresh) {
             const redirect = NextResponse.redirect(new URL('/login', request.url));
-            if (token) clearAuthCookies(redirect); // clear expired access token
+            if (token) clearAuthCookies(redirect); 
             return redirect;
         }
     }
 
-    // 4. Auth pages - redirect to dashboard if already logged in
     const authPages = ['/login', '/register', '/forgot-password', '/reset-password'];
     if (authPages.includes(pathname)) {
         const token = request.cookies.get('accessToken')?.value;
@@ -94,13 +83,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
     matcher: [
-        /*
-         * Match all request paths except for the ones starting with:
-         * - api (API routes)
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         */
+        
         '/((?!api|_next/static|_next/image|favicon.ico).*)',
     ],
 };

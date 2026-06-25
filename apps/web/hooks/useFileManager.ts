@@ -19,8 +19,6 @@ export const fmKeys = {
     search: (vpsId: string, q: string, ext?: string) => ['fm', vpsId, 'search', q, ext ?? ''] as const,
 };
 
-// ─── Queries ──────────────────────────────────────────────────────────────────
-
 export function useDirectoryListing(vpsId: string, path: string, enabled = true) {
     return useQuery({
         queryKey: fmKeys.listing(vpsId, path),
@@ -65,8 +63,6 @@ export function useFileSearch(vpsId: string, rootPath: string, query: string, ex
         retry: false,
     });
 }
-
-// ─── Mutations ────────────────────────────────────────────────────────────────
 
 export function useCreateEntry(vpsId: string) {
     const qc = useQueryClient();
@@ -177,8 +173,6 @@ export function useDecompress(vpsId: string) {
         onError: (e: any) => toast('Decompression Failed', e?.message || 'Failed', 'error'),
     });
 }
-
-// ─── Download helpers ─────────────────────────────────────────────────────────
 
 export async function downloadFile(vpsId: string, clientPath: string): Promise<void> {
     const filename = clientPath.split('/').pop() || 'file';

@@ -43,10 +43,10 @@ const rollbackBodySchema = z.object({
 });
 
 export default async function deployRoutes(fastify: FastifyInstance) {
-    // 1. GitHub Deployment
+    
     fastify.post('/github', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
             const { projectId, repositoryId, vpsId, branch, autoDeploy, domainName, env, mode } = githubDeploySchema.parse(request.body);
@@ -83,7 +83,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
 
     fastify.post('/upload', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
             const upload = await readUploadMultipart(request);
@@ -174,7 +174,6 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // 2. List Deployments
     fastify.get('/list', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
@@ -195,7 +194,6 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         return { success: true, data: deployments.map(formatDeploymentResponse).filter(Boolean) };
     });
 
-    // 3. Get Logs
     fastify.get('/:id/logs', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
@@ -208,7 +206,6 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         return { success: true, data: logs };
     });
 
-    // WebSocket logs stream
     fastify.get('/:id/logs/stream', { websocket: true }, async (connection, request) => {
         let id: string;
         let token: string;
@@ -278,7 +275,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
 
     fastify.post('/rollback/:id', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
             const { id } = idParamsSchema.parse(request.params);
@@ -291,10 +288,9 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // 4. Start/Stop
     fastify.post('/:id/stop', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
             const { id } = idParamsSchema.parse(request.params);
@@ -308,7 +304,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
 
     fastify.post('/:id/start', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
             const { id } = idParamsSchema.parse(request.params);
@@ -358,7 +354,7 @@ async function readUploadMultipart(request: any) {
             try {
                 await fs.promises.rm(createdUploadDir, { recursive: true, force: true });
             } catch (rmErr) {
-                // ignore
+                
             }
         }
         throw err;

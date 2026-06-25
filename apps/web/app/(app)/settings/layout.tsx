@@ -54,7 +54,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
             />
 
             <div className="flex flex-col gap-6 lg:flex-row">
-                {/* Settings Sidebar Navigation */}
+                {}
                 <aside className="w-full shrink-0 lg:w-64">
                     <nav className="flex flex-row flex-wrap gap-1 rounded-lg border border-white/5 bg-slate-950/20 p-1 lg:flex-col lg:p-2">
                         {navItems.map((item) => (
@@ -76,7 +76,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
                     </nav>
                 </aside>
 
-                {/* Subpage Contents */}
+                {}
                 <main className="flex-1 space-y-6">
                     {children}
                 </main>

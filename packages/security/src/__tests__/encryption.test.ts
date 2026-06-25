@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EncryptionService } from '../encryption';
 
 describe('EncryptionService', () => {
-    // 32-byte hex key (64 hex characters)
+    
     const validKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     const invalidKeyShort = '0123456789abcdef';
 

@@ -36,13 +36,11 @@ export default function RegisterPage() {
     const [error, setError] = useState<string | null>(null);
     const [verified, setVerified] = useState(false);
 
-    // Field-level error states
     const [nameError, setNameError] = useState<string | null>(null);
     const [emailError, setEmailError] = useState<string | null>(null);
     const [passwordError, setPasswordError] = useState<string | null>(null);
     const [termsError, setTermsError] = useState<string | null>(null);
 
-    // Refs for focus management
     const nameRef = useRef<HTMLInputElement>(null);
     const emailRef = useRef<HTMLInputElement>(null);
     const passwordRef = useRef<HTMLInputElement>(null);

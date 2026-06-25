@@ -2,10 +2,6 @@ import prisma from '@deployforge/database';
 import { AccountService } from '../services/account.service';
 import { FastifyRequest } from 'fastify';
 
-/**
- * Verifies that the deployment exists and belongs to the requesting user.
- * Throws 403 if owned by someone else, 404 if not found.
- */
 export async function verifyDeploymentOwnership(userId: string, deploymentId: string, request?: FastifyRequest) {
     const deployment = await prisma.deployment.findFirst({
         where: {
@@ -48,10 +44,6 @@ export async function verifyDeploymentOwnership(userId: string, deploymentId: st
     return deployment;
 }
 
-/**
- * Verifies that the VPS exists and belongs to the requesting user.
- * Throws 403 if owned by someone else, 404 if not found.
- */
 export async function verifyVpsOwnership(userId: string, vpsId: string, request?: FastifyRequest) {
     const vps = await prisma.vPS.findFirst({
         where: {
@@ -94,10 +86,6 @@ export async function verifyVpsOwnership(userId: string, vpsId: string, request?
     return vps;
 }
 
-/**
- * Verifies that the Domain exists and belongs to the requesting user via its deployment and VPS.
- * Throws 403 if owned by someone else, 404 if not found.
- */
 export async function verifyDomainOwnership(userId: string, domainId: string, request?: FastifyRequest) {
     const domain = await prisma.domain.findFirst({
         where: {
@@ -143,19 +131,13 @@ export async function verifyDomainOwnership(userId: string, domainId: string, re
         throw err;
     }
 
-    // Verify deployment ownership
     await verifyDeploymentOwnership(userId, domain.deploymentId, request);
 
-    // Verify VPS ownership
     await verifyVpsOwnership(userId, domain.vpsId, request);
 
     return domain;
 }
 
-/**
- * Verifies that the Sandbox result exists and belongs to the requesting user via its deployment.
- * Throws 403 if owned by someone else, 404 if not found.
- */
 export async function verifySandboxOwnership(userId: string, deploymentId: string, request?: FastifyRequest) {
     const sandbox = await prisma.deploymentSandbox.findFirst({
         where: {
@@ -195,7 +177,6 @@ export async function verifySandboxOwnership(userId: string, deploymentId: strin
             throw err;
         }
 
-        // Verify deployment ownership to check if the user has permission for this deployment
         await verifyDeploymentOwnership(userId, deploymentId, request);
 
         const err = new Error('Sandbox result not found') as any;

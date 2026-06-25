@@ -37,7 +37,6 @@ export function ContextMenu({ x, y, onClose, items }: ContextMenuProps) {
         };
     }, [onClose]);
 
-    // Adjust position to keep menu in viewport
     const style: React.CSSProperties = {
         position: 'fixed',
         top: Math.min(y, window.innerHeight - 320),

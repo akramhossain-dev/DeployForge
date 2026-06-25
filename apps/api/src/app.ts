@@ -15,7 +15,7 @@ const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
 const probePaths = new Set(['/health', '/live', '/liveness', '/ready', '/readiness', '/metrics']);
 
 const app = Fastify({
-    bodyLimit: 1024 * 1024, // API-5: Global body limit of 1MB for JSON/Form requests
+    bodyLimit: 1024 * 1024, 
     trustProxy: true,
     genReqId: (req) => {
         return (req.headers['x-request-id'] as string) || randomUUID();
@@ -32,22 +32,18 @@ const app = Fastify({
     },
 });
 
-
 import prisma from '@deployforge/database';
 import { deploymentEventEmitter, DEPLOYMENT_EVENTS } from './utils/deployment-events';
 
 export async function buildApp() {
     validateOAuthConfig(app.log);
 
-    // M-4: Transparent encryption of Deployment.env and DeploymentHistory.env
-    // Encrypts env vars before they hit the DB; decrypts on read.
-    // This covers ALL callers without touching individual service files.
     const encryptionService = new EncryptionService(config.encryption.key);
     const ENV_MODELS = new Set(['Deployment', 'DeploymentHistory']);
     const WRITE_ACTIONS = new Set(['create', 'update', 'upsert', 'createMany', 'updateMany']);
 
     prisma.$use(async (params, next) => {
-        // Encrypt env on writes
+        
         if (params.model && ENV_MODELS.has(params.model) && WRITE_ACTIONS.has(params.action)) {
             const data = params.args?.data;
             if (data && typeof data.env === 'string' && data.env) {
@@ -57,17 +53,15 @@ export async function buildApp() {
 
         const result = await next(params);
 
-        // Decrypt env on reads
         if (params.model && ENV_MODELS.has(params.model) && result) {
             const decrypt = (record: any) => {
                 if (record && typeof record.env === 'string' && record.env) {
-                    try { record.env = encryptionService.decrypt(record.env); } catch { /* already plaintext (legacy) */ }
+                    try { record.env = encryptionService.decrypt(record.env); } catch {  }
                 }
             };
             Array.isArray(result) ? result.forEach(decrypt) : decrypt(result);
         }
 
-        // Emit deployment events
         if (params.model === 'DeploymentLog' && params.action === 'create') {
             if (result) deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.LOG_ADDED, result.deploymentId, result);
         } else if (params.model === 'Deployment' && (params.action === 'update' || params.action === 'upsert' || params.action === 'create')) {
@@ -87,9 +81,6 @@ export async function buildApp() {
         }
     });
 
-    // M-5: Removed the raw.url rewriter — it mutated request.raw.url AFTER Fastify's router
-    // had already matched the route, so it never affected routing. Only side effect was setting
-    // the Permissions-Policy header, which is now done in the onResponse hook below.
     app.addHook('onRequest', async (_request, reply) => {
         reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
     });
@@ -118,7 +109,6 @@ export async function buildApp() {
         return payload;
     });
 
-
     app.addHook('preValidation', async (request, reply) => {
         const unsafeKeys = new Set(['__proto__', 'prototype', 'constructor']);
         const checkPayload = (value: unknown, depth = 0): boolean => {
@@ -142,7 +132,6 @@ export async function buildApp() {
         }
     });
 
-    // Security Plugins
     await app.register(helmet, {
         contentSecurityPolicy: {
             directives: {
@@ -203,7 +192,7 @@ export async function buildApp() {
 
     await app.register(multipart, {
         limits: {
-            fileSize: 250 * 1024 * 1024, // Multipart limits are preserved as requested
+            fileSize: 250 * 1024 * 1024, 
             files: 1,
             fields: 20,
         },
@@ -211,18 +200,15 @@ export async function buildApp() {
 
     await app.register(import('@fastify/websocket'));
 
-    // Custom Plugins
     await app.register(import('./plugins/auth'));
     await app.register(import('./plugins/csrf'));
 
-    // Global Error Handler conforming to API Standardization format
     app.setErrorHandler((error, request, reply) => {
         const isValidationError = error instanceof ZodError;
         let statusCode = isValidationError ? 400 : error.statusCode || 500;
         let message = error.message || 'Request failed';
         let code = (error as any).errorCode || (error as any).code || 'INTERNAL_ERROR';
 
-        // Handle Prisma errors
         const isPrismaError = (error as any).code?.startsWith('P') || error.constructor?.name?.includes('Prisma');
         if (isPrismaError) {
             const prismaCode = (error as any).code;
@@ -246,7 +232,6 @@ export async function buildApp() {
             }
         }
 
-        // Map known application errors to appropriate status codes and clean messages
         if (!isValidationError && !isPrismaError) {
             const lowerMessage = message.toLowerCase();
             if (message === 'User already exists') {
@@ -329,7 +314,6 @@ export async function buildApp() {
             else if (finalStatusCode === 429) code = 'RATE_LIMITED';
         }
 
-        // Log suspicious requests, malformed payloads and validation failures
         if (finalStatusCode === 400) {
             request.log.warn({ ip: request.ip, path: request.url, err: error }, 'Bad Request / Validation Failure');
         } else if (finalStatusCode === 401 || finalStatusCode === 403) {
@@ -340,7 +324,6 @@ export async function buildApp() {
             request.log.error(error);
         }
 
-
         reply.status(finalStatusCode).send({
             success: false,
             error: {
@@ -350,7 +333,6 @@ export async function buildApp() {
         });
     });
 
-    // API-1: Registered all routes cleanly with standard structure and no duplicates
     await app.register(import('./routes/auth'), { prefix: '/auth' });
     await app.register(import('./routes/profile'), { prefix: '/profile' });
     await app.register(import('./routes/sessions'), { prefix: '/sessions' });

@@ -21,7 +21,6 @@ export default function SettingsPage() {
     const [isConnecting, setIsConnecting] = useState(false);
     const [isSendingVerification, setIsSendingVerification] = useState(false);
 
-    // Profile fields
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
@@ -40,7 +39,6 @@ export default function SettingsPage() {
         }
     }, [auth.user]);
 
-    // Automatically refresh user state after successful connect
     useEffect(() => {
         if (githubStatus === 'connected') {
             queryClient.invalidateQueries({ queryKey: queryKeys.githubProfile });
@@ -93,7 +91,6 @@ export default function SettingsPage() {
         }
     };
 
-    // Map the error type to a detailed human-readable explanation
     let errorTitle = 'GitHub OAuth failed';
     let errorMessage = 'GitHub returned to DeployForge, but the OAuth callback could not complete. Check the API logs for the exact GitHub error.';
 
@@ -126,7 +123,7 @@ export default function SettingsPage() {
 
     return (
         <div className="space-y-6">
-            {/* Email Verification banner */}
+            {}
             {auth.user && !auth.user.isVerified && (
                 <div className="flex flex-col gap-4 p-4 rounded-lg border border-amber-500/30 bg-amber-950/20 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-start gap-3">
@@ -149,7 +146,7 @@ export default function SettingsPage() {
                 </div>
             )}
 
-            {/* Profile details form */}
+            {}
             <Panel>
                 <h3 className="mb-4 font-bold text-white">General Settings</h3>
                 <form onSubmit={handleSaveProfile} className="space-y-4">

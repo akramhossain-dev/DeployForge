@@ -34,7 +34,6 @@ export function sanitizeDeployment(deployment: any) {
     if (!deployment) return null;
     const sanitized = { ...deployment };
     
-    // Remove sensitive fields
     delete sanitized.githubAccessToken;
     delete sanitized.githubToken;
     delete sanitized.sshKey;
@@ -45,7 +44,7 @@ export function sanitizeDeployment(deployment: any) {
     delete sanitized.envSecrets;
     delete sanitized.encryptedCredentials;
     delete sanitized.privateMetadata;
-    delete sanitized.env; // Ensure raw env containing secrets is not leaked
+    delete sanitized.env; 
 
     if (sanitized.vps) {
         sanitized.vps = sanitizeVps(sanitized.vps);
@@ -62,7 +61,6 @@ export function sanitizeDeployment(deployment: any) {
         sanitized.project = proj;
     }
 
-    // Include friendly preview properties
     if (deployment.env) {
         sanitized.envPreview = DeploymentService.envPreview(deployment.env);
     }

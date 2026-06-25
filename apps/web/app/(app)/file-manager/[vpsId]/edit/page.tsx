@@ -25,11 +25,10 @@ export default function FileEditPage({ params }: EditPageProps) {
         retry: false,
     });
 
-    // Extract filename from path
     const fileName = filePath ? filePath.split('/').pop() || '' : '';
 
     const handleClose = () => {
-        // Navigate back to the parent directory or file manager listing page
+        
         if (filePath) {
             const parentDir = filePath.substring(0, filePath.lastIndexOf('/')) || '/';
             router.push(`/file-manager/${vpsId}?path=${encodeURIComponent(parentDir)}`);
@@ -78,7 +77,6 @@ export default function FileEditPage({ params }: EditPageProps) {
         );
     }
 
-    // Construct a minimal FileEntry for the editor
     const mockFileEntry: FileEntry = {
         name: fileName,
         path: filePath,
@@ -92,7 +90,7 @@ export default function FileEditPage({ params }: EditPageProps) {
 
     return (
         <div className="flex h-full flex-col gap-0 overflow-hidden bg-slate-950">
-            {/* Full-width Edge-to-Edge Editor */}
+            {}
             <div className="flex min-h-0 flex-1">
                 <CodeEditor
                     vpsId={vpsId}

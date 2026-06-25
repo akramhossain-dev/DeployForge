@@ -39,12 +39,10 @@ function GithubDeployForm() {
     const vps = useVpsList();
     const deploy = useCreateGithubDeployment();
 
-    // Ref hooks for focus management
     const repositoryRef = useRef<HTMLSelectElement>(null);
     const vpsRef = useRef<HTMLSelectElement>(null);
     const branchRef = useRef<HTMLSelectElement>(null);
 
-    // Error state
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     const [repositoryId, setRepositoryId] = useState('');
@@ -121,7 +119,7 @@ function GithubDeployForm() {
             });
             router.push(`/deployments/${deployment.id}`);
         } catch (err) {
-            // Error handled by query/mutation helper
+            
         }
     }
 
@@ -258,11 +256,9 @@ function UploadDeployForm() {
     const vps = useVpsList();
     const deploy = useCreateUploadDeployment();
 
-    // Ref hooks for focus management
     const vpsRef = useRef<HTMLSelectElement>(null);
     const projectNameRef = useRef<HTMLInputElement>(null);
 
-    // Error state
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     const [file, setFile] = useState<File | null>(null);
@@ -335,7 +331,7 @@ function UploadDeployForm() {
             });
             router.push(`/deployments/${deployment.id}`);
         } catch (err) {
-            // Error handled by query/mutation helper
+            
         }
     }
 

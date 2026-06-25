@@ -77,10 +77,9 @@ export class AuthService {
             data: activeSession,
         });
 
-        // Warm Redis cache
         const cacheKey = `user-session:${user.id}:${sessionId}`;
         const { passwordHash, ...safeUser } = user;
-        const ttlSeconds = 7 * 24 * 60 * 60; // 7 days
+        const ttlSeconds = 7 * 24 * 60 * 60; 
         await CacheService.set(cacheKey, { activeSession, user: safeUser }, ttlSeconds);
 
         return { user, accessToken, refreshToken };
@@ -116,20 +115,10 @@ export class AuthService {
         return { user: { id: user.id, email: user.email, name: user.name } };
     }
 
-    /**
-     * Generates a secure 6-digit OTP, stores it hashed with expiry,
-     * and sends it via SMTP email.
-     *
-     * Security:
-     * - OTP is stored as SHA-256 hash (never plaintext)
-     * - OTP expires in 10 minutes
-     * - OTP is NEVER returned in the API response
-     * - SMTP errors are caught and logged internally
-     */
     static async sendOTP(email: string) {
         const otp = crypto.randomInt(100000, 1000000).toString();
         const hashedOTP = sha256(otp);
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); 
 
         await prisma.verificationToken.upsert({
             where: { email },
@@ -216,7 +205,6 @@ export class AuthService {
     static async refresh(refreshToken: string) {
         const hashedToken = refreshTokenHash(refreshToken);
 
-        // Check if this token was previously rotated (replay attack detection)
         const replayedToken = await prisma.refreshTokenReplay.findUnique({ where: { tokenHash: hashedToken } });
         if (replayedToken && new Date() <= replayedToken.expiresAt) {
             const userId = replayedToken.userId;
@@ -239,7 +227,6 @@ export class AuthService {
             throw publicError('Invalid refresh token', 401);
         }
 
-        // Generate a new refresh token and extend the expiration date
         const newRefreshToken = crypto.randomBytes(40).toString('hex');
         const hashedNewRefreshToken = refreshTokenHash(newRefreshToken);
         const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

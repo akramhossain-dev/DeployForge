@@ -160,7 +160,7 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
 
     fastify.delete('/:id', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive route: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
             const { id } = vpsParamsSchema.parse(request.params);

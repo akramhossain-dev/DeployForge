@@ -14,10 +14,9 @@ describe('TokenService', () => {
         
         const decoded = service.verifyToken(token);
         expect(decoded).toMatchObject(payload);
-        // Should contain expiration fields
+        
         expect(decoded.exp).toBeDefined();
     });
-
 
     it('should throw an error for expired or invalid tokens', () => {
         const service = new TokenService(secret);

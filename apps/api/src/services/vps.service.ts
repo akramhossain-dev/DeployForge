@@ -296,10 +296,9 @@ export class VPSService {
     }
 
     static startScheduledHealthChecks() {
-        // Run health check on startup for all active VPS
+        
         this.runAllHealthChecks().catch(() => undefined);
 
-        // Run every 5 minutes
         setInterval(() => {
             this.runAllHealthChecks().catch(() => undefined);
         }, 5 * 60 * 1000);

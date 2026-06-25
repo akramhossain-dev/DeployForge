@@ -32,7 +32,6 @@ import {
     DeploymentMode
 } from './deployment/types';
 
-// Re-export public types for backward compatibility
 export {
     DeploymentError,
     DeploymentSource,
@@ -232,10 +231,7 @@ export class DeploymentService {
 
             if (source.type === 'github_repo') {
                 await GitHubDeploymentService.prepareGithubSource(ssh, deploymentId, source, project.repositoryUrl, workDir);
-                // ✅ Advance to BUILDING immediately after clone completes.
-                //    Previously setStatus('BUILDING') was only called after the
-                //    entire caching + dep-install phase, leaving the UI stuck
-                //    at CLONING for the full duration of that work.
+                
                 await this.setStatus(deploymentId, 'BUILDING');
             } else {
                 await this.setStatus(deploymentId, 'EXTRACTING');
@@ -257,7 +253,6 @@ export class DeploymentService {
                 },
             });
 
-            // ------------------ CACHING SYSTEM START ------------------
             let lockfileHash = 'nolock';
             const hashTarget = detected.lockfile || 'package.json';
             const checkTargetCmd = `if [ -f ${shellQuote(`${workDir}/${hashTarget}`)} ]; then if command -v sha256sum >/dev/null 2>&1; then sha256sum ${shellQuote(`${workDir}/${hashTarget}`)} | awk '{print $1}'; else md5sum ${shellQuote(`${workDir}/${hashTarget}`)} | awk '{print $1}'; fi; else echo "missing"; fi`;
@@ -282,7 +277,6 @@ export class DeploymentService {
             const buildCacheKey = crypto.createHash('sha256').update(`${sourceHash}-${lockfileHash}`).digest('hex');
             const cacheDir = `${baseDir}/cache`;
 
-            // Check Build Cache Hit
             let buildCacheHit = false;
             if (detected.deploymentType === 'STATIC') {
                 const checkStaticBuildCmd = `[ -f ${shellQuote(`${cacheDir}/builds/${buildCacheKey}/static/index.html`)} ]`;
@@ -299,7 +293,6 @@ export class DeploymentService {
             } else {
                 await LoggingService.log(deploymentId, `[CACHE_MISS_BUILD] No build cache found for key ${buildCacheKey}`, 'build');
 
-                // Check Dependency Cache Hit
                 let depCacheHit = false;
                 if (lockfileHash !== 'nolock') {
                     const checkDepCmd = `[ -d ${shellQuote(`${cacheDir}/dependencies/${lockfileHash}/node_modules`)} ]`;
@@ -330,14 +323,12 @@ export class DeploymentService {
                     await LoggingService.log(deploymentId, 'No package.json or lockfile found; skipping dependency cache', 'build');
                 }
             }
-            // ------------------ CACHING SYSTEM END ------------------
-
+            
             await LoggingService.log(deploymentId, 'Analysing project and preparing build environment...', 'build');
             const hasEnv = await EnvironmentService.injectEnvironment(ssh, deploymentId, workDir, deployment.env);
-            // (status is already BUILDING — set right after clone/extract above)
-
+            
             if (hasEnv) {
-                // Temporarily copy the secure environment variables file to the project build context
+                
                 const envTarget = detected.framework === ('DOCKER_COMPOSE' as any) ? '.env' : '.env.deployforge';
                 await runCommand(ssh, deploymentId, 'system', `cp ${shellQuote(EnvironmentService.getEnvPath(deploymentId))} ${shellQuote(`${workDir}/${envTarget}`)}`);
             }
@@ -362,13 +353,11 @@ export class DeploymentService {
                         await this.persistDomainBinding(deploymentId, vps.id, domainName);
                     }
 
-                    // --- SUBPATH ASSET REWRITING ---
                     if (!staticHosting.domainActivated) {
                         await LoggingService.log(deploymentId, `Subpath hosting active. Rewriting assets for subpath /site/${deploymentId}...`, 'build');
                         await this.rewriteStaticAssets(ssh, deploymentId, staticDir, `/site/${deploymentId}`);
                     }
                     
-                    // Static Health Check & Asset Validation with Retry
                     try {
                         await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
                         await ValidationService.validateStaticAssets(ssh, deploymentId, staticHosting, vps, domainName);
@@ -427,7 +416,6 @@ export class DeploymentService {
                             });
                         }
 
-                        // Now verify that the compose ports are free
                         const composeFile = detected.lockfile || 'docker-compose.yml';
                         await this.verifyComposePorts(ssh, deploymentId, workDir, composeFile);
                     }
@@ -476,7 +464,6 @@ export class DeploymentService {
                             await LoggingService.log(deploymentId, `Sandbox direct port mode active at http://${vps.ipAddress}:${port}`, 'system', 'warn');
                         }
 
-                        // Health check with 1 retry
                         try {
                             await ValidationService.healthCheck(ssh, deploymentId, port!);
                         } catch (err) {
@@ -502,7 +489,6 @@ export class DeploymentService {
                             routingAttempted = true;
                             staticHosting = await this.configureStaticHosting(ssh, deploymentId, domainName || vps.ipAddress, staticDir, Boolean(domainName), vps.ipAddress);
                             
-                            // Health check with 1 retry for static fallback
                             try {
                                 await ValidationService.healthCheckStatic(ssh, deploymentId, staticHosting);
                             } catch (staticErr) {
@@ -529,13 +515,12 @@ export class DeploymentService {
                 }
             } finally {
                 if (hasEnv) {
-                    // Always clean up the temporary build context environment file
+                    
                     const envTarget = detected.framework === ('DOCKER_COMPOSE' as any) ? '.env' : '.env.deployforge';
                     await ssh.execute(`rm -f ${shellQuote(`${workDir}/${envTarget}`)}`).catch(() => undefined);
                 }
             }
 
-            // Deployment is SUCCESS
             await prisma.deployment.update({
                 where: { id: deploymentId },
                 data: {
@@ -550,7 +535,6 @@ export class DeploymentService {
                 },
             });
 
-            // Clean up previous active deployment of the same project
             if (!isSandbox) {
                 const previousActiveDeployment = await prisma.deployment.findFirst({
                     where: {
@@ -632,7 +616,6 @@ export class DeploymentService {
         }
         throw new DeploymentError('port_alloc', 'No available ports in range 3000-9000', 'NO_AVAILABLE_PORT');
     }
-
 
     static async stopDeployment(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
@@ -899,7 +882,6 @@ export class DeploymentService {
         return EnvironmentService.envPreview(encryptedEnv);
     }
 
-    // Nginx configuration & VPS helper methods
     private static async configureNginx(ssh: SSHService, deploymentId: string, host: string, port: number, isDomain: boolean) {
         const configPath = `/etc/nginx/conf.d/deployforge-${deploymentId}.conf`;
         const nginxConfig = `server {\n    listen 80;\n    server_name ${host};\n\n    location / {\n        proxy_pass http://127.0.0.1:${port};\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n    }\n}`;

@@ -52,7 +52,6 @@ export default function ProfilePage() {
         }
     };
 
-    // Helper to generate name initials
     const getInitials = () => {
         const displayName = (name || username || 'User').trim();
         const parts = displayName.split(/\s+/).filter(Boolean);
@@ -77,7 +76,7 @@ export default function ProfilePage() {
             <PageHeader title="My Profile" description="View and manage your public profile information." />
 
             <div className="grid gap-6 md:grid-cols-3">
-                {/* Profile Photo Panel */}
+                {}
                 <Panel className="flex flex-col items-center justify-center p-6 text-center md:col-span-1">
                     <h3 className="mb-4 font-bold text-white">Profile Picture</h3>
                     
@@ -109,7 +108,7 @@ export default function ProfilePage() {
                     </div>
                 </Panel>
 
-                {/* Profile Information Panel */}
+                {}
                 <Panel className="md:col-span-2">
                     <h3 className="mb-4 font-bold text-white">Profile Information</h3>
                     

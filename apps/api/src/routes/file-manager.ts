@@ -45,7 +45,6 @@ const dlLimit = { max: 15, timeWindow: '1 minute' };
 
 export default async function fileManagerRoutes(fastify: FastifyInstance) {
 
-    // ── Info ─────────────────────────────────────────────────────────────────
     fastify.get('/:vpsId/info', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: readLimit },
@@ -57,7 +56,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── List directory ────────────────────────────────────────────────────────
     fastify.get('/:vpsId/list', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: readLimit },
@@ -70,7 +68,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Read file ─────────────────────────────────────────────────────────────
     fastify.get('/:vpsId/read', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: readLimit },
@@ -83,7 +80,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Properties ────────────────────────────────────────────────────────────
     fastify.get('/:vpsId/properties', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: readLimit },
@@ -96,7 +92,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Search ────────────────────────────────────────────────────────────────
     fastify.get('/:vpsId/search', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
@@ -109,7 +104,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Download file ─────────────────────────────────────────────────────────
     fastify.get('/:vpsId/download', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: dlLimit },
@@ -122,7 +116,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Download ZIP ──────────────────────────────────────────────────────────
     fastify.get('/:vpsId/download-zip', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: dlLimit },
@@ -135,7 +128,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Create file or folder ─────────────────────────────────────────────────
     fastify.post('/:vpsId/create', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: writeLimit },
@@ -152,10 +144,9 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Save file content ─────────────────────────────────────────────────────
     fastify.put('/:vpsId/save', {
         preHandler: [(fastify as any).authGuard],
-        config: { rateLimit: writeLimit, bodyLimit: 20 * 1024 * 1024 }, // 20MB — matches preview limit
+        config: { rateLimit: writeLimit, bodyLimit: 20 * 1024 * 1024 }, 
     }, async (request, reply) => {
         try {
             const { vpsId } = vpsParam.parse(request.params);
@@ -165,7 +156,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Rename / move ─────────────────────────────────────────────────────────
     fastify.put('/:vpsId/rename', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: writeLimit },
@@ -178,7 +168,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Copy ──────────────────────────────────────────────────────────────────
     fastify.put('/:vpsId/copy', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: writeLimit },
@@ -191,7 +180,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Delete (bulk) ─────────────────────────────────────────────────────────
     fastify.delete('/:vpsId/delete', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: writeLimit },
@@ -211,7 +199,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Upload ────────────────────────────────────────────────────────────────
     fastify.post('/:vpsId/upload', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: uploadLimit, bodyLimit: 50 * 1024 * 1024 },
@@ -235,7 +222,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Compress ──────────────────────────────────────────────────────────────
     fastify.post('/:vpsId/compress', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: writeLimit },
@@ -248,7 +234,6 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
         } catch (e) { return fmError(reply, e); }
     });
 
-    // ── Decompress ────────────────────────────────────────────────────────────
     fastify.post('/:vpsId/decompress', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: writeLimit },

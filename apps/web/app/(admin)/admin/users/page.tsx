@@ -11,7 +11,6 @@ export default function AdminUsersPage() {
     const [status, setStatus] = useState('');
     const [activeTab, setActiveTab] = useState<'platform' | 'admins' | 'moderators'>('platform');
 
-    // Create User Form State
     const [createName, setCreateName] = useState('');
     const [createEmail, setCreateEmail] = useState('');
     const [createPassword, setCreatePassword] = useState('');
@@ -21,7 +20,6 @@ export default function AdminUsersPage() {
 
     const params = useMemo(() => ({ search, status }), [search, status]);
 
-    // Data queries
     const me = useAdminMe();
     const platformUsers = useAdminUsers(params);
     const adminAccounts = useAdminAccounts();
@@ -30,7 +28,6 @@ export default function AdminUsersPage() {
     const isSuperAdmin = me.data?.data?.role === 'SUPER_ADMIN';
     const currentAdminId = me.data?.data?.id;
 
-    // Filter admin accounts based on tab
     const filteredAdmins = useMemo(() => {
         if (!adminAccounts.data) return [];
         const accounts = adminAccounts.data;
@@ -121,12 +118,12 @@ export default function AdminUsersPage() {
         <div className="space-y-6">
             <PageHeader title="User Management" description="Manage platform developers, moderators, administrators, and configure system access roles." />
 
-            {/* Error notifications */}
+            {}
             {platformUsers.isError && <ErrorState message={(platformUsers.error as Error)?.message} onRetry={() => platformUsers.refetch()} />}
             {adminAccounts.isError && <ErrorState message={(adminAccounts.error as Error)?.message} onRetry={() => adminAccounts.refetch()} />}
             {action.isError && <ErrorState title="Admin Action Failed" message={(action.error as Error)?.message} />}
 
-            {/* Super Admin - Create Account Panel */}
+            {}
             {isSuperAdmin && (
                 <Panel className="border-cyan-500/20 bg-cyan-950/5">
                     <div className="flex items-center gap-2 mb-4">
@@ -184,7 +181,7 @@ export default function AdminUsersPage() {
                 </Panel>
             )}
 
-            {/* Tab Navigation */}
+            {}
             <div className="flex border-b border-white/10 bg-slate-950/20 p-1 rounded-lg">
                 <button
                     onClick={() => setActiveTab('platform')}
@@ -212,7 +209,7 @@ export default function AdminUsersPage() {
                 </button>
             </div>
 
-            {/* Platform Users Tab */}
+            {}
             {activeTab === 'platform' && (
                 <div className="space-y-4">
                     <Panel>
@@ -261,7 +258,7 @@ export default function AdminUsersPage() {
                                           </span>,
                                           <span key="joined">{formatDate(user.createdAt)}</span>,
                                           <div key="actions" className="flex flex-wrap gap-2">
-                                              {/* Status Toggles */}
+                                              {}
                                               {user.status === 'ACTIVE' ? (
                                                   <>
                                                       <Button
@@ -286,7 +283,7 @@ export default function AdminUsersPage() {
                                                   </Button>
                                               )}
 
-                                              {/* Role Promotion / Demotion Actions (Super Admin only) */}
+                                              {}
                                               {isSuperAdmin && (
                                                   <>
                                                       {user.role === 'USER' && (
@@ -329,7 +326,7 @@ export default function AdminUsersPage() {
                 </div>
             )}
 
-            {/* Administrators & Moderators Tabs */}
+            {}
             {activeTab !== 'platform' && (
                 <Panel>
                     <AdminTable

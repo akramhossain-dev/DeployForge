@@ -20,7 +20,6 @@ const rollbackBodySchema = z.object({
 export default async function monitoringRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    // 1. Logs
     fastify.get('/logs/:deploymentId', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -30,7 +29,6 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
         return { success: true, data: logs };
     });
 
-    // 2. Metrics
     fastify.get('/metrics/:vpsId', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -40,9 +38,8 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
         return { success: true, data: metrics };
     });
 
-    // 3. Manual Metrics Trigger
     fastify.post('/metrics/:vpsId/collect', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { vpsId } = vpsIdParamsSchema.parse(request.params);
         await verifyVpsOwnership(request.user.id, vpsId, request);
@@ -50,7 +47,6 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
         return { success: true, data: metrics };
     });
 
-    // 4. History
     fastify.get('/history/:deploymentId', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -60,9 +56,8 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
         return { success: true, data: history };
     });
 
-    // 5. Rollback
     fastify.post('/rollback/:deploymentId', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, // Sensitive: 5/min
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { deploymentId } = deploymentIdParamsSchema.parse(request.params);
         const { historyId } = rollbackBodySchema.parse(request.body);

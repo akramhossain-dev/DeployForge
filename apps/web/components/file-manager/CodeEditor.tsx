@@ -15,7 +15,6 @@ interface CodeEditorProps {
     onClose: () => void;
 }
 
-/** Virtualised line-number gutter — only renders lines in the visible viewport. */
 function VirtualLineNumbers({ lineCount, activeLine, lineHeight = 24 }: { lineCount: number; activeLine: number; lineHeight?: number }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [range, setRange] = useState({ start: 0, end: 80 });
@@ -85,7 +84,6 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
         }
     }, [data]);
 
-    // Handle cursor and active line changes
     const updateCursorInfo = useCallback(() => {
         const textarea = textareaRef.current;
         if (!textarea) return;
@@ -100,7 +98,6 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
         });
     }, []);
 
-    // Ctrl+S / Ctrl+F shortcuts
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave(); }
@@ -130,7 +127,6 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
     }, [content]);
     const fileSizeLabel = formatBytes(file.size ?? 0);
 
-    // ── Image preview ────────────────────────────────────────────────────────
     if (data?.encoding === 'base64') {
         return (
             <div className="flex flex-col h-full w-full bg-slate-950">
@@ -175,7 +171,7 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
                 vpsIp={vpsIp}
             />
 
-            {/* Find & Replace Bar */}
+            {}
             {showSearch && (
                 <div className="flex items-center gap-3 border-b border-white/10 bg-slate-900/60 px-4 py-2 font-mono">
                     <Search size={13} className="shrink-0 text-cyan-400" />
@@ -202,9 +198,9 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
                 </div>
             )}
 
-            {/* Editor body */}
+            {}
             <div className="relative flex min-h-0 flex-1 overflow-hidden">
-                {/* Loading overlay */}
+                {}
                 {isLoading && (
                     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/80 backdrop-blur-sm">
                         <Loader2 size={20} className="animate-spin text-cyan-300" />
@@ -215,7 +211,7 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
                     </div>
                 )}
 
-                {/* Error state */}
+                {}
                 {isError && (
                     <div className="flex flex-1 flex-col items-center justify-center gap-4 p-10">
                         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-slate-900">
@@ -231,7 +227,7 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
                     </div>
                 )}
 
-                {/* Editor — virtualized line numbers + textarea */}
+                {}
                 {!isError && !isLoading && (
                     <div className="flex flex-1 overflow-auto font-mono text-[12px] terminal-scrollbar bg-slate-950">
                         <VirtualLineNumbers lineCount={lineCount} activeLine={activeLine} lineHeight={24} />
@@ -256,7 +252,7 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
                 )}
             </div>
 
-            {/* Status bar */}
+            {}
             <div className="flex items-center justify-between border-t border-white/10 bg-slate-950 px-4 py-1.5 text-[10px] text-slate-500 font-mono">
                 <div className="flex items-center gap-4">
                     <span className="text-cyan-400 font-bold">{getLanguage(file.name).toUpperCase()}</span>
@@ -308,7 +304,7 @@ function EditorHeader({
 }) {
     return (
         <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-slate-900/90 px-4 py-2">
-            {/* Left section: navigation + file name + full path */}
+            {}
             <div className="flex items-center gap-3 min-w-0 flex-1">
                 <button
                     onClick={onClose}
@@ -329,7 +325,7 @@ function EditorHeader({
                 </div>
             </div>
 
-            {/* Middle section: VPS details capsule */}
+            {}
             {vpsName && (
                 <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 border border-cyan-400/10 rounded-md bg-cyan-400/[0.02] font-mono text-[9px] text-cyan-400 shrink-0">
                     <Server size={9} />
@@ -338,7 +334,7 @@ function EditorHeader({
                 </div>
             )}
 
-            {/* Right section: Editor controls */}
+            {}
             <div className="flex items-center gap-1.5 ml-4 shrink-0">
                 {!isReadOnly && (
                     <>

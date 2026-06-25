@@ -32,10 +32,8 @@ export default function VpsPage() {
     const [testState, setTestState] = useState<TestState>({ status: 'idle', message: '' });
     const [testingId, setTestingId] = useState<string | null>(null);
 
-    // Local validation errors
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    // Refs for focus management
     const nameRef = useRef<HTMLInputElement>(null);
     const ipRef = useRef<HTMLInputElement>(null);
     const portRef = useRef<HTMLInputElement>(null);

@@ -63,8 +63,7 @@ const rawEnvSchema = z.object({
     SMTP_SECURE: envBoolean(false),
     SMTP_USER: required('SMTP_USER'),
     SMTP_PASS: secret('SMTP_PASS', 1),
-    // SMTP_FROM is optional. Falls back to SMTP_USER if not set.
-    // Accepts plain email ("you@gmail.com") or display-name format ("App Name <you@gmail.com>").
+    
     SMTP_FROM: z.string().trim().optional().default(''),
 
     EMAIL_SERVICE: optional(),
@@ -78,7 +77,7 @@ const rawEnvSchema = z.object({
     ADMIN_LOCKOUT_TIME: z.coerce.number().int().positive().default(900),
     SUPER_ADMIN_EMAIL: z.string().email('SUPER_ADMIN_EMAIL must be a valid email address'),
     SUPER_ADMIN_PASSWORD: z.string().min(8, 'SUPER_ADMIN_PASSWORD must be at least 8 characters'),
-    // Optional bearer token required to access /metrics. If unset, /metrics is open (dev-only).
+    
     METRICS_TOKEN: optional(),
 });
 
@@ -192,7 +191,7 @@ export const securityConfig = {
     rateLimitWindow: env.RATE_LIMIT_WINDOW,
     adminMaxAttempts: env.ADMIN_MAX_ATTEMPTS,
     adminLockoutTime: env.ADMIN_LOCKOUT_TIME,
-    // Set METRICS_TOKEN in production to require Bearer auth on /metrics
+    
     metricsToken: env.METRICS_TOKEN || '',
 } as const;
 

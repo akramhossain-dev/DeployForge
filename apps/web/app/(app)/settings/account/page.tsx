@@ -38,7 +38,6 @@ export default function AccountSettingsPage() {
             });
             addToast({ title: 'Success', description: 'Your DeployForge account has been permanently deleted.', severity: 'success' });
             
-            // Clear auth store state and redirect to landing page
             logout();
             setTimeout(() => {
                 window.location.assign('/');

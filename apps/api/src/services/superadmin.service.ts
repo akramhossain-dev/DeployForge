@@ -20,14 +20,12 @@ export class SuperAdminService {
             if (existingSuperAdmin) {
                 const conflictUser = await prisma.adminUser.findUnique({ where: { email: superAdminEmail } });
                 if (conflictUser && conflictUser.id !== existingSuperAdmin.id) {
-                    // Conflict: another admin user holds the superAdminEmail — remove it.
+                    
                     await prisma.adminSession.deleteMany({ where: { adminId: conflictUser.id } });
                     await prisma.adminActivity.deleteMany({ where: { adminId: conflictUser.id } });
                     await prisma.adminUser.delete({ where: { id: conflictUser.id } });
                 }
 
-                // H-6: Only re-hash if the password has actually changed.
-                // Avoids a full bcrypt hash computation on every server restart (expensive CPU).
                 const passwordUnchanged = await PasswordService.verify(
                     existingSuperAdmin.passwordHash,
                     superAdminPassword,
@@ -47,7 +45,6 @@ export class SuperAdminService {
                 return;
             }
 
-            // No SUPER_ADMIN exists yet — hash once and create/promote.
             const passwordHash = await PasswordService.hash(superAdminPassword);
 
             const userWithEmail = await prisma.adminUser.findUnique({ where: { email: superAdminEmail } });

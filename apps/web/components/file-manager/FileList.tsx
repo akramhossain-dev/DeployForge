@@ -104,7 +104,7 @@ export function FileList({
 
     return (
         <div onContextMenu={onDropZoneContext} onClick={() => onSelect('', false, false)}>
-            {/* Header */}
+            {}
             <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-white/[0.06] bg-slate-950/80 backdrop-blur-sm px-4 py-2">
                 <div className="w-8 shrink-0" />
                 {cols.map((col) => (
@@ -120,7 +120,7 @@ export function FileList({
                 <div className="w-6 shrink-0" />
             </div>
 
-            {/* Rows */}
+            {}
             <div className="font-mono">
                 {entries.map((entry, idx) => {
                     const isSelected = selected.has(entry.path);
@@ -144,7 +144,7 @@ export function FileList({
                                     : 'border-l-2 border-transparent hover:bg-white/[0.03] hover:border-white/10'
                             }`}
                         >
-                            {/* Checkbox */}
+                            {}
                             <div className="w-4 shrink-0 flex items-center">
                                 <input
                                     type="checkbox"
@@ -159,7 +159,7 @@ export function FileList({
                                 />
                             </div>
 
-                            {/* Icon + Name */}
+                            {}
                             <div className="flex min-w-0 flex-1 items-center gap-2">
                                 {openingFile === entry.path ? (
                                     <Loader2 size={14} className="animate-spin text-cyan-400 shrink-0" />
@@ -182,22 +182,22 @@ export function FileList({
                                 )}
                             </div>
 
-                            {/* Size */}
+                            {}
                             <span className="w-20 text-right text-[11px] text-slate-600 hidden sm:block font-mono">
                                 {isDir ? '—' : formatSize(entry.size)}
                             </span>
 
-                            {/* Modified */}
+                            {}
                             <span className="w-36 text-[11px] text-slate-600 hidden md:block font-mono">
                                 {formatDate(entry.modified)}
                             </span>
 
-                            {/* Kind */}
+                            {}
                             <span className="w-20 text-[10px] uppercase tracking-wider text-slate-700 hidden lg:block">
                                 {isDir ? 'DIR' : (entry.extension?.toUpperCase() || 'FILE')}
                             </span>
 
-                            {/* Row number / Hover actions */}
+                            {}
                             <div className="w-6 shrink-0 flex items-center justify-end relative h-5">
                                 <span className="text-[9px] text-slate-800 select-none font-mono group-hover:opacity-0 transition-opacity duration-150">
                                     {String(idx + 1).padStart(2, '0')}

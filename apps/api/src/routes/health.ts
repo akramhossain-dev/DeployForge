@@ -67,13 +67,12 @@ export default async function healthRoutes(fastify: FastifyInstance) {
     };
 
     const metricsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-        // If METRICS_TOKEN is configured, require Bearer auth — prevents information leakage
+        
         const configuredToken = config.security.metricsToken;
         if (configuredToken) {
             const authHeader = request.headers.authorization || '';
             const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
-            // Timing-safe comparison to prevent timing attacks
             const isValid = provided.length > 0 &&
                 provided.length === configuredToken.length &&
                 crypto.timingSafeEqual(
@@ -106,4 +105,3 @@ export default async function healthRoutes(fastify: FastifyInstance) {
     fastify.get('/api/readiness', readinessHandler);
     fastify.get('/api/metrics', metricsHandler);
 }
-

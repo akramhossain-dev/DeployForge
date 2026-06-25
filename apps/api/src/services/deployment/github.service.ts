@@ -9,9 +9,6 @@ import { runCommand } from './runner';
 import { shellQuote, extractRepoFullName } from './utils';
 import crypto from 'node:crypto';
 
-// Git clone/fetch timeout: 2 minutes. If git hangs longer than this the
-// deployment would be stuck at CLONING forever. 120s is generous enough
-// for large repos but short enough to surface network/auth issues quickly.
 const GIT_TIMEOUT_MS = 2 * 60 * 1000;
 
 export class GitHubDeploymentService {
@@ -41,8 +38,6 @@ export class GitHubDeploymentService {
     static async prepareGithubSource(ssh: SSHService, deploymentId: string, source: GitHubDeploymentSource, repositoryUrl: string, workDir: string) {
         if (!source.accessToken) throw new DeploymentError('cloning', 'Missing GitHub access token', 'MISSING_GITHUB_TOKEN');
         
-        // Hide access token by prepending x-access-token username to URL instead of the token itself.
-        // The token is fed dynamically via a temporary GIT_ASKPASS script to prevent exposure in .git/config.
         const repoUrl = repositoryUrl.replace(/^https:\/\/(?:[^@]+@)?/, 'https://x-access-token@');
         await LoggingService.log(deploymentId, `Preparing repository source for branch ${source.branch}...`, 'build');
 

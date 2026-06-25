@@ -72,7 +72,7 @@ export class AccountService {
         });
         if (!user) throw new Error('User not found');
         
-        await CacheService.set(cacheKey, user, 300); // cache for 5 minutes
+        await CacheService.set(cacheKey, user, 300); 
         return user;
     }
 
@@ -110,7 +110,6 @@ export class AccountService {
         if (!data.newPassword) throw publicError('New password is required', 400);
         PasswordService.assertStrong(data.newPassword);
 
-        // Local accounts check
         if (user.passwordHash) {
             if (!data.currentPassword) throw publicError('Unable to change password', 400);
             const match = await PasswordService.verify(user.passwordHash, data.currentPassword);
@@ -129,16 +128,6 @@ export class AccountService {
         await this.logAudit(userId, 'PASSWORD_CHANGE', 'User password successfully changed.', ip, ua);
     }
 
-    /**
-     * Sends a password reset email with a secure token.
-     *
-     * Security:
-     * - Returns a proper error if email not found
-     * - Token is stored as SHA-256 hash
-     * - Token expires in 1 hour
-     * - Token is single-use (marked usedAt after consumption)
-     * - SMTP errors are caught and logged internally
-     */
     static async forgotPassword(email: string, ip?: string, ua?: string) {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
@@ -148,7 +137,7 @@ export class AccountService {
 
         const rawToken = crypto.randomBytes(32).toString('hex');
         const hashedToken = sha256(rawToken);
-        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); 
 
         await prisma.passwordResetToken.create({
             data: {
@@ -199,15 +188,6 @@ export class AccountService {
         await this.logAudit(resetTokenRecord.userId, 'PASSWORD_RESET_SUCCESS', 'Password reset completed via token.', ip, ua);
     }
 
-    /**
-     * Sends an email verification link to the user.
-     *
-     * Security:
-     * - Token is stored as SHA-256 hash
-     * - Token expires in 24 hours
-     * - Token is single-use (marked usedAt after consumption)
-     * - SMTP errors are caught and logged internally
-     */
     static async sendVerification(userId: string) {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user || !user.email) throw new Error('User not found');
@@ -215,7 +195,7 @@ export class AccountService {
 
         const rawToken = crypto.randomBytes(32).toString('hex');
         const hashedToken = sha256(rawToken);
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); 
 
         await prisma.emailVerificationToken.create({
             data: {
@@ -347,8 +327,6 @@ export class AccountService {
 
         await CacheService.del(`user:profile:${userId}`);
 
-        // We cascade delete sessions and tokens (handled by schema cascade rules).
-        // Deployments should not be deleted automatically as requested.
         await prisma.user.delete({ where: { id: userId } });
     }
 
