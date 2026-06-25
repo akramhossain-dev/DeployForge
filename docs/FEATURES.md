@@ -67,3 +67,16 @@ Built-in disaster recovery tools managed from the Admin panel:
 * **Manual Exports:** Trigger backup exports containing the full PostgreSQL database dump, system configurations, and active deployment states.
 * **Automated Retention Cleanup:** Background tasks periodically purge expired backups to manage disk space.
 * **One-Click Restore:** Rollback the entire platform state to a previous backup snapshot in the event of hardware failures.
+
+---
+
+## 7. VPS File Manager
+
+An integrated, web-based explorer designed to manage files on target VPS nodes directly from the control panel:
+* **Directory Browsing:** Browse directory structures, view metadata, and check unix permissions.
+* **Universal File Editor:** Built-in code editor featuring language syntax highlighting (JS/TS, Python, Go, Rust, JSON, YAML, Nginx/system configuration templates), auto-save, toggles for word wrap, and line search.
+* **Universal Access Control:** Utilizes a custom binary deny-list approach rather than a strict allow-list, allowing users to safely read and edit configuration, env, and script files without execution issues.
+* **File Operations:** Full support for file creation, folder creation, renaming, deletion, copying, moving, and downloading (as single files or archives).
+* **Upload & Drag-and-Drop:** Drag-and-drop file/folder uploads and move operations.
+* **Integrated Search:** Instant path search for files and folders by name directly within the browser interface.
+* **Archive Tools:** Compress multiple items into a single `.zip` file or extract compressed archives.

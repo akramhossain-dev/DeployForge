@@ -332,3 +332,232 @@ The DeployForge backend is powered by a Fastify REST API and WebSocket gateway.
 * **Description:** Establish an interactive shell terminal with the remote VPS.
 * **Authentication:** Handshake validated via one-time query token: `?token=<temp_token>`
 * **Parameters:** `cols`, `rows` for terminal geometry.
+
+---
+
+## 8. File Manager API (`/file-manager`)
+
+Provides target VPS filesystem exploration, uploads, downloads, edits, search, and zip utilities.
+
+### `GET /file-manager/:vpsId/info`
+* **Description:** Get connection health state and target user's home directory path.
+* **Authentication:** Required
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "isConnected": true, "homeDir": "/home/ubuntu" }
+  }
+  ```
+
+### `GET /file-manager/:vpsId/list`
+* **Description:** List directory files and folders.
+* **Authentication:** Required
+* **Query Parameters:** `path` (Defaults to `~`)
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "path": "/home/ubuntu/project",
+      "entries": [
+        { "name": "src", "path": "/home/ubuntu/project/src", "type": "directory", "size": 4096, "modified": "timestamp", "permissions": "drwxr-xr-x", "extension": "", "mimeType": "" }
+      ]
+    }
+  }
+  ```
+
+### `GET /file-manager/:vpsId/read`
+* **Description:** Read a file's textual or previewable content.
+* **Authentication:** Required
+* **Query Parameters:** `path`
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "content": "file text content...",
+      "encoding": "utf8"
+    }
+  }
+  ```
+
+### `GET /file-manager/:vpsId/properties`
+* **Description:** Get metadata, sizing, counts, and permissions of a path.
+* **Authentication:** Required
+* **Query Parameters:** `path`
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "path": "/home/ubuntu/file.txt",
+      "name": "file.txt",
+      "type": "file",
+      "size": 124,
+      "modified": "timestamp",
+      "permissions": "-rw-r--r--",
+      "owner": "ubuntu",
+      "group": "ubuntu"
+    }
+  }
+  ```
+
+### `GET /file-manager/:vpsId/search`
+* **Description:** Find files and directories by name.
+* **Authentication:** Required
+* **Query Parameters:** `path` (root path to search), `query` (search term), `extension` (optional extension filter)
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": [
+      { "name": "index.ts", "path": "/home/ubuntu/project/src/index.ts", "type": "file", "size": 1024, "modified": "timestamp" }
+    ]
+  }
+  ```
+
+### `GET /file-manager/:vpsId/download`
+* **Description:** Download single file content.
+* **Authentication:** Required
+* **Query Parameters:** `path`
+* **Response `200 OK`:** Base64 or raw file stream response.
+
+### `POST /file-manager/:vpsId/create`
+* **Description:** Create a new empty file or folder.
+* **Authentication:** Required
+* **Request Body:**
+  ```json
+  {
+    "path": "/home/ubuntu/project/newfile.js",
+    "type": "file"
+  }
+  ```
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "File created" }
+  }
+  ```
+
+### `PUT /file-manager/:vpsId/save`
+* **Description:** Save edits to a text file.
+* **Authentication:** Required
+* **Request Body:**
+  ```json
+  {
+    "path": "/home/ubuntu/project/newfile.js",
+    "content": "const x = 10;"
+  }
+  ```
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "File saved" }
+  }
+  ```
+
+### `PUT /file-manager/:vpsId/rename`
+* **Description:** Move or rename a file or folder.
+* **Authentication:** Required
+* **Request Body:**
+  ```json
+  {
+    "oldPath": "/home/ubuntu/project/old.js",
+    "newPath": "/home/ubuntu/project/new.js"
+  }
+  ```
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "Renamed successfully" }
+  }
+  ```
+
+### `PUT /file-manager/:vpsId/copy`
+* **Description:** Copy a file or folder.
+* **Authentication:** Required
+* **Request Body:**
+  ```json
+  {
+    "srcPath": "/home/ubuntu/project/source.js",
+    "dstPath": "/home/ubuntu/project/copy.js"
+  }
+  ```
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "Copied successfully" }
+  }
+  ```
+
+### `DELETE /file-manager/:vpsId/delete`
+* **Description:** Delete files or directories in bulk.
+* **Authentication:** Required
+* **Request Body:**
+  ```json
+  {
+    "paths": ["/home/ubuntu/project/temp.js"]
+  }
+  ```
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "Deleted", "errors": [] }
+  }
+  ```
+
+### `POST /file-manager/:vpsId/upload`
+* **Description:** Upload a file to the target directory.
+* **Authentication:** Required
+* **Query Parameters:** `path` (target directory)
+* **Request Body:** Multipart `form-data` containing `file`
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "Uploaded", "filename": "uploaded.jpg" }
+  }
+  ```
+
+### `POST /file-manager/:vpsId/compress`
+* **Description:** Compress items to a zip archive on remote VPS.
+* **Authentication:** Required
+* **Request Body:**
+  ```json
+  {
+    "parentDir": "/home/ubuntu/project",
+    "paths": ["/home/ubuntu/project/src", "/home/ubuntu/project/package.json"],
+    "archiveName": "backup.zip"
+  }
+  ```
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "Files compressed successfully" }
+  }
+  ```
+
+### `POST /file-manager/:vpsId/decompress`
+* **Description:** Extract zip archive.
+* **Authentication:** Required
+* **Request Body:**
+  ```json
+  {
+    "zipFilePath": "/home/ubuntu/project/backup.zip",
+    "destDir": "/home/ubuntu/project/extracted"
+  }
+  ```
+* **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "data": { "message": "Archive decompressed successfully" }
+  }
+  ```
