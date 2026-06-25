@@ -8,7 +8,7 @@ import {
     FolderArchive, FileArchive,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useDirectoryListing, useCreateEntry, useDeleteEntries, useRenameEntry, useCopyEntry, downloadFile, downloadZip, useCompress, useDecompress } from '@/hooks/useFileManager';
+import { useDirectoryListing, useCreateEntry, useDeleteEntries, useRenameEntry, useCopyEntry, downloadFile, downloadZip, useCompress, useDecompress, useFileSearch } from '@/hooks/useFileManager';
 import { FileList } from './FileList';
 import { Breadcrumb } from './Breadcrumb';
 import { ContextMenu } from './ContextMenu';
@@ -71,12 +71,24 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     const renameRef = useRef<HTMLInputElement>(null);
 
     const listing = useDirectoryListing(vpsId, currentPath, !showSearch);
+    const search = useFileSearch(vpsId, currentPath, searchQuery, undefined, showSearch);
     const createEntry = useCreateEntry(vpsId);
     const deleteEntries = useDeleteEntries(vpsId);
     const renameEntry = useRenameEntry(vpsId);
     const copyEntry = useCopyEntry(vpsId);
     const compress = useCompress(vpsId);
     const decompress = useDecompress(vpsId);
+
+    const refetch = () => {
+        listing.refetch();
+        if (showSearch) {
+            search.refetch();
+        }
+    };
+
+    const isLoading = showSearch ? search.isLoading : listing.isLoading;
+    const isError = showSearch ? search.isError : listing.isError;
+    const isFetching = showSearch ? search.isFetching : listing.isFetching;
 
     // Sync currentPath when URL path parameter changes (e.g. back button)
     useEffect(() => {
@@ -93,9 +105,23 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     }, [listing.data?.path, currentPath]);
 
     const entries = useMemo(() => {
+        if (showSearch) {
+            const raw = search.data || [];
+            const mapped: FileEntry[] = raw.map((item) => ({
+                name: item.name,
+                path: item.path,
+                type: item.type === 'directory' ? 'directory' : 'file',
+                size: item.size || 0,
+                modified: item.modified || '',
+                permissions: '',
+                extension: item.name.split('.').pop() || '',
+                mimeType: '',
+            }));
+            return sortEntries(mapped, sortKey, sortDir);
+        }
         const raw = listing.data?.entries || [];
         return sortEntries(raw, sortKey, sortDir);
-    }, [listing.data, sortKey, sortDir]);
+    }, [listing.data, search.data, showSearch, sortKey, sortDir]);
 
     // Keyboard shortcuts — intentionally uses closure over latest state
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -162,7 +188,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 await deleteEntries.mutateAsync(paths);
                 setSelected(new Set());
                 setConfirm(null);
-                listing.refetch();
+                refetch();
             },
         });
     };
@@ -180,7 +206,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         const newPath = joinPath(parentPath(rename.entry.path), rename.value);
         await renameEntry.mutateAsync({ oldPath: rename.entry.path, newPath });
         setRename(null);
-        listing.refetch();
+        refetch();
     };
 
     const handlePaste = async () => {
@@ -195,7 +221,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
             }
         }
         if (clipboard.operation === 'cut') setClipboard(null);
-        listing.refetch();
+        refetch();
     };
 
     const handleDrop = async (targetDirPath: string) => {
@@ -206,7 +232,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
             await renameEntry.mutateAsync({ oldPath: srcPath, newPath: dstPath });
         }
         setDragging([]);
-        listing.refetch();
+        refetch();
     };
 
     const handleCreateNew = async () => {
@@ -217,7 +243,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         await createEntry.mutateAsync({ path, type: newItemType });
         setNewItemType(null);
         setNewItemName('');
-        listing.refetch();
+        refetch();
     };
 
     const handleCompressSubmit = async () => {
@@ -234,14 +260,14 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         setCompressInput(null);
         setCompressName('');
         setSelected(new Set());
-        listing.refetch();
+        refetch();
     };
 
     const handleDecompress = async (entry: FileEntry) => {
         await decompress.mutateAsync({
             zipFilePath: entry.path,
         });
-        listing.refetch();
+        refetch();
     };
 
     const buildContextItems = (entry?: FileEntry) => {
@@ -251,7 +277,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
             ...(forEntry ? [
                 { label: 'Open', icon: <FolderOpen size={13} />, onClick: () => handleOpen(entry!) },
                 { label: 'Rename', icon: null, onClick: () => startRename(entry!), divider: false },
-                { label: 'Duplicate', icon: <Copy size={13} />, onClick: async () => { await copyEntry.mutateAsync({ srcPath: entry!.path, dstPath: entry!.path + '_copy' }); listing.refetch(); } },
+                { label: 'Duplicate', icon: <Copy size={13} />, onClick: async () => { await copyEntry.mutateAsync({ srcPath: entry!.path, dstPath: entry!.path + '_copy' }); refetch(); } },
                 { label: 'Copy', icon: <Copy size={13} />, onClick: () => setClipboard({ paths: [entry!.path], operation: 'copy' }) },
                 { label: 'Cut', icon: <Scissors size={13} />, onClick: () => setClipboard({ paths: [entry!.path], operation: 'cut' }) },
                 { label: 'Download', icon: <Download size={13} />, onClick: () => entry!.type === 'directory' ? downloadZip(vpsId, entry!.path) : downloadFile(vpsId, entry!.path), divider: true },
@@ -277,7 +303,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
             { label: 'New File', icon: <FilePlus size={13} />, onClick: () => { setNewItemType('file'); setNewItemName(''); }, divider: !forEntry },
             { label: 'New Folder', icon: <FolderPlus size={13} />, onClick: () => { setNewItemType('directory'); setNewItemName(''); } },
             { label: 'Paste', icon: <Clipboard size={13} />, onClick: handlePaste, disabled: !clipboard },
-            { label: 'Refresh', icon: <RefreshCw size={13} />, onClick: () => listing.refetch(), divider: true },
+            { label: 'Refresh', icon: <RefreshCw size={13} />, onClick: () => refetch(), divider: true },
         ];
     };
 
@@ -352,8 +378,8 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
 
                 {/* Right side */}
                 <div className="flex items-center gap-1 ml-auto">
-                    <button onClick={() => listing.refetch()} title="Refresh" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200 transition-colors">
-                        <RefreshCw size={12} className={listing.isFetching ? 'animate-spin text-cyan-300' : ''} />
+                    <button onClick={() => refetch()} title="Refresh" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200 transition-colors">
+                        <RefreshCw size={12} className={isFetching ? 'animate-spin text-cyan-300' : ''} />
                     </button>
                     <div className="flex rounded-lg border border-white/10 overflow-hidden">
                         <button onClick={() => setView('list')} title="List" className={`flex h-7 w-7 items-center justify-center transition-colors ${view === 'list' ? 'bg-cyan-300/15 text-cyan-300' : 'bg-white/[0.04] text-slate-600 hover:text-slate-300'}`}><List size={13} /></button>
@@ -369,7 +395,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 {clipboard && <><span className="text-slate-800">·</span><span className="text-amber-500/60">{clipboard.paths.length} in {clipboard.operation}</span></>}
                 <div className="flex-1" />
                 <span className="truncate text-slate-800 max-w-xs">{currentPath}</span>
-                {listing.isFetching && <Loader2 size={9} className="animate-spin text-cyan-500 shrink-0" />}
+                {isFetching && <Loader2 size={9} className="animate-spin text-cyan-500 shrink-0" />}
             </div>
 
             {/* ── Search bar ── */}
@@ -434,23 +460,23 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 {/* File list panel */}
                 {/* File list panel */}
                 <div className="flex flex-col flex-1 min-h-0 overflow-y-auto terminal-scrollbar">
-                    {listing.isLoading ? (
+                    {isLoading ? (
                         <div className="flex flex-1 items-center justify-center p-12">
                             <div className="flex flex-col items-center gap-3">
                                 <Loader2 size={20} className="animate-spin text-cyan-400/60" />
                                 <span className="font-mono text-[10px] text-slate-700">loading…</span>
                             </div>
                         </div>
-                    ) : listing.isError ? (
+                    ) : isError ? (
                         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-12">
                             <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-rose-400/20 bg-rose-500/10">
                                 <AlertTriangle size={22} className="text-rose-400" />
                             </div>
                             <div className="text-center">
-                                <p className="text-sm font-bold text-rose-300">Failed to load directory</p>
+                                <p className="text-sm font-bold text-rose-300">{showSearch ? 'Search failed' : 'Failed to load directory'}</p>
                                 <p className="mt-1 font-mono text-[10px] text-slate-700">SSH connection error or permission denied</p>
                             </div>
-                            <button onClick={() => listing.refetch()} className="h-7 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 text-[11px] font-bold text-cyan-400 hover:bg-cyan-400/20 transition-colors">Retry</button>
+                            <button onClick={() => refetch()} className="h-7 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 text-[11px] font-bold text-cyan-400 hover:bg-cyan-400/20 transition-colors">Retry</button>
                         </div>
                     ) : entries.length === 0 ? (
                         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-12">
@@ -458,13 +484,15 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                                 <FolderOpen size={22} className="text-slate-600" />
                             </div>
                             <div className="text-center">
-                                <p className="text-sm font-semibold text-slate-500">Empty directory</p>
-                                <p className="mt-1 font-mono text-[10px] text-slate-700">{currentPath}</p>
+                                <p className="text-sm font-semibold text-slate-500">{showSearch ? 'No search results found' : 'Empty directory'}</p>
+                                <p className="mt-1 font-mono text-[10px] text-slate-700">{showSearch ? `Query: ${searchQuery}` : currentPath}</p>
                             </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => setNewItemType('file')} className="h-7 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 text-[11px] text-slate-500 hover:text-cyan-300 transition-colors">New File</button>
-                                <button onClick={() => setShowUpload(true)} className="h-7 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 text-[11px] text-slate-500 hover:text-cyan-300 transition-colors">Upload</button>
-                            </div>
+                            {!showSearch && (
+                                <div className="flex gap-2">
+                                    <button onClick={() => setNewItemType('file')} className="h-7 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 text-[11px] text-slate-500 hover:text-cyan-300 transition-colors">New File</button>
+                                    <button onClick={() => setShowUpload(true)} className="h-7 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 text-[11px] text-slate-500 hover:text-cyan-300 transition-colors">Upload</button>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <FileList
@@ -529,7 +557,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                             </div>
                             <button onClick={() => setShowUpload(false)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-slate-500 hover:text-white transition-colors"><X size={13} /></button>
                         </div>
-                        <UploadZone vpsId={vpsId} currentPath={currentPath} onClose={() => { setShowUpload(false); listing.refetch(); }} />
+                        <UploadZone vpsId={vpsId} currentPath={currentPath} onClose={() => { setShowUpload(false); refetch(); }} />
                     </div>
                 </div>
             )}
