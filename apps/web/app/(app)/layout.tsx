@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     Activity,
+    FolderOpen,
     Github,
     LayoutDashboard,
     LogOut,
@@ -30,6 +31,7 @@ const navItems = [
     { name: 'Deployments', icon: Rocket, href: '/deployments' },
     { name: 'Repositories', icon: Github, href: '/repositories' },
     { name: 'VPS Manager', icon: Server, href: '/vps' },
+    { name: 'File Manager', icon: FolderOpen, href: '/file-manager' },
     { name: 'Terminal', icon: Terminal, href: '/terminal' },
     { name: 'Monitoring', icon: Activity, href: '/monitoring' },
     { name: 'Settings', icon: Settings, href: '/settings' },
@@ -41,7 +43,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const { user, hasHydrated, setUser, logout } = useAuthStore();
     const me = useMe(hasHydrated);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const activeItem = useMemo(() => navItems.find((item) => item.href === pathname) || navItems[0], [pathname]);
+    const activeItem = useMemo(() => navItems.find((item) => pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))) || navItems[0], [pathname]);
 
     const queryClient = useQueryClient();
 

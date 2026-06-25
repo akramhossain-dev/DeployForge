@@ -253,3 +253,49 @@ export type AdminLog = {
     user?: User | null;
     createdAt: string;
 };
+
+// ─── File Manager Types ────────────────────────────────────────────────────────
+
+export type FileEntry = {
+    name: string;
+    path: string;
+    type: 'file' | 'directory' | 'symlink';
+    size: number;
+    modified: string;
+    permissions: string;
+    extension: string;
+    mimeType: string;
+};
+
+export type DirectoryListing = {
+    path: string;
+    entries: FileEntry[];
+};
+
+export type FileReadResult = {
+    content: string;
+    encoding: 'utf-8' | 'base64';
+    mimeType: string;
+};
+
+export type FileDownloadResult = {
+    content: string;
+    size: number;
+    mimeType: string;
+    filename: string;
+};
+
+export type ZipDownloadResult = {
+    content: string;
+    filename: string;
+};
+
+export type FileSearchResult = {
+    path: string;
+    name: string;
+    type: 'file' | 'directory';
+    size: number;
+    modified: string;
+};
+
+export type FileProperties = Record<string, string>;

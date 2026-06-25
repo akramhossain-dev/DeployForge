@@ -10,8 +10,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     networks:
       - deployforge_internal
+      - deployforge_dev
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
@@ -25,8 +28,11 @@ services:
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--requirepass", "${REDIS_PASSWORD:-deployforge_redis_pass_123}"]
     volumes:
       - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
     networks:
       - deployforge_internal
+      - deployforge_dev
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-deployforge_redis_pass_123}", "ping"]
       interval: 10s
@@ -134,6 +140,9 @@ networks:
   deployforge_internal:
     internal: true
   deployforge_public:
+  deployforge_dev:
+    # Non-internal network for host access to postgres/redis in local dev.
+    # Port bindings on internal networks are blocked by Docker.
 
 volumes:
   postgres_data:
