@@ -46,16 +46,16 @@ export function isImage(entry: FileEntry): boolean {
 }
 
 export function isText(entry: FileEntry): boolean {
-    const textExts = new Set([
-        'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'sass', 'less', 'json', 'yaml', 'yml',
-        'env', 'md', 'txt', 'sh', 'bash', 'php', 'py', 'go', 'java', 'cs', 'rs', 'rb', 'sql',
-        'xml', 'csv', 'toml', 'ini', 'cfg', 'conf', 'log', 'gitignore', 'dockerfile', 'makefile',
-        'lock', 'prisma', 'graphql', 'gql', 'vue', 'svelte', 'astro', 'mdx', 'mjs', 'cjs',
+    const ext = entry.extension?.toLowerCase() || '';
+    const binaryExts = new Set([
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp', 'pdf',
+        'zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar',
+        'mp3', 'mp4', 'mkv', 'avi', 'mov', 'wav', 'ogg', 'flac',
+        'exe', 'dll', 'so', 'dylib', 'bin', 'iso', 'img', 'dmg',
+        'deb', 'rpm', 'msi', 'app', 'war', 'jar', 'class',
+        'pyc', 'pyd', 'db', 'sqlite', 'woff', 'woff2', 'ttf', 'eot'
     ]);
-    if (!entry.extension) {
-        return ['makefile', 'dockerfile', 'rakefile', 'gemfile', 'procfile'].includes(entry.name.toLowerCase());
-    }
-    return textExts.has(entry.extension.toLowerCase());
+    return !binaryExts.has(ext);
 }
 
 export function isPdf(entry: FileEntry): boolean {
@@ -63,7 +63,7 @@ export function isPdf(entry: FileEntry): boolean {
 }
 
 export function isPreviewable(entry: FileEntry): boolean {
-    return entry.type === 'file' && (isImage(entry) || isText(entry) || isPdf(entry));
+    return entry.type === 'file' && (isImage(entry) || isText(entry));
 }
 
 // ─── Language mapping for syntax highlighting ─────────────────────────────────

@@ -40,8 +40,8 @@ function VirtualLineNumbers({ lineCount, activeLine, lineHeight = 24 }: { lineCo
     return (
         <div
             ref={containerRef}
-            className="select-none border-r border-white/10 bg-slate-950/60 text-right text-slate-600 shrink-0 font-mono"
-            style={{ position: 'relative', height: totalHeight, minWidth: 56 }}
+            className="select-none border-r border-white/10 bg-slate-950 text-right text-slate-600 shrink-0 font-mono"
+            style={{ position: 'sticky', left: 0, zIndex: 10, height: totalHeight, minWidth: 56 }}
             aria-hidden
         >
             <div style={{ position: 'absolute', top: range.start * lineHeight, width: '100%' }}>
@@ -124,6 +124,10 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
     };
 
     const lineCount = useMemo(() => content.split('\n').length, [content]);
+    const maxLineLength = useMemo(() => {
+        const lines = content.split('\n');
+        return Math.max(...lines.map((l) => l.length), 40);
+    }, [content]);
     const fileSizeLabel = formatBytes(file.size ?? 0);
 
     // ── Image preview ────────────────────────────────────────────────────────
@@ -229,7 +233,7 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
 
                 {/* Editor — virtualized line numbers + textarea */}
                 {!isError && !isLoading && (
-                    <div className="flex flex-1 overflow-auto font-mono text-[12px] terminal-scrollbar">
+                    <div className="flex flex-1 overflow-auto font-mono text-[12px] terminal-scrollbar bg-slate-950">
                         <VirtualLineNumbers lineCount={lineCount} activeLine={activeLine} lineHeight={24} />
                         <textarea
                             ref={textareaRef}
@@ -239,8 +243,13 @@ export function CodeEditor({ vpsId, vpsName, vpsUser, vpsIp, file, onClose }: Co
                             onClick={updateCursorInfo}
                             onSelect={updateCursorInfo}
                             spellCheck={false}
-                            className={`flex-1 resize-none bg-transparent px-4 py-0 leading-6 text-slate-300 caret-cyan-400 outline-none ${
-                                wordWrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'
+                            style={{
+                                height: `${lineCount * 24}px`,
+                                lineHeight: '24px',
+                                width: wordWrap ? '100%' : `${maxLineLength + 5}ch`,
+                            }}
+                            className={`resize-none bg-transparent px-4 py-0 text-slate-300 caret-cyan-400 outline-none overflow-hidden ${
+                                wordWrap ? 'whitespace-pre-wrap break-all flex-1' : 'whitespace-pre'
                             }`}
                         />
                     </div>

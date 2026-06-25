@@ -68,34 +68,6 @@ export function useFileSearch(vpsId: string, rootPath: string, query: string, ex
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
-async function putJson(url: string, body: unknown): Promise<any> {
-    const resp = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body),
-    });
-    const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(json?.error?.message || `Request failed: ${resp.status}`);
-    return json;
-}
-
-async function deleteJson(url: string, body: unknown): Promise<any> {
-    const resp = await fetch(url, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body),
-    });
-    const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(json?.error?.message || `Request failed: ${resp.status}`);
-    return json;
-}
-
-function apiUrl(path: string): string {
-    return `${api.baseUrl}/api${path}`;
-}
-
 export function useCreateEntry(vpsId: string) {
     const qc = useQueryClient();
     return useMutation({
@@ -113,7 +85,7 @@ export function useSaveFile(vpsId: string) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ path, content }: { path: string; content: string }) =>
-            putJson(apiUrl(`${BASE(vpsId)}/save`), { path, content }),
+            api.put<{ message: string }>(`${BASE(vpsId)}/save`, { path, content }),
         onSuccess: (_d, { path }) => {
             toast('Saved', 'File saved successfully');
             qc.invalidateQueries({ queryKey: fmKeys.file(vpsId, path) });
@@ -126,7 +98,7 @@ export function useRenameEntry(vpsId: string) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ oldPath, newPath }: { oldPath: string; newPath: string }) =>
-            putJson(apiUrl(`${BASE(vpsId)}/rename`), { oldPath, newPath }),
+            api.put<{ message: string }>(`${BASE(vpsId)}/rename`, { oldPath, newPath }),
         onSuccess: () => {
             toast('Renamed', 'Renamed successfully');
             qc.invalidateQueries({ queryKey: fmKeys.all(vpsId) });
@@ -139,7 +111,7 @@ export function useCopyEntry(vpsId: string) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ srcPath, dstPath }: { srcPath: string; dstPath: string }) =>
-            putJson(apiUrl(`${BASE(vpsId)}/copy`), { srcPath, dstPath }),
+            api.put<{ message: string }>(`${BASE(vpsId)}/copy`, { srcPath, dstPath }),
         onSuccess: () => {
             toast('Copied', 'Copied successfully');
             qc.invalidateQueries({ queryKey: fmKeys.all(vpsId) });
@@ -152,7 +124,7 @@ export function useDeleteEntries(vpsId: string) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (paths: string[]) =>
-            deleteJson(apiUrl(`${BASE(vpsId)}/delete`), { paths }),
+            api.delete<{ message: string }>(`${BASE(vpsId)}/delete`, { paths }),
         onSuccess: (_d, paths) => {
             toast('Deleted', `${paths.length} item${paths.length > 1 ? 's' : ''} deleted`);
             qc.invalidateQueries({ queryKey: fmKeys.all(vpsId) });
@@ -209,6 +181,12 @@ export function useDecompress(vpsId: string) {
 // ─── Download helpers ─────────────────────────────────────────────────────────
 
 export async function downloadFile(vpsId: string, clientPath: string): Promise<void> {
+    const filename = clientPath.split('/').pop() || 'file';
+    useToastStore.getState().addToast({
+        title: 'Download Started',
+        description: `Downloading ${filename} from VPS...`,
+        severity: 'success',
+    });
     try {
         const data = await api.get<FileDownloadResult>(`${BASE(vpsId)}/download?path=${encodeURIComponent(clientPath)}`);
         const bytes = Uint8Array.from(atob(data.content), (c) => c.charCodeAt(0));
@@ -217,12 +195,27 @@ export async function downloadFile(vpsId: string, clientPath: string): Promise<v
         const a = document.createElement('a');
         a.href = url; a.download = data.filename; a.click();
         URL.revokeObjectURL(url);
+        useToastStore.getState().addToast({
+            title: 'Download Complete',
+            description: `Successfully downloaded ${data.filename}`,
+            severity: 'success',
+        });
     } catch (e: any) {
-        useToastStore.getState().addToast({ title: 'Download Failed', description: e?.message || 'Failed', severity: 'error' });
+        useToastStore.getState().addToast({
+            title: 'Download Failed',
+            description: e?.message || `Failed to download ${filename}`,
+            severity: 'error',
+        });
     }
 }
 
 export async function downloadZip(vpsId: string, clientPath: string): Promise<void> {
+    const filename = (clientPath.split('/').pop() || 'folder') + '.zip';
+    useToastStore.getState().addToast({
+        title: 'Download Started',
+        description: `Compressing and downloading ${filename}...`,
+        severity: 'success',
+    });
     try {
         const data = await api.get<ZipDownloadResult>(`${BASE(vpsId)}/download-zip?path=${encodeURIComponent(clientPath)}`);
         const bytes = Uint8Array.from(atob(data.content), (c) => c.charCodeAt(0));
@@ -231,7 +224,16 @@ export async function downloadZip(vpsId: string, clientPath: string): Promise<vo
         const a = document.createElement('a');
         a.href = url; a.download = data.filename; a.click();
         URL.revokeObjectURL(url);
+        useToastStore.getState().addToast({
+            title: 'Download Complete',
+            description: `Successfully downloaded ${data.filename}`,
+            severity: 'success',
+        });
     } catch (e: any) {
-        useToastStore.getState().addToast({ title: 'Download Failed', description: e?.message || 'Failed', severity: 'error' });
+        useToastStore.getState().addToast({
+            title: 'Download Failed',
+            description: e?.message || `Failed to download ${filename}`,
+            severity: 'error',
+        });
     }
 }

@@ -7,9 +7,8 @@ export class TokenService {
         return jwt.sign(payload, this.secret, { expiresIn: '15m' });
     }
 
-    generateRefreshToken(payload: object): string {
-        return jwt.sign(payload, this.secret, { expiresIn: '7d' });
-    }
+    // Note: Refresh tokens are opaque random bytes (crypto.randomBytes), NOT JWTs.
+    // See AuthService.issueSession() — do NOT add a JWT-based refresh token method here.
 
     verifyToken(token: string): any {
         return jwt.verify(token, this.secret);

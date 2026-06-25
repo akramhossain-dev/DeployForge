@@ -67,6 +67,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     const [compressInput, setCompressInput] = useState<{ paths: string[] } | null>(null);
     const [compressName, setCompressName] = useState('');
     const [dragging, setDragging] = useState<string[]>([]);
+    const [openingFile, setOpeningFile] = useState<string | null>(null);
     const newItemRef = useRef<HTMLInputElement>(null);
     const renameRef = useRef<HTMLInputElement>(null);
 
@@ -144,7 +145,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         return () => window.removeEventListener('keydown', handler);
     }, [entries, selected, clipboard, rename, newItemType]);
 
-    useEffect(() => { setSelected(new Set()); }, [currentPath]);
+    useEffect(() => { setSelected(new Set()); setOpeningFile(null); }, [currentPath]);
     useEffect(() => { if (newItemType) setTimeout(() => newItemRef.current?.focus(), 50); }, [newItemType]);
     useEffect(() => { if (rename) setTimeout(() => renameRef.current?.select(), 50); }, [rename]);
 
@@ -160,7 +161,10 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     const handleOpen = (entry: FileEntry) => {
         if (entry.type === 'directory') { navigate(entry.path); return; }
         if (isPreviewable(entry)) {
+            setOpeningFile(entry.path);
             router.push(`/file-manager/${vpsId}/edit?path=${encodeURIComponent(entry.path)}`);
+        } else {
+            downloadFile(vpsId, entry.path);
         }
     };
 
@@ -510,6 +514,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                             onDragStart={(entry) => setDragging(selected.size > 0 ? Array.from(selected) : [entry.path])}
                             onDrop={handleDrop}
                             onDownload={(entry) => entry.type === 'directory' ? downloadZip(vpsId, entry.path) : downloadFile(vpsId, entry.path)}
+                            openingFile={openingFile}
                         />
                     )}
 

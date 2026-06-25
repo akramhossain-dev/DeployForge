@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronUp, ChevronDown, Download } from 'lucide-react';
+import { ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react';
 import type { FileEntry } from '@/lib/api/types';
 import { FileIcon } from './FileIcon';
 import { formatSize, formatDate } from './utils';
@@ -25,6 +25,7 @@ interface FileListProps {
     onDragStart: (entry: FileEntry) => void;
     onDrop: (targetPath: string) => void;
     onDownload: (entry: FileEntry) => void;
+    openingFile?: string | null;
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -37,7 +38,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 export function FileList({
     entries, selected, view, sortKey, sortDir, onSort,
     onSelect, onOpen, onContextMenu, onDropZoneContext,
-    dragging, onDragStart, onDrop, onDownload,
+    dragging, onDragStart, onDrop, onDownload, openingFile,
 }: FileListProps) {
 
     const handleClick = (e: React.MouseEvent, entry: FileEntry) => {
@@ -72,7 +73,13 @@ export function FileList({
                                     : 'hover:bg-white/[0.05]'
                             }`}
                         >
-                            <FileIcon entry={entry} size={28} isOpen={false} />
+                            {openingFile === entry.path ? (
+                                <div className="flex h-[28px] w-[28px] items-center justify-center shrink-0">
+                                    <Loader2 size={20} className="animate-spin text-cyan-400" />
+                                </div>
+                            ) : (
+                                <FileIcon entry={entry} size={28} isOpen={false} />
+                            )}
                             <span className="w-full break-words text-[10px] font-medium leading-tight text-slate-400 line-clamp-2 group-hover:text-slate-200 transition-colors">
                                 {entry.name}
                             </span>
@@ -154,7 +161,11 @@ export function FileList({
 
                             {/* Icon + Name */}
                             <div className="flex min-w-0 flex-1 items-center gap-2">
-                                <FileIcon entry={entry} size={14} />
+                                {openingFile === entry.path ? (
+                                    <Loader2 size={14} className="animate-spin text-cyan-400 shrink-0" />
+                                ) : (
+                                    <FileIcon entry={entry} size={14} />
+                                )}
                                 <span className={`truncate text-[12px] transition-colors ${
                                     isSelected
                                         ? 'text-cyan-100 font-semibold'

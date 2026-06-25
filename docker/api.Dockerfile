@@ -63,5 +63,6 @@ COPY --from=builder --chown=node:node /app/prisma ./prisma
 USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/live').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-CMD ["node", "apps/api/dist/server.js"]
+# M-6: Run DB migration on every container start, then launch the server
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema=prisma/schema.prisma && node apps/api/dist/server.js"]
 

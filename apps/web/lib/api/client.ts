@@ -67,10 +67,14 @@ function readCookie(name: string) {
         ?.slice(name.length + 1) || null;
 }
 
-async function ensureCsrfToken() {
+async function ensureCsrfToken(force = false) {
     if (typeof window === 'undefined') return null;
-    csrfToken = csrfToken || readCookie('csrfToken');
-    if (csrfToken) return csrfToken;
+    if (!force) {
+        csrfToken = csrfToken || readCookie('csrfToken');
+        if (csrfToken) return csrfToken;
+    } else {
+        csrfToken = null;
+    }
 
     const response = await fetch(`${API_URL}/auth/csrf`, {
         method: 'GET',
@@ -144,7 +148,10 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
 
         if (response.status === 403 && apiErrorCode(payload) === 'CSRF_TOKEN_INVALID' && !hasRetried) {
             csrfToken = null;
-            await ensureCsrfToken();
+            if (typeof document !== 'undefined') {
+                document.cookie = 'csrfToken=; Path=/; Max-Age=0; SameSite=Lax';
+            }
+            await ensureCsrfToken(true);
             return request<T>(path, init, true);
         }
 
@@ -186,9 +193,12 @@ export const api = {
     get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'GET' }),
     post: <T>(path: string, body?: unknown, init?: RequestInit) =>
         request<T>(path, { ...init, method: 'POST', body: typeof FormData !== 'undefined' && body instanceof FormData ? body : body ? JSON.stringify(body) : undefined }),
+    put: <T>(path: string, body?: unknown, init?: RequestInit) =>
+        request<T>(path, { ...init, method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
     patch: <T>(path: string, body?: unknown, init?: RequestInit) =>
         request<T>(path, { ...init, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
-    delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'DELETE' }),
+    delete: <T>(path: string, body?: unknown, init?: RequestInit) =>
+        request<T>(path, { ...init, method: 'DELETE', body: body ? JSON.stringify(body) : undefined }),
 };
 
 export default api;

@@ -18,17 +18,6 @@ describe('TokenService', () => {
         expect(decoded.exp).toBeDefined();
     });
 
-    it('should generate and verify a refresh token', () => {
-        const service = new TokenService(secret);
-        const token = service.generateRefreshToken(payload);
-        
-        expect(token).toBeDefined();
-        expect(typeof token).toBe('string');
-        
-        const decoded = service.verifyToken(token);
-        expect(decoded).toMatchObject(payload);
-        expect(decoded.exp).toBeDefined();
-    });
 
     it('should throw an error for expired or invalid tokens', () => {
         const service = new TokenService(secret);

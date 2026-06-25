@@ -34,7 +34,8 @@ services:
       - deployforge_internal
       - deployforge_dev
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-deployforge_redis_pass_123}", "ping"]
+      # L-4: Use REDISCLI_AUTH env var — avoids password appearing in `ps aux`
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -103,6 +104,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      # M-3: Named volume for backups — container fs is read_only, /app/backups must be a writable mount
+      - backup_data:/app/backups
 
   web:
     build:
@@ -198,5 +202,6 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  certbot_webroot:      # H-3: ACME challenge files
-  certbot_certs:        # H-3: Let's Encrypt certificates
+  backup_data:            # M-3: API backup files (read_only container needs writable mount)
+  certbot_webroot:        # H-3: ACME challenge files
+  certbot_certs:          # H-3: Let's Encrypt certificates

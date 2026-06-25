@@ -8,6 +8,7 @@ import { config, validateOAuthConfig } from './config/env';
 import { redactionPaths } from './utils/logger';
 import { AppMetricsService } from './services/app-metrics.service';
 import { randomUUID } from 'crypto';
+import { EncryptionService } from '@deployforge/security';
 
 const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
@@ -38,18 +39,39 @@ import { deploymentEventEmitter, DEPLOYMENT_EVENTS } from './utils/deployment-ev
 export async function buildApp() {
     validateOAuthConfig(app.log);
 
-    // Register Prisma middleware to emit deployment/log events to subscribers
+    // M-4: Transparent encryption of Deployment.env and DeploymentHistory.env
+    // Encrypts env vars before they hit the DB; decrypts on read.
+    // This covers ALL callers without touching individual service files.
+    const encryptionService = new EncryptionService(config.encryption.key);
+    const ENV_MODELS = new Set(['Deployment', 'DeploymentHistory']);
+    const WRITE_ACTIONS = new Set(['create', 'update', 'upsert', 'createMany', 'updateMany']);
+
     prisma.$use(async (params, next) => {
+        // Encrypt env on writes
+        if (params.model && ENV_MODELS.has(params.model) && WRITE_ACTIONS.has(params.action)) {
+            const data = params.args?.data;
+            if (data && typeof data.env === 'string' && data.env) {
+                params.args.data.env = encryptionService.encrypt(data.env);
+            }
+        }
+
         const result = await next(params);
 
+        // Decrypt env on reads
+        if (params.model && ENV_MODELS.has(params.model) && result) {
+            const decrypt = (record: any) => {
+                if (record && typeof record.env === 'string' && record.env) {
+                    try { record.env = encryptionService.decrypt(record.env); } catch { /* already plaintext (legacy) */ }
+                }
+            };
+            Array.isArray(result) ? result.forEach(decrypt) : decrypt(result);
+        }
+
+        // Emit deployment events
         if (params.model === 'DeploymentLog' && params.action === 'create') {
-            if (result) {
-                deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.LOG_ADDED, result.deploymentId, result);
-            }
+            if (result) deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.LOG_ADDED, result.deploymentId, result);
         } else if (params.model === 'Deployment' && (params.action === 'update' || params.action === 'upsert' || params.action === 'create')) {
-            if (result) {
-                deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.STATUS_UPDATED, result.id, result);
-            }
+            if (result) deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.STATUS_UPDATED, result.id, result);
         }
 
         return result;
@@ -65,16 +87,11 @@ export async function buildApp() {
         }
     });
 
-    // API-1: URL Rewriter Hook to map legacy requests to /api/ prefixes transparently
-    app.addHook('onRequest', async (request, reply) => {
-        const url = request.raw.url || '';
-        const path = url.split('?')[0];
-
+    // M-5: Removed the raw.url rewriter — it mutated request.raw.url AFTER Fastify's router
+    // had already matched the route, so it never affected routing. Only side effect was setting
+    // the Permissions-Policy header, which is now done in the onResponse hook below.
+    app.addHook('onRequest', async (_request, reply) => {
         reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
-
-        if (!probePaths.has(path) && !url.startsWith('/api/') && !url.startsWith('/api?')) {
-            request.raw.url = `/api${url}`;
-        }
     });
 
     app.addHook('onResponse', async (request, reply) => {

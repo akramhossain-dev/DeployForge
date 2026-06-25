@@ -52,17 +52,15 @@ function getMimeType(name: string): string {
 
 function isTextFile(name: string): boolean {
     const ext = path.extname(name).toLowerCase().slice(1);
-    const textExts = new Set([
-        'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'sass', 'less', 'json', 'yaml', 'yml',
-        'env', 'md', 'txt', 'sh', 'bash', 'zsh', 'fish', 'php', 'py', 'go', 'java', 'cs', 'rs',
-        'rb', 'sql', 'xml', 'csv', 'toml', 'ini', 'cfg', 'conf', 'log', 'gitignore', 'dockerfile',
-        'makefile', 'lock', 'sum', 'mod', 'gradle', 'properties', 'htaccess', 'prisma',
-        'graphql', 'gql', 'vue', 'svelte', 'astro', 'mdx', 'mjs', 'cjs',
+    const binaryExts = new Set([
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp', 'pdf',
+        'zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar',
+        'mp3', 'mp4', 'mkv', 'avi', 'mov', 'wav', 'ogg', 'flac',
+        'exe', 'dll', 'so', 'dylib', 'bin', 'iso', 'img', 'dmg',
+        'deb', 'rpm', 'msi', 'app', 'war', 'jar', 'class',
+        'pyc', 'pyd', 'db', 'sqlite', 'woff', 'woff2', 'ttf', 'eot'
     ]);
-    if (!ext) {
-        return ['makefile', 'dockerfile', 'rakefile', 'gemfile', 'procfile', 'vagrantfile'].includes(name.toLowerCase());
-    }
-    return textExts.has(ext);
+    return !binaryExts.has(ext);
 }
 
 function isImageFile(name: string): boolean {
