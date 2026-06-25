@@ -63,7 +63,9 @@ const rawEnvSchema = z.object({
     SMTP_SECURE: envBoolean(false),
     SMTP_USER: required('SMTP_USER'),
     SMTP_PASS: secret('SMTP_PASS', 1),
-    SMTP_FROM: z.string().trim().email('SMTP_FROM must be a valid email address').optional(),
+    // SMTP_FROM is optional. Falls back to SMTP_USER if not set.
+    // Accepts plain email ("you@gmail.com") or display-name format ("App Name <you@gmail.com>").
+    SMTP_FROM: z.string().trim().optional().default(''),
 
     EMAIL_SERVICE: optional(),
     EMAIL_USER: optional(),
@@ -76,6 +78,8 @@ const rawEnvSchema = z.object({
     ADMIN_LOCKOUT_TIME: z.coerce.number().int().positive().default(900),
     SUPER_ADMIN_EMAIL: z.string().email('SUPER_ADMIN_EMAIL must be a valid email address'),
     SUPER_ADMIN_PASSWORD: z.string().min(8, 'SUPER_ADMIN_PASSWORD must be at least 8 characters'),
+    // Optional bearer token required to access /metrics. If unset, /metrics is open (dev-only).
+    METRICS_TOKEN: optional(),
 });
 
 function formatEnvErrors(error: z.ZodError) {
@@ -107,7 +111,6 @@ if (env.REDIS_ENABLED && !env.REDIS_URL) finalChecks.push('REDIS_URL is required
 if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_ID) finalChecks.push('GOOGLE_CLIENT_ID is required when GOOGLE_OAUTH_ENABLED=true');
 if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_SECRET) finalChecks.push('GOOGLE_CLIENT_SECRET is required when GOOGLE_OAUTH_ENABLED=true');
 if (env.GOOGLE_OAUTH_ENABLED && !googleCallbackUrl) finalChecks.push('GOOGLE_CALLBACK_URL is required when GOOGLE_OAUTH_ENABLED=true');
-if (env.MASTER_KEY && env.MASTER_KEY !== env.ENCRYPTION_KEY) finalChecks.push('MASTER_KEY and ENCRYPTION_KEY must match while both are configured');
 if (env.GOOGLE_OAUTH_ENABLED && !env.GOOGLE_CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
     finalChecks.push('GOOGLE_CLIENT_ID must be a Google OAuth client ID ending in .apps.googleusercontent.com');
 }
@@ -189,6 +192,8 @@ export const securityConfig = {
     rateLimitWindow: env.RATE_LIMIT_WINDOW,
     adminMaxAttempts: env.ADMIN_MAX_ATTEMPTS,
     adminLockoutTime: env.ADMIN_LOCKOUT_TIME,
+    // Set METRICS_TOKEN in production to require Bearer auth on /metrics
+    metricsToken: env.METRICS_TOKEN || '',
 } as const;
 
 export const config = {

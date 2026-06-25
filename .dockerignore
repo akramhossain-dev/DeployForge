@@ -10,5 +10,4 @@ coverage
 !.env.example
 Dockerfile
 docker-compose*.yml
-Deployforge audit report.md
 docs

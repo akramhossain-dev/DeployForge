@@ -74,7 +74,7 @@ services:
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
       SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required}
-      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      SMTP_FROM: ${SMTP_FROM:-}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
       ADMIN_MAX_ATTEMPTS: ${ADMIN_MAX_ATTEMPTS:-5}
@@ -107,6 +107,8 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:3001}}
     restart: unless-stopped
     environment:
       # Explicitly set PORT=3000 — MUST come before env_file to override any PORT from .env

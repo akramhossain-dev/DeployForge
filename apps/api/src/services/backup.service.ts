@@ -1,12 +1,33 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import { AccountService } from './account.service';
 
-const execAsync = promisify(exec);
+/**
+ * Spawns a child process with the given args (NO shell expansion — safe from injection).
+ * Collects stderr for error messages and resolves/rejects on process close.
+ */
+function execSafe(command: string, args: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const proc = spawn(command, args, { stdio: 'pipe' });
+        const stderrChunks: string[] = [];
+
+        proc.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString()));
+
+        proc.on('error', (err) => reject(err));
+
+        proc.on('close', (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                const stderrMsg = stderrChunks.join('').trim();
+                reject(new Error(stderrMsg || `Command '${command}' exited with code ${code}`));
+            }
+        });
+    });
+}
 
 export interface BackupMetadata {
     filename: string;
@@ -64,9 +85,8 @@ export class BackupService {
         logger.info(`Starting database backup to ${filename}...`);
 
         try {
-            // Run pg_dump in custom archive format (-F c) which is compressed by default and supports pg_restore
-            const cmd = `pg_dump --dbname="${databaseUrl}" -F c -f "${filePath}"`;
-            await execAsync(cmd);
+            // Run pg_dump in custom archive format (-F c) — arguments passed as array (no shell injection)
+            await execSafe('pg_dump', ['--dbname', databaseUrl, '-Fc', '-f', filePath]);
 
             // Validate integrity immediately
             const isValid = await this.validateBackup(filePath, 'db');
@@ -222,12 +242,10 @@ export class BackupService {
                 throw new Error(`Backup file ${filename} failed integrity validation or is missing.`);
             }
 
-            // run pg_restore with connection url.
+            // Run pg_restore — arguments passed as an array (no shell injection)
             // --clean drops database objects before recreating them
             // --no-owner skips setting ownership of objects to match the original database
-            // -c/--clean requires custom format
-            const cmd = `pg_restore --clean --no-owner --dbname="${databaseUrl}" "${filePath}"`;
-            await execAsync(cmd);
+            await execSafe('pg_restore', ['--clean', '--no-owner', '--dbname', databaseUrl, filePath]);
 
             logger.info({ restoredFile: filename }, 'Database restore completed successfully.');
 

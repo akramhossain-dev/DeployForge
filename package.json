@@ -6,6 +6,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "db:push": "pnpm exec prisma db push --schema prisma/schema.prisma",
     "db:generate": "pnpm exec prisma generate --schema prisma/schema.prisma",
     "db:studio": "pnpm exec prisma studio --schema prisma/schema.prisma"

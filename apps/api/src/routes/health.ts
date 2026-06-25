@@ -1,8 +1,9 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import IORedis from 'ioredis';
 import prisma from '@deployforge/database';
 import { config } from '../config/env';
 import { AppMetricsService } from '../services/app-metrics.service';
+import crypto from 'crypto';
 
 type DependencyStatus = {
     status: 'ok' | 'error' | 'disabled';
@@ -65,7 +66,29 @@ export default async function healthRoutes(fastify: FastifyInstance) {
         });
     };
 
-    const metricsHandler = async () => {
+    const metricsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+        // If METRICS_TOKEN is configured, require Bearer auth — prevents information leakage
+        const configuredToken = config.security.metricsToken;
+        if (configuredToken) {
+            const authHeader = request.headers.authorization || '';
+            const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+            // Timing-safe comparison to prevent timing attacks
+            const isValid = provided.length > 0 &&
+                provided.length === configuredToken.length &&
+                crypto.timingSafeEqual(
+                    Buffer.from(provided),
+                    Buffer.from(configuredToken)
+                );
+
+            if (!isValid) {
+                request.log.warn({ ip: request.ip, path: request.url }, 'Metrics endpoint: unauthorized access attempt');
+                return reply.status(401).send({
+                    error: { code: 'UNAUTHORIZED', message: 'Valid Bearer token required' },
+                });
+            }
+        }
+
         return await AppMetricsService.getMetrics();
     };
 
