@@ -392,6 +392,67 @@ export class FileManagerService {
         }
     }
 
+    static async compress(userId: string, vpsId: string, parentDir: string, paths: string[], archiveName: string): Promise<void> {
+        const { ssh } = await connectToVps(userId, vpsId);
+        const resolvedParent = await resolvePath(ssh, parentDir);
+        const safeArchiveName = path.basename(archiveName).replace(/[^a-zA-Z0-9._\- ()[\]]/g, '_');
+        if (!safeArchiveName.endsWith('.zip')) {
+            throw new FileManagerError('Archive must end with .zip', 'INVALID_ARCHIVE', 400);
+        }
+        const archivePath = path.join(resolvedParent, safeArchiveName);
+
+        try {
+            const exists = await ssh.execute(`test -e "${archivePath}" && echo "EXISTS" || echo "OK"`);
+            if (exists.stdout.trim() === 'EXISTS') throw new FileManagerError('Archive file already exists', 'ALREADY_EXISTS', 409);
+
+            const resolvedPaths: string[] = [];
+            for (const p of paths) {
+                const resolved = await resolvePath(ssh, p);
+                resolvedPaths.push(resolved);
+            }
+
+            const relativeItems = resolvedPaths.map(p => {
+                return `"${path.relative(resolvedParent, p)}"`;
+            }).join(' ');
+
+            const cmd = `cd "${resolvedParent}" && zip -r "${safeArchiveName}" ${relativeItems}`;
+            const result = await ssh.execute(cmd);
+            if (result.code !== 0) {
+                throw new FileManagerError(`Failed to compress: ${result.stderr.trim() || result.stdout.trim() || 'zip failed'}`, 'COMPRESS_ERROR', 500);
+            }
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    static async decompress(userId: string, vpsId: string, zipFilePath: string, destDir?: string): Promise<void> {
+        const { ssh } = await connectToVps(userId, vpsId);
+        const resolvedZipPath = await resolvePath(ssh, zipFilePath);
+
+        try {
+            if (!resolvedZipPath.endsWith('.zip')) {
+                throw new FileManagerError('Only .zip files can be decompressed', 'INVALID_FILE', 400);
+            }
+
+            const exists = await ssh.execute(`test -f "${resolvedZipPath}" && echo "EXISTS" || echo "OK"`);
+            if (exists.stdout.trim() !== 'EXISTS') throw new FileManagerError('Zip file not found', 'NOT_FOUND', 404);
+
+            const resolvedDestDir = destDir 
+                ? await resolvePath(ssh, destDir) 
+                : path.dirname(resolvedZipPath);
+
+            await ssh.execute(`mkdir -p "${resolvedDestDir}"`);
+
+            const cmd = `unzip -o "${resolvedZipPath}" -d "${resolvedDestDir}"`;
+            const result = await ssh.execute(cmd);
+            if (result.code !== 0) {
+                throw new FileManagerError(`Failed to unzip: ${result.stderr.trim() || result.stdout.trim() || 'unzip failed'}`, 'DECOMPRESS_ERROR', 500);
+            }
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
     static async getVpsInfo(userId: string, vpsId: string): Promise<{ id: string; name: string; ipAddress: string; username: string }> {
         const vps = await prisma.vPS.findFirst({
             where: { id: vpsId, userId },
@@ -401,3 +462,4 @@ export class FileManagerService {
         return vps;
     }
 }
+

@@ -5,9 +5,10 @@ import {
     FolderOpen, LayoutGrid, List, Search, Upload, RefreshCw,
     Plus, Trash2, Copy, Scissors, Clipboard, Download, ArrowLeft,
     ArrowUp, X, Loader2, FolderPlus, FilePlus, AlertTriangle,
+    FolderArchive, FileArchive,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useDirectoryListing, useCreateEntry, useDeleteEntries, useRenameEntry, useCopyEntry, downloadFile, downloadZip } from '@/hooks/useFileManager';
+import { useDirectoryListing, useCreateEntry, useDeleteEntries, useRenameEntry, useCopyEntry, downloadFile, downloadZip, useCompress, useDecompress } from '@/hooks/useFileManager';
 import { FileList } from './FileList';
 import { Breadcrumb } from './Breadcrumb';
 import { ContextMenu } from './ContextMenu';
@@ -63,6 +64,8 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     const [confirm, setConfirm] = useState<ConfirmState | null>(null);
     const [newItemType, setNewItemType] = useState<'file' | 'directory' | null>(null);
     const [newItemName, setNewItemName] = useState('');
+    const [compressInput, setCompressInput] = useState<{ paths: string[] } | null>(null);
+    const [compressName, setCompressName] = useState('');
     const [dragging, setDragging] = useState<string[]>([]);
     const newItemRef = useRef<HTMLInputElement>(null);
     const renameRef = useRef<HTMLInputElement>(null);
@@ -72,6 +75,8 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     const deleteEntries = useDeleteEntries(vpsId);
     const renameEntry = useRenameEntry(vpsId);
     const copyEntry = useCopyEntry(vpsId);
+    const compress = useCompress(vpsId);
+    const decompress = useDecompress(vpsId);
 
     // Sync currentPath when URL path parameter changes (e.g. back button)
     useEffect(() => {
@@ -215,8 +220,33 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
         listing.refetch();
     };
 
+    const handleCompressSubmit = async () => {
+        if (!compressInput || !compressName.trim()) return;
+        let archive = compressName.trim();
+        if (!archive.endsWith('.zip')) {
+            archive += '.zip';
+        }
+        await compress.mutateAsync({
+            parentDir: currentPath,
+            paths: compressInput.paths,
+            archiveName: archive,
+        });
+        setCompressInput(null);
+        setCompressName('');
+        setSelected(new Set());
+        listing.refetch();
+    };
+
+    const handleDecompress = async (entry: FileEntry) => {
+        await decompress.mutateAsync({
+            zipFilePath: entry.path,
+        });
+        listing.refetch();
+    };
+
     const buildContextItems = (entry?: FileEntry) => {
         const forEntry = !!entry;
+        const isZip = entry?.name.endsWith('.zip');
         return [
             ...(forEntry ? [
                 { label: 'Open', icon: <FolderOpen size={13} />, onClick: () => handleOpen(entry!) },
@@ -225,6 +255,22 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 { label: 'Copy', icon: <Copy size={13} />, onClick: () => setClipboard({ paths: [entry!.path], operation: 'copy' }) },
                 { label: 'Cut', icon: <Scissors size={13} />, onClick: () => setClipboard({ paths: [entry!.path], operation: 'cut' }) },
                 { label: 'Download', icon: <Download size={13} />, onClick: () => entry!.type === 'directory' ? downloadZip(vpsId, entry!.path) : downloadFile(vpsId, entry!.path), divider: true },
+                ...(isZip ? [
+                    { label: 'Extract ZIP', icon: <FolderArchive size={13} />, onClick: () => handleDecompress(entry!), divider: false }
+                ] : []),
+                {
+                    label: 'Compress to ZIP',
+                    icon: <FileArchive size={13} />,
+                    onClick: () => {
+                        const paths = selected.size > 0 && selected.has(entry!.path)
+                            ? Array.from(selected)
+                            : [entry!.path];
+                        setCompressInput({ paths });
+                        const baseName = basename(entry!.path);
+                        setCompressName(baseName ? `${baseName}.zip` : 'archive.zip');
+                    },
+                    divider: true
+                },
                 { label: 'Properties', icon: null, onClick: () => setShowProps(entry!) },
                 { label: 'Delete', icon: <Trash2 size={13} />, onClick: () => confirmDelete([entry!.path]), danger: true, divider: true },
             ] : []),
@@ -276,6 +322,26 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                         <button onClick={() => setClipboard({ paths: Array.from(selected), operation: 'copy' })} title="Copy" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors"><Copy size={13} /></button>
                         <button onClick={() => setClipboard({ paths: Array.from(selected), operation: 'cut' })} title="Cut" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-amber-300 transition-colors"><Scissors size={13} /></button>
                         <button onClick={() => confirmDelete(Array.from(selected))} title="Delete" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:text-rose-400 transition-colors"><Trash2 size={13} /></button>
+                        <button onClick={() => {
+                            setCompressInput({ paths: Array.from(selected) });
+                            setCompressName(selected.size === 1 ? `${basename(Array.from(selected)[0])}.zip` : 'archive.zip');
+                        }} title="Compress to ZIP" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors">
+                            <FileArchive size={13} />
+                        </button>
+                        <button onClick={() => {
+                            Array.from(selected).forEach((path) => {
+                                const entry = entries.find(e => e.path === path);
+                                if (entry) {
+                                    if (entry.type === 'directory') {
+                                        downloadZip(vpsId, entry.path);
+                                    } else {
+                                        downloadFile(vpsId, entry.path);
+                                    }
+                                }
+                            });
+                        }} title="Download Selected" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors">
+                            <Download size={13} />
+                        </button>
                     </div>
                 )}
                 {clipboard && (
@@ -341,6 +407,28 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                 </div>
             )}
 
+            {/* ── Compress input ── */}
+            {compressInput && (
+                <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.07] bg-black/20 px-4 py-2 font-mono">
+                    <span className="text-cyan-400/60 text-xs select-none">zip -r</span>
+                    <input
+                        autoFocus
+                        value={compressName}
+                        onChange={(e) => setCompressName(e.target.value)}
+                        onKeyDown={(e) => { 
+                            if (e.key === 'Enter') handleCompressSubmit(); 
+                            if (e.key === 'Escape') setCompressInput(null); 
+                        }}
+                        placeholder="archive.zip"
+                        className="flex-1 bg-transparent text-xs text-cyan-100 outline-none placeholder:text-slate-700 font-mono"
+                    />
+                    <button onClick={handleCompressSubmit} disabled={compress.isPending} className="h-6 rounded border border-cyan-400/25 bg-cyan-400/10 px-2.5 text-[10px] font-bold text-cyan-300 hover:bg-cyan-400/20 transition-colors">
+                        {compress.isPending ? <Loader2 size={10} className="animate-spin" /> : '↵ Zip'}
+                    </button>
+                    <button onClick={() => setCompressInput(null)} className="text-slate-600 hover:text-slate-400 transition-colors"><X size={13} /></button>
+                </div>
+            )}
+
             {/* ── Main content area ── */}
             <div className="flex min-h-0 flex-1 overflow-hidden">
                 {/* File list panel */}
@@ -393,6 +481,7 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
                             dragging={dragging}
                             onDragStart={(entry) => setDragging(selected.size > 0 ? Array.from(selected) : [entry.path])}
                             onDrop={handleDrop}
+                            onDownload={(entry) => entry.type === 'directory' ? downloadZip(vpsId, entry.path) : downloadFile(vpsId, entry.path)}
                         />
                     )}
 

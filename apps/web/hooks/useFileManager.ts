@@ -180,6 +180,32 @@ export function useUploadFile(vpsId: string) {
     });
 }
 
+export function useCompress(vpsId: string) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ parentDir, paths, archiveName }: { parentDir: string; paths: string[]; archiveName: string }) =>
+            api.post<{ message: string }>(`${BASE(vpsId)}/compress`, { parentDir, paths, archiveName }),
+        onSuccess: () => {
+            toast('Compressed', 'Files compressed to ZIP successfully');
+            qc.invalidateQueries({ queryKey: fmKeys.all(vpsId) });
+        },
+        onError: (e: any) => toast('Compression Failed', e?.message || 'Failed', 'error'),
+    });
+}
+
+export function useDecompress(vpsId: string) {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ zipFilePath, destDir }: { zipFilePath: string; destDir?: string }) =>
+            api.post<{ message: string }>(`${BASE(vpsId)}/decompress`, { zipFilePath, destDir }),
+        onSuccess: () => {
+            toast('Decompressed', 'ZIP file unzipped successfully');
+            qc.invalidateQueries({ queryKey: fmKeys.all(vpsId) });
+        },
+        onError: (e: any) => toast('Decompression Failed', e?.message || 'Failed', 'error'),
+    });
+}
+
 // ─── Download helpers ─────────────────────────────────────────────────────────
 
 export async function downloadFile(vpsId: string, clientPath: string): Promise<void> {

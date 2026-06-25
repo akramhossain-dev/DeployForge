@@ -17,6 +17,15 @@ const renameBody = z.object({ oldPath: z.string().min(1).max(4096), newPath: z.s
 const copyBody = z.object({ srcPath: z.string().min(1).max(4096), dstPath: z.string().min(1).max(4096) });
 const saveBody = z.object({ path: z.string().min(1).max(4096), content: z.string().max(20 * 1024 * 1024) });
 const deleteBody = z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(100) });
+const compressBody = z.object({
+    parentDir: z.string().min(1).max(4096),
+    paths: z.array(z.string().min(1).max(4096)).min(1).max(100),
+    archiveName: z.string().min(1).max(256),
+});
+const decompressBody = z.object({
+    zipFilePath: z.string().min(1).max(4096),
+    destDir: z.string().min(1).max(4096).optional(),
+});
 
 function fmError(reply: FastifyReply, error: unknown) {
     if (error instanceof FileManagerError) {
@@ -223,6 +232,32 @@ export default async function fileManagerRoutes(fastify: FastifyInstance) {
 
             await FileManagerService.uploadFile(request.user!.id, vpsId, uploadDir, data.filename, buffer.toString('base64'));
             return { success: true, data: { message: 'Uploaded', filename: data.filename } };
+        } catch (e) { return fmError(reply, e); }
+    });
+
+    // ── Compress ──────────────────────────────────────────────────────────────
+    fastify.post('/:vpsId/compress', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: writeLimit },
+    }, async (request, reply) => {
+        try {
+            const { vpsId } = vpsParam.parse(request.params);
+            const { parentDir, paths, archiveName } = compressBody.parse(request.body);
+            await FileManagerService.compress(request.user!.id, vpsId, parentDir, paths, archiveName);
+            return { success: true, data: { message: 'Files compressed successfully' } };
+        } catch (e) { return fmError(reply, e); }
+    });
+
+    // ── Decompress ────────────────────────────────────────────────────────────
+    fastify.post('/:vpsId/decompress', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: writeLimit },
+    }, async (request, reply) => {
+        try {
+            const { vpsId } = vpsParam.parse(request.params);
+            const { zipFilePath, destDir } = decompressBody.parse(request.body);
+            await FileManagerService.decompress(request.user!.id, vpsId, zipFilePath, destDir);
+            return { success: true, data: { message: 'Archive decompressed successfully' } };
         } catch (e) { return fmError(reply, e); }
     });
 }

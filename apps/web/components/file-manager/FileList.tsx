@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, Download } from 'lucide-react';
 import type { FileEntry } from '@/lib/api/types';
 import { FileIcon } from './FileIcon';
 import { formatSize, formatDate } from './utils';
@@ -24,6 +24,7 @@ interface FileListProps {
     dragging: string[];
     onDragStart: (entry: FileEntry) => void;
     onDrop: (targetPath: string) => void;
+    onDownload: (entry: FileEntry) => void;
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -36,7 +37,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 export function FileList({
     entries, selected, view, sortKey, sortDir, onSort,
     onSelect, onOpen, onContextMenu, onDropZoneContext,
-    dragging, onDragStart, onDrop,
+    dragging, onDragStart, onDrop, onDownload,
 }: FileListProps) {
 
     const handleClick = (e: React.MouseEvent, entry: FileEntry) => {
@@ -185,10 +186,24 @@ export function FileList({
                                 {isDir ? 'DIR' : (entry.extension?.toUpperCase() || 'FILE')}
                             </span>
 
-                            {/* Row number */}
-                            <span className="w-6 text-right text-[9px] text-slate-800 select-none font-mono">
-                                {String(idx + 1).padStart(2, '0')}
-                            </span>
+                            {/* Row number / Hover actions */}
+                            <div className="w-6 shrink-0 flex items-center justify-end relative h-5">
+                                <span className="text-[9px] text-slate-800 select-none font-mono group-hover:opacity-0 transition-opacity duration-150">
+                                    {String(idx + 1).padStart(2, '0')}
+                                </span>
+                                <div className="absolute inset-0 flex items-center justify-end opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onDownload(entry);
+                                        }}
+                                        title="Download"
+                                        className="flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:bg-white/10 hover:text-cyan-300 transition-colors"
+                                    >
+                                        <Download size={11} />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     );
                 })}
