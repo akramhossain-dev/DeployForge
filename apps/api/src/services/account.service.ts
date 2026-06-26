@@ -32,6 +32,32 @@ function emailServiceUnavailableError() {
 }
 
 export class AccountService {
+    static async generateUniqueUsername(email: string, name?: string | null): Promise<string> {
+        let baseUsername = (name || email.split('@')[0])
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, '');
+
+        if (!baseUsername || baseUsername.length < 3) {
+            baseUsername = 'user';
+        }
+
+        let username = baseUsername;
+        let isUnique = false;
+        let counter = 0;
+
+        while (!isUnique) {
+            const candidate = counter === 0 ? username : `${username}${counter}`;
+            const existing = await prisma.user.findUnique({ where: { username: candidate } });
+            if (!existing) {
+                username = candidate;
+                isUnique = true;
+            } else {
+                counter++;
+            }
+        }
+        return username;
+    }
+
     static async logAudit(userId: string | null, action: string, details: string, ip?: string, ua?: string, metadata?: any) {
         const { browser, device, os } = parseUserAgent(ua);
 
@@ -325,6 +351,15 @@ export class AccountService {
 
         await this.logAudit(userId, 'ACCOUNT_DELETED', 'Account successfully deleted.', ip, ua);
 
+        // Delete verification tokens
+        if (user.email) {
+            await prisma.verificationToken.deleteMany({ where: { email: user.email } });
+        }
+
+        // Clear all session cache patterns from Redis to instantly log out the user from all devices
+        await CacheService.clearPattern(`user-session:${userId}:*`);
+
+        // Clear profile cache
         await CacheService.del(`user:profile:${userId}`);
 
         await prisma.user.delete({ where: { id: userId } });

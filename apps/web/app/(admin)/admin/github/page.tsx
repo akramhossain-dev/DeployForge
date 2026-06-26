@@ -1,16 +1,70 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { CheckCircle2, Github, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import clsx from 'clsx';
-import { ErrorState, PageHeader, SkeletonBlock } from '@/components/ui';
+import { ErrorState, PageHeader, SkeletonBlock, AppModal, Button } from '@/components/ui';
 import { formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAction, useAdminGithubAccounts } from '@/hooks/useDeployForgeData';
 
 export default function AdminGithubPage() {
     const accounts = useAdminGithubAccounts();
     const action   = useAdminAction();
+
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        actionText: string;
+        onConfirm: () => void;
+        variant: 'primary' | 'secondary' | 'danger';
+    }>({
+        open: false,
+        title: '',
+        message: '',
+        actionText: '',
+        onConfirm: () => {},
+        variant: 'primary',
+    });
+
     const connected  = accounts.data?.length ?? 0;
     const totalRepos = accounts.data?.reduce((s, a) => s + a.repositories.length, 0) ?? 0;
+
+    const triggerSync = (userId: string, username: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Sync GitHub Account',
+            message: `Are you sure you want to trigger a force sync for GitHub account @${username}? This will refetch all repositories from the GitHub API.`,
+            actionText: 'Sync Account',
+            variant: 'primary',
+            onConfirm: () => {
+                action.mutate({ path: `/admin/github/accounts/${userId}/sync` }, {
+                    onSuccess: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        accounts.refetch();
+                    }
+                });
+            }
+        });
+    };
+
+    const triggerDisconnect = (userId: string, username: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Disconnect GitHub Account',
+            message: `Are you sure you want to disconnect the GitHub account @${username}? This will remove the GitHub connection and associated repositories from DeployForge.`,
+            actionText: 'Disconnect',
+            variant: 'danger',
+            onConfirm: () => {
+                action.mutate({ method: 'delete', path: `/admin/github/accounts/${userId}` }, {
+                    onSuccess: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        accounts.refetch();
+                    }
+                });
+            }
+        });
+    };
 
     return (
         <div className="space-y-6">
@@ -64,6 +118,7 @@ export default function AdminGithubPage() {
                         const repoCount    = account.repositories.length;
                         const privateCount = account.repositories.filter(r => r.private).length;
                         const publicCount  = repoCount - privateCount;
+                        const userId       = account.user?.id;
 
                         return (
                             <div key={account.id ?? account.username}
@@ -120,14 +175,14 @@ export default function AdminGithubPage() {
                                         <div className="flex gap-1.5">
                                             <button
                                                 title="Force Sync"
-                                                onClick={() => action.mutate({ path: `/admin/github/accounts/${account.user?.id}/sync` })}
+                                                onClick={() => userId && triggerSync(userId, account.username)}
                                                 className="flex h-8 items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 text-[11px] font-black text-slate-400 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
                                             >
                                                 <RefreshCw size={10} /> Sync
                                             </button>
                                             <button
                                                 title="Disconnect"
-                                                onClick={() => action.mutate({ method: 'delete', path: `/admin/github/accounts/${account.user?.id}` })}
+                                                onClick={() => userId && triggerDisconnect(userId, account.username)}
                                                 className="flex h-8 w-8 items-center justify-center rounded-xl border border-rose-400/20 bg-rose-400/[0.07] text-rose-400/70 transition-all hover:border-rose-400/50 hover:bg-rose-400/15 hover:text-rose-300"
                                             >
                                                 <XCircle size={13} />
@@ -147,6 +202,38 @@ export default function AdminGithubPage() {
                     <span className="font-black text-slate-400">{totalRepos}</span> repositories
                 </p>
             )}
+
+            {/* Confirmation Modal */}
+            <AppModal
+                open={confirmModal.open}
+                onClose={() => !action.isPending && setConfirmModal(prev => ({ ...prev, open: false }))}
+                title={confirmModal.title}
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                        {confirmModal.message}
+                    </p>
+
+                    <div className="flex justify-end gap-2 border-t border-white/5 pt-4 mt-2">
+                        <Button 
+                            type="button" 
+                            variant="secondary"
+                            onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                            disabled={action.isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            type="button" 
+                            variant={confirmModal.variant}
+                            onClick={confirmModal.onConfirm}
+                            loading={action.isPending}
+                        >
+                            {confirmModal.actionText}
+                        </Button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 }

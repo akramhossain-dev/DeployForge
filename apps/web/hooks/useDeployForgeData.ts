@@ -481,7 +481,10 @@ export function useTestVpsConnection() {
             } else {
                 handleMutationError('Connection Failed', data.message);
             }
-            if ('id' in payload) queryClient.invalidateQueries({ queryKey: queryKeys.vps });
+            if ('id' in payload) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.vps });
+                queryClient.invalidateQueries({ queryKey: queryKeys.adminVps });
+            }
         },
         onError: (err) => handleMutationError('Connection Check Failed', err),
     });
@@ -626,5 +629,43 @@ export function useAdminAction() {
             queryClient.invalidateQueries({ queryKey: ['admin'] });
         },
         onError: (err) => handleMutationError('Admin Action Failed', err),
+    });
+}
+
+export function useAdminVpsLiveMetrics(vpsId?: string, enabled = true) {
+    return useQuery({
+        queryKey: ['admin', 'vps', vpsId, 'live-metrics'] as const,
+        queryFn: () => api.get<VpsLiveMetrics>(`/admin/vps/${vpsId}/live-metrics`),
+        enabled: !!vpsId && enabled,
+        refetchInterval: 3000,
+        staleTime: 0,
+        retry: false,
+    });
+}
+
+export function useAdminVpsServerInfo(vpsId?: string) {
+    return useQuery({
+        queryKey: ['admin', 'vps', vpsId, 'info'] as const,
+        queryFn: () => api.get<VpsServerInfo>(`/admin/vps/${vpsId}/info`),
+        enabled: !!vpsId,
+        staleTime: 60000,
+        retry: false,
+    });
+}
+
+export function useAdminTestVpsConnection() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => api.post<VpsConnectionResult>(`/admin/vps/${id}/test-connection`, {}),
+        onSuccess: (data) => {
+            if (data.success) {
+                handleMutationSuccess('Connection Succeeded', 'VPS connection test completed successfully.');
+            } else {
+                handleMutationError('Connection Failed', new Error(data.message));
+            }
+            queryClient.invalidateQueries({ queryKey: queryKeys.adminVps });
+        },
+        onError: (err) => handleMutationError('Connection Check Failed', err),
     });
 }

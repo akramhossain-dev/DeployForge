@@ -52,12 +52,13 @@ function UsageBar({ used, total, label }: { used: number; total: number; label: 
 }
 
 interface ServerInfoTabProps {
-    vps: Vps | null;
-    vpsList: Vps[];
+    vps: any | null;
+    vpsList?: any[];
+    useServerInfoHook?: (vpsId?: string) => any;
 }
 
-export default function ServerInfoTab({ vps, vpsList }: ServerInfoTabProps) {
-    const info = useVpsServerInfo(vps?.id);
+export default function ServerInfoTab({ vps, vpsList = [], useServerInfoHook = useVpsServerInfo }: ServerInfoTabProps) {
+    const info = useServerInfoHook(vps?.id);
 
     if (!vps) {
         return (

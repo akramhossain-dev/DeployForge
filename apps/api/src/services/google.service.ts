@@ -1,6 +1,7 @@
 import prisma from '@deployforge/database';
 import { config } from '../config/env';
 import { AuthService } from './auth.service';
+import { AccountService } from './account.service';
 import { logger } from '../utils/logger';
 
 type GoogleTokenResponse = {
@@ -146,9 +147,11 @@ export class GoogleService {
                 },
             });
         } else {
+            const username = await AccountService.generateUniqueUsername(email, profile.name || email.split('@')[0]);
             user = await prisma.user.create({
                 data: {
                     email,
+                    username,
                     googleId,
                     googleEmail: email,
                     googleAvatar: profile.picture,

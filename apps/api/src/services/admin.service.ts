@@ -1,4 +1,5 @@
 import prisma from '@deployforge/database';
+import { CacheService } from './cache.service';
 
 export class AdminService {
     static async deleteDeploymentCascade(deploymentId: string) {
@@ -14,6 +15,12 @@ export class AdminService {
         if (user?.email) {
             await prisma.verificationToken.deleteMany({ where: { email: user.email } });
         }
+
+        // Clear all session cache patterns from Redis to instantly log out the user from all devices
+        await CacheService.clearPattern(`user-session:${userId}:*`);
+
+        // Clear profile cache
+        await CacheService.del(`user:profile:${userId}`);
 
         await prisma.user.delete({ where: { id: userId } });
     }

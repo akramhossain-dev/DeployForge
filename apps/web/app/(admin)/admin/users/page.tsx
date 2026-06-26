@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { ErrorState, PageHeader, PasswordInput, inputClassName } from '@/components/ui';
+import { ErrorState, PageHeader, PasswordInput, inputClassName, AppModal } from '@/components/ui';
 import { AdminTable, Button, Panel, StatusBadge, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAction, useAdminAccounts, useAdminMe, useAdminUsers } from '@/hooks/useDeployForgeData';
 
@@ -39,6 +39,22 @@ export default function AdminUsersPage() {
     const [createError,    setCreateError]    = useState('');
     const [createSuccess,  setCreateSuccess]  = useState('');
 
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        actionText: string;
+        onConfirm: () => void;
+        variant: 'primary' | 'secondary' | 'danger';
+    }>({
+        open: false,
+        title: '',
+        message: '',
+        actionText: '',
+        onConfirm: () => {},
+        variant: 'primary',
+    });
+
     const params       = useMemo(() => ({ search, status }), [search, status]);
     const me           = useAdminMe();
     const platformUsers = useAdminUsers(params);
@@ -60,22 +76,101 @@ export default function AdminUsersPage() {
         setCreateError(''); setCreateSuccess('');
         if (!createName || !createEmail || !createPassword) { setCreateError('All fields are required.'); return; }
         if (createPassword.length < 6) { setCreateError('Password must be at least 6 characters.'); return; }
-        action.mutate(
-            { method: 'post', path: '/admin/create-user', body: { name: createName, email: createEmail, password: createPassword, role: createRole } },
-            {
-                onSuccess: () => {
-                    setCreateSuccess(`${createRole === 'ADMIN' ? 'Admin' : 'Moderator'} created successfully.`);
-                    setCreateName(''); setCreateEmail(''); setCreatePassword('');
-                },
-                onError: (err: any) => setCreateError(err?.response?.data?.message || err?.message || 'Failed to create user.'),
+        setConfirmModal({
+            open: true,
+            title: 'Provision Administrative Account',
+            message: `Are you sure you want to create a new ${createRole} account for "${createEmail}"?`,
+            actionText: 'Create Account',
+            variant: 'primary',
+            onConfirm: () => {
+                action.mutate(
+                    { method: 'post', path: '/admin/create-user', body: { name: createName, email: createEmail, password: createPassword, role: createRole } },
+                    {
+                        onSuccess: () => {
+                            setCreateSuccess(`${createRole === 'ADMIN' ? 'Admin' : 'Moderator'} created successfully.`);
+                            setCreateName(''); setCreateEmail(''); setCreatePassword('');
+                            setConfirmModal(prev => ({ ...prev, open: false }));
+                        },
+                        onError: (err: any) => {
+                            setCreateError(err?.response?.data?.message || err?.message || 'Failed to create user.');
+                            setConfirmModal(prev => ({ ...prev, open: false }));
+                        },
+                    }
+                );
             }
+        });
+    };
+
+    const handleRoleChange   = (id: string, r: 'ADMIN' | 'MODERATOR' | 'USER') => {
+        action.mutate(
+            { method: 'patch', path: `/admin/users/${id}/role`, body: { role: r } },
+            { onSuccess: () => setConfirmModal(prev => ({ ...prev, open: false })) }
+        );
+    };
+    const handleStatusChange = (id: string, s: 'ACTIVE' | 'SUSPENDED') => {
+        action.mutate(
+            { method: 'patch', path: `/admin/platform-users/${id}/status`, body: { status: s } },
+            { onSuccess: () => setConfirmModal(prev => ({ ...prev, open: false })) }
+        );
+    };
+    const handleDeleteAdmin  = (id: string) => {
+        action.mutate(
+            { method: 'delete', path: `/admin/users/${id}` },
+            { onSuccess: () => setConfirmModal(prev => ({ ...prev, open: false })) }
+        );
+    };
+    const handleDeleteUser   = (id: string) => {
+        action.mutate(
+            { method: 'delete', path: `/admin/platform-users/${id}` },
+            { onSuccess: () => setConfirmModal(prev => ({ ...prev, open: false })) }
         );
     };
 
-    const handleRoleChange   = (id: string, r: 'ADMIN' | 'MODERATOR' | 'USER') => action.mutate({ method: 'patch', path: `/admin/users/${id}/role`, body: { role: r } });
-    const handleStatusChange = (id: string, s: 'ACTIVE' | 'SUSPENDED' | 'DISABLED') => action.mutate({ method: 'patch', path: `/admin/platform-users/${id}/status`, body: { status: s } });
-    const handleDeleteAdmin  = (id: string) => { if (confirm('Delete this admin/moderator account?')) action.mutate({ method: 'delete', path: `/admin/users/${id}` }); };
-    const handleDeleteUser   = (id: string) => { if (confirm('Delete this platform user and all their resources?')) action.mutate({ method: 'delete', path: `/admin/platform-users/${id}` }); };
+    const triggerRoleChange = (id: string, r: 'ADMIN' | 'MODERATOR' | 'USER') => {
+        setConfirmModal({
+            open: true,
+            title: r === 'USER' ? 'Demote User Role' : `Promote User to ${r}`,
+            message: `Are you sure you want to change this user's role to ${r}? This will modify their access permissions.`,
+            actionText: 'Confirm Role Change',
+            variant: 'primary',
+            onConfirm: () => handleRoleChange(id, r),
+        });
+    };
+
+    const triggerStatusChange = (id: string, s: 'ACTIVE' | 'SUSPENDED') => {
+        setConfirmModal({
+            open: true,
+            title: s === 'ACTIVE' ? 'Activate User Account' : 'Suspend User Account',
+            message: s === 'ACTIVE'
+                ? 'Are you sure you want to activate this user account? They will regain access to their dashboard and deployments.'
+                : 'Are you sure you want to suspend this user account? They will be immediately blocked from logging in and accessing their resources.',
+            actionText: s === 'ACTIVE' ? 'Activate' : 'Suspend',
+            variant: s === 'ACTIVE' ? 'primary' : 'danger',
+            onConfirm: () => handleStatusChange(id, s),
+        });
+    };
+
+    const triggerDeleteAdmin = (id: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Delete Administrative Account',
+            message: 'Are you sure you want to permanently delete this admin/moderator account? This action is permanent and cannot be undone.',
+            actionText: 'Delete Account',
+            variant: 'danger',
+            onConfirm: () => handleDeleteAdmin(id),
+        });
+    };
+
+    const triggerDeleteUser = (id: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Delete Platform User',
+            message: 'Are you sure you want to permanently delete this platform user and ALL of their associated VPS servers, projects, and deployments? This action is permanent and cannot be undone.',
+            actionText: 'Delete User & Resources',
+            variant: 'danger',
+            onConfirm: () => handleDeleteUser(id),
+        });
+    };
 
     const platformCount  = platformUsers.data?.length || 0;
     const adminCount     = adminAccounts.data?.filter(a => a.role === 'ADMIN' || a.role === 'SUPER_ADMIN').length || 0;
@@ -186,7 +281,6 @@ export default function AdminUsersPage() {
                                 <option value="">All Statuses</option>
                                 <option value="ACTIVE">ACTIVE</option>
                                 <option value="SUSPENDED">SUSPENDED</option>
-                                <option value="DISABLED">DISABLED</option>
                             </select>
                         </div>
                     </Panel>
@@ -211,39 +305,36 @@ export default function AdminUsersPage() {
                                 <span key="j" className="text-xs text-slate-500 whitespace-nowrap">{formatDate(user.createdAt)}</span>,
                                 <div key="a" className="flex flex-wrap gap-1.5">
                                     {user.status === 'ACTIVE' ? (
-                                        <>
-                                            <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => handleStatusChange(user.id, 'SUSPENDED')}>
-                                                <UserMinus size={11} /> Suspend
-                                            </Button>
-                                            <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => handleStatusChange(user.id, 'DISABLED')}>
-                                                Disable
-                                            </Button>
-                                        </>
+                                        <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => triggerStatusChange(user.id, 'SUSPENDED')}>
+                                            <UserMinus size={11} /> Suspend
+                                        </Button>
                                     ) : (
-                                        <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => handleStatusChange(user.id, 'ACTIVE')}>
+                                        <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => triggerStatusChange(user.id, 'ACTIVE')}>
                                             <UserCheck size={11} /> Activate
+                                        </Button>
+                                    )}
+                                    {isSuperAdmin && (
+                                        <Button variant="danger" className="h-7 px-2 text-[11px]" onClick={() => triggerDeleteUser(user.id)}>
+                                            <Trash2 size={11} /> Delete
                                         </Button>
                                     )}
                                     {isSuperAdmin && (
                                         <>
                                             {user.role === 'USER' && (
                                                 <>
-                                                    <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => handleRoleChange(user.id, 'ADMIN')}>
+                                                    <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => triggerRoleChange(user.id, 'ADMIN')}>
                                                         <ShieldCheck size={11} /> Admin
                                                     </Button>
-                                                    <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => handleRoleChange(user.id, 'MODERATOR')}>
+                                                    <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => triggerRoleChange(user.id, 'MODERATOR')}>
                                                         <Shield size={11} /> Mod
                                                     </Button>
                                                 </>
                                             )}
                                             {(user.role === 'ADMIN' || user.role === 'MODERATOR') && (
-                                                <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => handleRoleChange(user.id, 'USER')}>
+                                                <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => triggerRoleChange(user.id, 'USER')}>
                                                     Demote
                                                 </Button>
                                             )}
-                                            <Button variant="danger" className="h-7 px-2 text-[11px]" onClick={() => handleDeleteUser(user.id)}>
-                                                <Trash2 size={11} />
-                                            </Button>
                                         </>
                                     )}
                                 </div>,
@@ -273,10 +364,10 @@ export default function AdminUsersPage() {
                                 <div key="act" className="flex gap-1.5">
                                     {canModify ? (
                                         <>
-                                            <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => handleRoleChange(account.id, 'USER')}>
+                                            <Button variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => triggerRoleChange(account.id, 'USER')}>
                                                 <UserMinus size={11} /> Demote
                                             </Button>
-                                            <Button variant="danger" className="h-7 px-2 text-[11px]" onClick={() => handleDeleteAdmin(account.id)}>
+                                            <Button variant="danger" className="h-7 px-2 text-[11px]" onClick={() => triggerDeleteAdmin(account.id)}>
                                                 <Trash2 size={11} />
                                             </Button>
                                         </>
@@ -289,6 +380,38 @@ export default function AdminUsersPage() {
                     />
                 </Panel>
             )}
+
+            {/* Admin confirmation modal */}
+            <AppModal
+                open={confirmModal.open}
+                onClose={() => !action.isPending && setConfirmModal(prev => ({ ...prev, open: false }))}
+                title={confirmModal.title}
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                        {confirmModal.message}
+                    </p>
+
+                    <div className="flex justify-end gap-2 border-t border-white/5 pt-4 mt-2">
+                        <Button 
+                            type="button" 
+                            variant="secondary"
+                            onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                            disabled={action.isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            type="button" 
+                            variant={confirmModal.variant}
+                            onClick={confirmModal.onConfirm}
+                            loading={action.isPending}
+                        >
+                            {confirmModal.actionText}
+                        </Button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 }

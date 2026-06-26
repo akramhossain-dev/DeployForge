@@ -6,7 +6,7 @@ import {
     Settings, ShieldCheck, UserPlus, XCircle, Zap,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { ErrorState, PageHeader, PasswordInput, inputClassName } from '@/components/ui';
+import { ErrorState, PageHeader, PasswordInput, inputClassName, AppModal } from '@/components/ui';
 import { AdminTable, Button, Panel, SmallMeta, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAccounts, useAdminAction, useAdminMe, useAdminSettings } from '@/hooks/useDeployForgeData';
 
@@ -57,11 +57,79 @@ export default function AdminSettingsPage() {
     const isSuperAdmin  = me.data?.role === 'SUPER_ADMIN';
     const accounts      = useAdminAccounts(isSuperAdmin);
 
-    function createAdmin() {
-        action.mutate({ path: '/admin/create-user', body: { email, password, role, adminSecret } }, {
-            onSuccess: () => { setEmail(''); setPassword(''); setAdminSecret(''); },
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        actionText: string;
+        onConfirm: () => void;
+        variant: 'primary' | 'secondary' | 'danger';
+    }>({
+        open: false,
+        title: '',
+        message: '',
+        actionText: '',
+        onConfirm: () => {},
+        variant: 'primary',
+    });
+
+    const triggerCreateAdmin = () => {
+        if (!email || !password || !adminSecret) return;
+        setConfirmModal({
+            open: true,
+            title: `Provision Administrative Account`,
+            message: `Are you sure you want to create a new ${role} account for "${email}"?`,
+            actionText: 'Create Account',
+            variant: 'primary',
+            onConfirm: () => {
+                action.mutate({ path: '/admin/create-user', body: { email, password, role, adminSecret } }, {
+                    onSuccess: () => { 
+                        setEmail(''); 
+                        setPassword(''); 
+                        setAdminSecret('');
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        accounts.refetch();
+                    },
+                });
+            }
         });
-    }
+    };
+
+    const triggerRoleChange = (id: string, adminEmail: string, newRole: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Change Administrator Role',
+            message: `Are you sure you want to change the role of "${adminEmail}" to "${newRole}"?`,
+            actionText: 'Update Role',
+            variant: 'primary',
+            onConfirm: () => {
+                action.mutate({ method: 'patch', path: `/admin/users/${id}/role`, body: { role: newRole } }, {
+                    onSuccess: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        accounts.refetch();
+                    }
+                });
+            }
+        });
+    };
+
+    const triggerDeleteAdmin = (id: string, adminEmail: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Delete Administrative Account',
+            message: `Are you sure you want to permanently delete the administrative account "${adminEmail}"? This action is permanent and cannot be undone.`,
+            actionText: 'Delete Account',
+            variant: 'danger',
+            onConfirm: () => {
+                action.mutate({ method: 'delete', path: `/admin/users/${id}` }, {
+                    onSuccess: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        accounts.refetch();
+                    }
+                });
+            }
+        });
+    };
 
     return (
         <div className="space-y-6">
@@ -103,7 +171,7 @@ export default function AdminSettingsPage() {
                                 <PasswordInput value={adminSecret} onChange={e => setAdminSecret(e.target.value)} placeholder="ADMIN_SECRET env value" />
                             </label>
                             <div className="pt-1">
-                                <Button onClick={createAdmin} loading={action.isPending} className="w-full">
+                                <Button onClick={triggerCreateAdmin} loading={action.isPending} disabled={!email || !password || !adminSecret} className="w-full">
                                     <UserPlus size={14} /> Create Account
                                 </Button>
                             </div>
@@ -120,13 +188,13 @@ export default function AdminSettingsPage() {
                                     <p className="text-[10px] text-slate-500">{admin.email}</p>
                                 </div>,
                                 <select key="r" value={admin.role}
-                                    onChange={e => action.mutate({ method: 'patch', path: `/admin/users/${admin.id}/role`, body: { role: e.target.value } })}
+                                    onChange={e => triggerRoleChange(admin.id, admin.email || 'Admin', e.target.value)}
                                     className={`${inputClassName} h-8 py-1 text-xs`}>
                                     <option>SUPER_ADMIN</option><option>ADMIN</option><option>MODERATOR</option>
                                 </select>,
                                 <span key="l" className="text-xs text-slate-500">{formatDate(admin.lastLoginAt)}</span>,
                                 <Button key="d" variant="danger" className="h-7 px-2 text-[11px]"
-                                    onClick={() => action.mutate({ method: 'delete', path: `/admin/users/${admin.id}` })}>
+                                    onClick={() => triggerDeleteAdmin(admin.id, admin.email || 'Admin')}>
                                     Delete
                                 </Button>,
                             ]) || []}
@@ -190,6 +258,38 @@ export default function AdminSettingsPage() {
                     </div>
                 </SectionPanel>
             </div>
+
+            {/* Confirmation Modal */}
+            <AppModal
+                open={confirmModal.open}
+                onClose={() => !action.isPending && setConfirmModal(prev => ({ ...prev, open: false }))}
+                title={confirmModal.title}
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                        {confirmModal.message}
+                    </p>
+
+                    <div className="flex justify-end gap-2 border-t border-white/5 pt-4 mt-2">
+                        <Button 
+                            type="button" 
+                            variant="secondary"
+                            onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                            disabled={action.isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            type="button" 
+                            variant={confirmModal.variant}
+                            onClick={confirmModal.onConfirm}
+                            loading={action.isPending}
+                        >
+                            {confirmModal.actionText}
+                        </Button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 }

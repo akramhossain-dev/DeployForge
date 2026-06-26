@@ -217,33 +217,63 @@ export function AppModal({
     children,
     open,
     onClose,
+    size = 'md',
 }: {
     title: string;
     children: ReactNode;
     open: boolean;
     onClose: () => void;
+    size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
 }) {
     useEffect(() => {
         if (!open) return;
+        document.body.style.overflow = 'hidden';
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         };
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', handleKeyDown);
+        };
     }, [open, onClose]);
+
+    const maxWidthMap = {
+        sm:   'max-w-sm',
+        md:   'max-w-lg',
+        lg:   'max-w-2xl',
+        xl:   'max-w-4xl',
+        full: 'max-w-[95vw]',
+    };
 
     if (!open) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-            <Panel className="w-full max-w-lg">
-                <div className="mb-5 flex items-center justify-between gap-4">
-                    <h2 className="text-lg font-black text-white">{title}</h2>
-                    <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-300 hover:text-white" aria-label="Close modal">
-                        <X size={16} />
-                    </button>
-                </div>
-                {children}
-            </Panel>
+        <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 p-4 pt-[5vh] backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div className={clsx('relative w-full my-auto', maxWidthMap[size])}>
+                <Panel className="flex flex-col">
+                    {/* Modal header */}
+                    <div className="mb-5 flex shrink-0 items-center justify-between gap-4">
+                        <h2 className="text-base font-black text-white sm:text-lg">{title}</h2>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-300 transition-colors hover:bg-white/[0.12] hover:text-white"
+                            aria-label="Close modal"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                    {/* Modal body */}
+                    <div className="min-h-0">
+                        {children}
+                    </div>
+                </Panel>
+            </div>
         </div>
     );
 }

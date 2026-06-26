@@ -3,6 +3,7 @@ import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import crypto from 'crypto';
 import { AuthService } from './auth.service';
+import { AccountService } from './account.service';
 import { logger } from '../utils/logger';
 
 const encryptionService = new EncryptionService(config.encryption.key);
@@ -221,9 +222,11 @@ export class GitHubService {
                 },
             });
         } else {
+            const username = await AccountService.generateUniqueUsername(email, profile.name || profile.login);
             user = await prisma.user.create({
                 data: {
                     email,
+                    username,
                     githubId,
                     githubUsername: profile.login,
                     githubAvatar: profile.avatar_url,

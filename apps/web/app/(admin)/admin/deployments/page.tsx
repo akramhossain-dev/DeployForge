@@ -6,7 +6,7 @@ import {
     Rocket, Search, Server, Square, Trash2, User, XCircle, CheckCircle2, Zap, Clock
 } from 'lucide-react';
 import clsx from 'clsx';
-import { ErrorState, PageHeader, SkeletonBlock } from '@/components/ui';
+import { ErrorState, PageHeader, SkeletonBlock, AppModal, Button } from '@/components/ui';
 import { StatusBadge, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAction, useAdminDeployments } from '@/hooks/useDeployForgeData';
 
@@ -41,6 +41,22 @@ export default function AdminDeploymentsPage() {
     const deployments = useAdminDeployments(params);
     const action      = useAdminAction();
 
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        actionText: string;
+        onConfirm: () => void;
+        variant: 'primary' | 'secondary' | 'danger';
+    }>({
+        open: false,
+        title: '',
+        message: '',
+        actionText: '',
+        onConfirm: () => {},
+        variant: 'primary',
+    });
+
     const filtered = useMemo(() => {
         if (!search.trim()) return deployments.data || [];
         const q = search.toLowerCase();
@@ -53,6 +69,60 @@ export default function AdminDeploymentsPage() {
     const running = (deployments.data || []).filter(d => d.status === 'RUNNING').length;
     const failed  = (deployments.data || []).filter(d => d.status === 'FAILED').length;
     const total   = deployments.data?.length ?? 0;
+
+    const triggerStop = (id: string, name: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Stop Deployment',
+            message: `Are you sure you want to stop the deployment "${name}"?`,
+            actionText: 'Stop Deployment',
+            variant: 'danger',
+            onConfirm: () => {
+                action.mutate({ path: `/admin/deployments/${id}/stop` }, {
+                    onSuccess: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        deployments.refetch();
+                    }
+                });
+            }
+        });
+    };
+
+    const triggerRestart = (id: string, name: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Restart Deployment',
+            message: `Are you sure you want to restart the deployment "${name}"?`,
+            actionText: 'Restart',
+            variant: 'primary',
+            onConfirm: () => {
+                action.mutate({ path: `/admin/deployments/${id}/restart` }, {
+                    onSuccess: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        deployments.refetch();
+                    }
+                });
+            }
+        });
+    };
+
+    const triggerDelete = (id: string, name: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Delete Deployment',
+            message: `Are you sure you want to permanently delete the deployment "${name}"? This action is permanent and cannot be undone.`,
+            actionText: 'Delete',
+            variant: 'danger',
+            onConfirm: () => {
+                action.mutate({ method: 'delete', path: `/admin/deployments/${id}` }, {
+                    onSuccess: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        deployments.refetch();
+                    }
+                });
+            }
+        });
+    };
 
     return (
         <div className="space-y-6">
@@ -208,13 +278,13 @@ export default function AdminDeploymentsPage() {
                                         <p className="text-[10px] text-slate-600">{formatDate(d.updatedAt || d.createdAt)}</p>
 
                                         <div className="flex items-center gap-1">
-                                            <ActionBtn title="Stop"    onClick={() => action.mutate({ path: `/admin/deployments/${d.id}/stop` })}>
+                                            <ActionBtn title="Stop"    onClick={() => triggerStop(d.id, name)}>
                                                 <Square size={12} />
                                             </ActionBtn>
-                                            <ActionBtn title="Restart" onClick={() => action.mutate({ path: `/admin/deployments/${d.id}/restart` })}>
+                                            <ActionBtn title="Restart" onClick={() => triggerRestart(d.id, name)}>
                                                 <RotateCcw size={12} />
                                             </ActionBtn>
-                                            <ActionBtn title="Delete"  danger onClick={() => action.mutate({ method: 'delete', path: `/admin/deployments/${d.id}` })}>
+                                            <ActionBtn title="Delete"  danger onClick={() => triggerDelete(d.id, name)}>
                                                 <Trash2 size={12} />
                                             </ActionBtn>
                                         </div>
@@ -233,6 +303,38 @@ export default function AdminDeploymentsPage() {
                     <span className="font-black text-slate-400">{total}</span> deployments
                 </p>
             )}
+
+            {/* Confirmation Modal */}
+            <AppModal
+                open={confirmModal.open}
+                onClose={() => !action.isPending && setConfirmModal(prev => ({ ...prev, open: false }))}
+                title={confirmModal.title}
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                        {confirmModal.message}
+                    </p>
+
+                    <div className="flex justify-end gap-2 border-t border-white/5 pt-4 mt-2">
+                        <Button 
+                            type="button" 
+                            variant="secondary"
+                            onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                            disabled={action.isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            type="button" 
+                            variant={confirmModal.variant}
+                            onClick={confirmModal.onConfirm}
+                            loading={action.isPending}
+                        >
+                            {confirmModal.actionText}
+                        </Button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 }

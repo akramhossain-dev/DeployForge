@@ -8,8 +8,10 @@ import { DeploymentService } from '../services/deployment.service';
 import { GitHubService } from '../services/github.service';
 import { CacheService } from '../services/cache.service';
 import { AdminService } from '../services/admin.service';
+import { AccountService } from '../services/account.service';
 import { apiError, cookie } from '../utils/http';
 import { BackupService } from '../services/backup.service';
+import { VPSService } from '../services/vps.service';
 
 const restoreBackupSchema = z.object({
     filename: z.string().min(1),
@@ -253,9 +255,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 
                 let userRecord = await prisma.user.findUnique({ where: { email: adminUser.email } });
                 if (!userRecord) {
+                    const username = await AccountService.generateUniqueUsername(adminUser.email, adminUser.name);
                     userRecord = await prisma.user.create({
                         data: {
                             email: adminUser.email,
+                            username,
                             name: adminUser.name,
                             passwordHash: adminUser.passwordHash,
                             role: 'USER',
@@ -445,12 +449,18 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     fastify.patch('/platform-users/:id/status', { preHandler: [(fastify as any).requireModerator] }, async (request, reply) => {
         if (!canManagePlatform(request.admin.role)) return error(reply, 403, 'Insufficient role', 'INSUFFICIENT_ROLE');
         const { id } = idParamsSchema.parse(request.params);
-        const { status } = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED']) }).parse(request.body);
+        const { status } = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED', 'DISABLED']) }).parse(request.body);
         const user = await prisma.user.update({ where: { id }, data: { status: status as any } });
-        if (status === 'SUSPENDED') {
+        if (status === 'SUSPENDED' || status === 'DISABLED') {
             await CacheService.clearPattern(`user-session:${id}:*`);
         }
-        await audit(request, status === 'SUSPENDED' ? 'SUSPEND_PLATFORM_USER' : 'ACTIVATE_PLATFORM_USER', { targetUserId: id, targetType: 'USER', targetId: id });
+        let auditAction = 'ACTIVATE_PLATFORM_USER';
+        if (status === 'SUSPENDED') {
+            auditAction = 'SUSPEND_PLATFORM_USER';
+        } else if (status === 'DISABLED') {
+            auditAction = 'DISABLE_PLATFORM_USER';
+        }
+        await audit(request, auditAction, { targetUserId: id, targetType: 'USER', targetId: id });
         return { success: true, data: user };
     });
 
@@ -521,6 +531,36 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         await AdminService.deleteVpsCascade(id);
         await audit(request, 'DELETE_VPS', { targetType: 'VPS', targetId: id });
         return { success: true, data: { message: 'VPS removed' } };
+    });
+
+    fastify.get('/vps/:id/info', { preHandler: [(fastify as any).requireModerator] }, async (request, reply) => {
+        const { id } = idParamsSchema.parse(request.params);
+        const vps = await prisma.vPS.findUnique({ where: { id } });
+        if (!vps) return error(reply, 404, 'VPS not found', 'NOT_FOUND');
+        const info = await VPSService.getServerInfo(vps.userId, id);
+        return { success: true, data: info };
+    });
+
+    fastify.get('/vps/:id/live-metrics', { preHandler: [(fastify as any).requireModerator] }, async (request, reply) => {
+        const { id } = idParamsSchema.parse(request.params);
+        const vps = await prisma.vPS.findUnique({ where: { id } });
+        if (!vps) return error(reply, 404, 'VPS not found', 'NOT_FOUND');
+        const metrics = await VPSService.getLiveMetrics(vps.userId, id);
+        return { success: true, data: metrics };
+    });
+
+    fastify.post('/vps/:id/test-connection', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+        const { id } = idParamsSchema.parse(request.params);
+        const vps = await prisma.vPS.findUnique({ where: { id } });
+        if (!vps) return error(reply, 404, 'VPS not found', 'NOT_FOUND');
+        const result = await VPSService.testStoredConnection(vps.userId, id);
+        return result.success ? { success: true, data: result } : reply.status(400).send({
+            success: false,
+            error: {
+                code: 'CONNECTION_FAILED',
+                message: result.message || 'Connection failed'
+            }
+        });
     });
 
     fastify.get('/github/accounts', { preHandler: [(fastify as any).requireModerator] }, async () => {

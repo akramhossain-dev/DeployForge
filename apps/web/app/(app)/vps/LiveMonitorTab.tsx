@@ -110,11 +110,12 @@ function IoRow({ d }: { d: VpsLiveMetrics }) {
 const MAX_HISTORY = 30;
 
 interface LiveMonitorTabProps {
-    vps: Vps | null;
+    vps: any | null;
+    useLiveMetricsHook?: (vpsId?: string, enabled?: boolean) => any;
 }
 
-export default function LiveMonitorTab({ vps }: LiveMonitorTabProps) {
-    const metrics = useVpsLiveMetrics(vps?.id, !!vps);
+export default function LiveMonitorTab({ vps, useLiveMetricsHook = useVpsLiveMetrics }: LiveMonitorTabProps) {
+    const metrics = useLiveMetricsHook(vps?.id, !!vps);
 
     const [cpuHist, setCpuHist] = useState<number[]>([]);
     const [ramHist, setRamHist] = useState<number[]>([]);

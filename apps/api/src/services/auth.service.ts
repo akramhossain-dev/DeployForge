@@ -93,9 +93,11 @@ export class AuthService {
         }
 
         const passwordHash = await PasswordService.hash(password);
+        const username = await AccountService.generateUniqueUsername(email, name);
         const user = await prisma.user.create({
             data: {
                 email,
+                username,
                 passwordHash,
                 name,
                 provider: 'email',
