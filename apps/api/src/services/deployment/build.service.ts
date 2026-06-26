@@ -55,13 +55,17 @@ export class BuildService {
 
         let lockfile: string | undefined = undefined;
         let installCommand = 'npm install';
+        let needsBun = false;
+        let needsPnpm = false;
 
         if (rootFileSet.has('bun.lock') || rootFileSet.has('bun.lockb')) {
             lockfile = rootFileSet.has('bun.lock') ? 'bun.lock' : 'bun.lockb';
             installCommand = 'bun install';
+            needsBun = true;
         } else if (rootFileSet.has('pnpm-lock.yaml')) {
             lockfile = 'pnpm-lock.yaml';
             installCommand = 'pnpm install';
+            needsPnpm = true;
         } else if (rootFileSet.has('yarn.lock')) {
             lockfile = 'yarn.lock';
             installCommand = 'yarn install';
@@ -76,7 +80,7 @@ export class BuildService {
                 throw new DeploymentError('building', 'Project type could not be detected. package.json, Dockerfile, or static HTML entrypoint is required.', 'PROJECT_TYPE_MISMATCH');
             }
             await LoggingService.log(deploymentId, 'Detected static HTML project', 'build');
-            return { framework: 'STATIC', deploymentType: 'STATIC', buildCommand: '', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile };
+            return { framework: 'STATIC', deploymentType: 'STATIC', buildCommand: '', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile, needsBun, needsPnpm };
         }
 
         const { stdout: pkgRaw } = await runCommand(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && python3 - <<'PY'\nimport json\nwith open('package.json') as f:\n    p=json.load(f)\ndeps={}\ndeps.update(p.get('dependencies') or {})\ndeps.update(p.get('devDependencies') or {})\nprint(json.dumps({'scripts': p.get('scripts') or {}, 'deps': deps, 'main': p.get('main') or ''}))\nPY`, 'building', 'PACKAGE_PARSE_FAILED');
@@ -87,24 +91,38 @@ export class BuildService {
             throw new DeploymentError('building', 'package.json could not be parsed', 'PACKAGE_PARSE_FAILED');
         }
 
-        const scriptValues = [...Object.keys(pkg.scripts || {}), ...Object.values(pkg.scripts || {})];
+        if (pkg.scripts && pkg.scripts['install:all']) {
+            installCommand = lockfile === 'bun.lock' || lockfile === 'bun.lockb' ? 'bun run install:all'
+                : lockfile === 'pnpm-lock.yaml' ? 'pnpm run install:all'
+                : lockfile === 'yarn.lock' ? 'yarn run install:all'
+                : 'npm run install:all';
+        }
+
+        const scriptValues = [...Object.keys(pkg.scripts || {}), ...Object.values(pkg.scripts || {}), ...Object.keys(pkg.deps || {})];
         const scriptHasNext = scriptValues.some((script) => /\bnext\b/.test(script));
+
+        if (scriptValues.some((val) => /\bbun\b/.test(val))) {
+            needsBun = true;
+        }
+        if (scriptValues.some((val) => /\bpnpm\b/.test(val))) {
+            needsPnpm = true;
+        }
         
         if (pkg.deps.next || hasNextConfig || scriptHasNext) {
             const startCommand = pkg.scripts.start ? 'npm run start' : 'npx next start -H 0.0.0.0 -p 3000';
             await LoggingService.log(deploymentId, 'Detected Next.js project; using Node runtime', 'build');
-            return { framework: 'NEXTJS', deploymentType: 'FULLSTACK', buildCommand: `${installCommand} && npm run build`, startCommand, appPort: 3000, dockerfileAlreadyPresent: false, installCommand, lockfile };
+            return { framework: 'NEXTJS', deploymentType: 'FULLSTACK', buildCommand: `${installCommand} && npm run build`, startCommand, appPort: 3000, dockerfileAlreadyPresent: false, installCommand, lockfile, needsBun, needsPnpm };
         }
 
         if (pkg.deps.astro || scriptValues.some((script) => /\bastro\b/.test(script))) {
             const isStatic = !pkg.deps['@astrojs/node'] && !pkg.deps['@astrojs/vercel'];
             if (isStatic) {
                 await LoggingService.log(deploymentId, 'Detected Astro static project; using static file runtime', 'build');
-                return { framework: 'ASTRO', deploymentType: 'STATIC', buildCommand: pkg.scripts.build ? `${installCommand} && npm run build` : installCommand, startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile };
+                return { framework: 'ASTRO', deploymentType: 'STATIC', buildCommand: pkg.scripts.build ? `${installCommand} && npm run build` : installCommand, startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile, needsBun, needsPnpm };
             } else {
                 await LoggingService.log(deploymentId, 'Detected Astro SSR project; using Node runtime', 'build');
                 const startCommand = pkg.scripts.start ? 'npm run start' : 'node ./dist/server/entry.mjs';
-                return { framework: 'ASTRO', deploymentType: 'SERVER', buildCommand: `${installCommand} && npm run build`, startCommand, appPort: 3000, dockerfileAlreadyPresent: false, installCommand, lockfile };
+                return { framework: 'ASTRO', deploymentType: 'SERVER', buildCommand: `${installCommand} && npm run build`, startCommand, appPort: 3000, dockerfileAlreadyPresent: false, installCommand, lockfile, needsBun, needsPnpm };
             }
         }
 
@@ -112,7 +130,7 @@ export class BuildService {
             const hasStaticFile = rootFileSet.has('index.html') || files.some((file) => file.endsWith('index.html'));
             if (hasStaticFile) {
                 await LoggingService.log(deploymentId, 'Detected Vite/React static project; using static file runtime', 'build');
-                return { framework: 'VITE_REACT', deploymentType: 'STATIC', buildCommand: `${installCommand} && npm run build`, startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile };
+                return { framework: 'VITE_REACT', deploymentType: 'STATIC', buildCommand: `${installCommand} && npm run build`, startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile, needsBun, needsPnpm };
             }
         }
 
@@ -152,13 +170,15 @@ export class BuildService {
                 appPort: 3000,
                 dockerfileAlreadyPresent: false,
                 installCommand,
-                lockfile
+                lockfile,
+                needsBun,
+                needsPnpm
             };
         }
 
         if (rootFileSet.has('index.html')) {
             await LoggingService.log(deploymentId, 'Detected static project; using static file runtime', 'build');
-            return { framework: 'STATIC', deploymentType: 'STATIC', buildCommand: '', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile };
+            return { framework: 'STATIC', deploymentType: 'STATIC', buildCommand: '', startCommand: 'nginx static mount', appPort: 80, dockerfileAlreadyPresent: false, installCommand, lockfile, needsBun, needsPnpm };
         }
 
         throw new DeploymentError('building', 'Project type is ambiguous. Unable to determine if it is a STATIC site or a NODE server.', 'AMBIGUOUS_PROJECT_TYPE');
@@ -194,18 +214,31 @@ export class BuildService {
     }
 }
 
+function getSetupCommands(detected: DetectedProject) {
+    let setup = '';
+    if (detected.needsPnpm) {
+        setup += 'RUN npm install -g pnpm\n';
+    }
+    if (detected.needsBun) {
+        setup += 'COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun\n';
+    }
+    return setup;
+}
+
 function generatedDockerfile(detected: DetectedProject) {
     if (detected.framework === 'STATIC') {
         return `FROM nginx:1.27-alpine\nWORKDIR /usr/share/nginx/html\nCOPY . .\nEXPOSE 80`;
     }
 
     const installCommand = detected.installCommand || 'npm install';
+    const setupCommands = getSetupCommands(detected);
+
     if (detected.deploymentType === 'STATIC') {
-        return `FROM node:20-alpine AS build\nWORKDIR /app\nCOPY . .\nRUN if [ ! -d node_modules ]; then ${installCommand}; fi\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nRUN mkdir -p /deployforge-static && \\\n    if [ -d dist ]; then cp -a dist/. /deployforge-static/; \\\n    elif [ -d build ]; then cp -a build/. /deployforge-static/; \\\n    elif [ -d out ]; then cp -a out/. /deployforge-static/; \\\n    elif [ -f index.html ]; then cp -a . /deployforge-static/; \\\n    else echo '<!doctype html><title>DeployForge Sandbox</title><h1>No static output detected</h1>' > /deployforge-static/index.html; fi\nFROM nginx:1.27-alpine\nCOPY --from=build /deployforge-static /usr/share/nginx/html\nEXPOSE 80`;
+        return `FROM node:20-alpine AS build\nWORKDIR /app\n${setupCommands}COPY . .\nRUN if [ ! -d node_modules ]; then ${installCommand}; fi\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nRUN mkdir -p /deployforge-static && \\\n    if [ -d dist ]; then cp -a dist/. /deployforge-static/; \\\n    elif [ -d build ]; then cp -a build/. /deployforge-static/; \\\n    elif [ -d out ]; then cp -a out/. /deployforge-static/; \\\n    elif [ -f index.html ]; then cp -a . /deployforge-static/; \\\n    else echo '<!doctype html><title>DeployForge Sandbox</title><h1>No static output detected</h1>' > /deployforge-static/index.html; fi\nFROM nginx:1.27-alpine\nCOPY --from=build /deployforge-static /usr/share/nginx/html\nEXPOSE 80`;
     }
 
     const command = detected.framework === 'NEXTJS' ? nextRuntimeCommand(detected.startCommand) : detected.startCommand;
-    return `FROM node:20-alpine\nWORKDIR /app\nENV HOSTNAME=0.0.0.0\nENV PORT=3000\nCOPY . .\nRUN if [ ! -d node_modules ]; then ${installCommand}; fi\nRUN npm install -g serve\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nENV NODE_ENV=production\nEXPOSE 3000\nCMD ["sh", "-lc", "${command.replace(/"/g, '\\"')}"]`;
+    return `FROM node:20-alpine\nWORKDIR /app\n${setupCommands}ENV HOSTNAME=0.0.0.0\nENV PORT=3000\nCOPY . .\nRUN if [ ! -d node_modules ]; then ${installCommand}; fi\nRUN npm install -g serve\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nENV NODE_ENV=production\nEXPOSE 3000\nCMD ["sh", "-lc", "${command.replace(/"/g, '\\"')}"]`;
 }
 
 function nextRuntimeCommand(startCommand: string) {

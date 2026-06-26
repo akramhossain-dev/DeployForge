@@ -373,7 +373,7 @@ function sendDeploymentError(reply: any, err: any) {
         success: false,
         error: {
             code: err?.errorCode || (err?.name === 'ZodError' ? 'VALIDATION_ERROR' : 'DEPLOYMENT_ERROR'),
-            message: status >= 500 ? 'Internal Server Error' : err.message,
+            message: err.message || 'Internal Server Error',
             stage: err?.stage || 'request',
         }
     });

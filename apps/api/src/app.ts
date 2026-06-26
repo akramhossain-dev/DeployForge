@@ -43,11 +43,15 @@ export async function buildApp() {
     const WRITE_ACTIONS = new Set(['create', 'update', 'upsert', 'createMany', 'updateMany']);
 
     prisma.$use(async (params, next) => {
-        
         if (params.model && ENV_MODELS.has(params.model) && WRITE_ACTIONS.has(params.action)) {
             const data = params.args?.data;
             if (data && typeof data.env === 'string' && data.env) {
-                params.args.data.env = encryptionService.encrypt(data.env);
+                const parts = data.env.split(':');
+                const isAlreadyEncrypted = parts.length === 3 && parts.every((p: string) => /^[a-f0-9]+$/i.test(p));
+                if (!isAlreadyEncrypted) {
+                    const encrypted = encryptionService.encrypt(data.env);
+                    params.args.data.env = `${encrypted.iv}:${encrypted.tag}:${encrypted.content}`;
+                }
             }
         }
 
@@ -56,7 +60,13 @@ export async function buildApp() {
         if (params.model && ENV_MODELS.has(params.model) && result) {
             const decrypt = (record: any) => {
                 if (record && typeof record.env === 'string' && record.env) {
-                    try { record.env = encryptionService.decrypt(record.env); } catch {  }
+                    try {
+                        const parts = record.env.split(':');
+                        if (parts.length === 3 && parts.every((p: string) => /^[a-f0-9]+$/i.test(p))) {
+                            const [iv, tag, content] = parts;
+                            record.env = encryptionService.decrypt({ iv, tag, content });
+                        }
+                    } catch { /* already plaintext (legacy) or decrypt failed */ }
                 }
             };
             Array.isArray(result) ? result.forEach(decrypt) : decrypt(result);

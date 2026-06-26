@@ -38,7 +38,14 @@ export class EnvironmentService {
     static envPreview(encryptedEnv?: string | null) {
         if (!encryptedEnv) return [];
         try {
-            const parsed = JSON.parse(this.decrypt(encryptedEnv));
+            let decrypted: string;
+            const trimmed = encryptedEnv.trim();
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                decrypted = trimmed;
+            } else {
+                decrypted = this.decrypt(encryptedEnv);
+            }
+            const parsed = JSON.parse(decrypted);
             return Object.keys(this.normalizeEnv(parsed)).map((key) => ({ key, value: '********' }));
         } catch {
             return [];
@@ -56,7 +63,14 @@ export class EnvironmentService {
 
         let env: Record<string, string>;
         try {
-            env = this.normalizeEnv(JSON.parse(this.decrypt(encryptedEnv)));
+            let decrypted: string;
+            const trimmed = encryptedEnv.trim();
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                decrypted = trimmed;
+            } else {
+                decrypted = this.decrypt(encryptedEnv);
+            }
+            env = this.normalizeEnv(JSON.parse(decrypted));
         } catch {
             throw new DeploymentError('building', 'Deployment environment variables are invalid', 'ENV_DECRYPT_FAILED');
         }

@@ -47,4 +47,6 @@ export type DetectedProject = {
     dockerfileAlreadyPresent: boolean;
     installCommand?: string;
     lockfile?: string;
+    needsBun?: boolean;
+    needsPnpm?: boolean;
 };
