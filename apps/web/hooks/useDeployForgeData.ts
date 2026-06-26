@@ -63,6 +63,8 @@ export const queryKeys = {
     deployments: ['deployments'] as const,
     deployment: (id: string) => ['deployments', id] as const,
     domains: ['domains'] as const,
+    domainSubdomains: (deploymentId: string) => ['domains', 'subdomains', deploymentId] as const,
+    domainDns: (domainName: string) => ['domains', 'dns', domainName] as const,
     vps: ['vps'] as const,
     deploymentLogs: (id: string) => ['deployments', id, 'logs'] as const,
     adminOverview: ['admin', 'overview'] as const,
@@ -212,6 +214,87 @@ export function useDomains(enabled = true) {
         queryKey: queryKeys.domains,
         queryFn: () => api.get<Domain[]>('/domain/list'),
         enabled,
+        refetchInterval: 30000,
+    });
+}
+
+export function useDeploymentSubdomains(deploymentId?: string) {
+    return useQuery({
+        queryKey: queryKeys.domainSubdomains(deploymentId || 'none'),
+        queryFn: () => api.get<Domain[]>(`/domain/subdomains/${deploymentId}`),
+        enabled: !!deploymentId,
+    });
+}
+
+export function useVerifyDns(domainName?: string, vpsIp?: string, enabled = true) {
+    return useQuery({
+        queryKey: queryKeys.domainDns(domainName || ''),
+        queryFn: () => api.get<{
+            isValid: boolean;
+            resolvedIps: string[];
+            cname: string | null;
+            expectedIp: string;
+            propagated: boolean;
+            checkedAt: string;
+        }>(`/domain/verify-dns/${encodeURIComponent(domainName!)}?vpsIp=${encodeURIComponent(vpsIp!)}`),
+        enabled: !!domainName && !!vpsIp && enabled,
+        retry: false,
+        staleTime: 10000,
+    });
+}
+
+export function useAttachDomain() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: { deploymentId: string; domainName: string }) =>
+            api.post<Domain>('/domain/attach', payload),
+        onSuccess: () => {
+            handleMutationSuccess('Domain Attached', 'Domain has been successfully bound to the deployment.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.domains });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+        },
+        onError: (err) => handleMutationError('Domain Attach Failed', err),
+    });
+}
+
+export function useRemoveDomain() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (domainId: string) => api.delete<{ message: string }>(`/domain/remove/${domainId}`),
+        onSuccess: () => {
+            handleMutationSuccess('Domain Removed', 'Domain has been successfully detached and removed.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.domains });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+        },
+        onError: (err) => handleMutationError('Domain Removal Failed', err),
+    });
+}
+
+export function useIssueSSL() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (domainId: string) => api.post<{ message: string }>(`/domain/ssl/issue/${domainId}`),
+        onSuccess: () => {
+            handleMutationSuccess('SSL Issued', 'SSL certificate has been successfully issued via Certbot.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.domains });
+        },
+        onError: (err) => handleMutationError('SSL Issuance Failed', err),
+    });
+}
+
+export function useToggleAutoHttps() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ domainId, enabled }: { domainId: string; enabled: boolean }) =>
+            api.post<Domain>(`/domain/auto-https/${domainId}`, { enabled }),
+        onSuccess: (_data, { enabled }) => {
+            handleMutationSuccess(
+                enabled ? 'Auto-HTTPS Enabled' : 'Auto-HTTPS Disabled',
+                enabled ? 'HTTP traffic will now automatically redirect to HTTPS.' : 'Auto-HTTPS redirect has been disabled.'
+            );
+            queryClient.invalidateQueries({ queryKey: queryKeys.domains });
+        },
+        onError: (err) => handleMutationError('Auto-HTTPS Toggle Failed', err),
     });
 }
 
