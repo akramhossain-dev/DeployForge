@@ -239,9 +239,13 @@ export function useVerifyDns(domainName?: string, vpsIp?: string, enabled = true
         }>(`/domain/verify-dns/${encodeURIComponent(domainName!)}?vpsIp=${encodeURIComponent(vpsIp!)}`),
         enabled: !!domainName && !!vpsIp && enabled,
         retry: false,
-        staleTime: 10000,
+        // MEDIUM FIX #12: Raise staleTime to 60s (was 10s) and disable refetch on
+        // window focus so expanding multiple cards doesn't self-rate-limit at 30/min.
+        staleTime: 60000,
+        refetchOnWindowFocus: false,
     });
 }
+
 
 export function useAttachDomain() {
     const queryClient = useQueryClient();

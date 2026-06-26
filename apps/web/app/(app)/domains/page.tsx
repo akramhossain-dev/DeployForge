@@ -127,7 +127,11 @@ function AddDomainModal({
 // ─── DNS Status Panel ────────────────────────────────────────────────────────
 
 function DnsStatusPanel({ domain, vpsIp }: { domain: Domain; vpsIp?: string }) {
-    const verify = useVerifyDns(domain.domainName, vpsIp, !!vpsIp);
+    // MEDIUM FIX #12 (frontend): Start disabled — only fire DNS lookup on explicit
+    // user click. This prevents N simultaneous requests when multiple cards are expanded,
+    // which could self-rate-limit at the server's 30/min threshold.
+    const [dnsEnabled, setDnsEnabled] = useState(false);
+    const verify = useVerifyDns(domain.domainName, vpsIp, dnsEnabled && !!vpsIp);
 
     if (!vpsIp) {
         return (
@@ -137,12 +141,13 @@ function DnsStatusPanel({ domain, vpsIp }: { domain: Domain; vpsIp?: string }) {
         );
     }
 
-    if (verify.isLoading) {
-        return <div className="h-4 w-32 animate-pulse rounded bg-slate-800" />;
+    function handleCheck() {
+        if (!dnsEnabled) {
+            setDnsEnabled(true);
+        } else {
+            verify.refetch();
+        }
     }
-
-    const data = verify.data;
-    if (!data) return null;
 
     return (
         <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 text-xs">
@@ -150,45 +155,58 @@ function DnsStatusPanel({ domain, vpsIp }: { domain: Domain; vpsIp?: string }) {
                 <span className="font-black text-slate-400 uppercase tracking-wide">DNS Status</span>
                 <button
                     id={`dns-refresh-${domain.id}`}
-                    onClick={() => verify.refetch()}
+                    onClick={handleCheck}
                     className="flex items-center gap-1 text-slate-500 hover:text-cyan-300 transition-colors"
                 >
-                    <RefreshCw size={11} className={verify.isFetching ? 'animate-spin' : ''} /> Check
+                    <RefreshCw size={11} className={verify.isFetching ? 'animate-spin' : ''} />
+                    {verify.isLoading ? 'Checking…' : verify.data ? 'Recheck' : 'Check DNS'}
                 </button>
             </div>
-            <div className="space-y-1.5">
-                <Row
-                    label="Propagated"
-                    value={
-                        data.propagated ? (
-                            <span className="flex items-center gap-1 text-emerald-400">
-                                <CheckCircle2 size={12} /> Yes
-                            </span>
-                        ) : (
-                            <span className="flex items-center gap-1 text-rose-400">
-                                <WifiOff size={12} /> No
-                            </span>
-                        )
-                    }
-                />
-                <Row label="Expected IP" value={<span className="font-mono">{data.expectedIp}</span>} />
-                {data.resolvedIps.length > 0 && (
+
+            {!dnsEnabled && (
+                <p className="text-slate-600 italic">Click "Check DNS" to verify propagation.</p>
+            )}
+
+            {verify.isLoading && (
+                <div className="h-4 w-32 animate-pulse rounded bg-slate-800" />
+            )}
+
+            {verify.data && (
+                <div className="space-y-1.5">
                     <Row
-                        label="Resolved IPs"
-                        value={<span className="font-mono">{data.resolvedIps.join(', ')}</span>}
+                        label="Propagated"
+                        value={
+                            verify.data.propagated ? (
+                                <span className="flex items-center gap-1 text-emerald-400">
+                                    <CheckCircle2 size={12} /> Yes
+                                </span>
+                            ) : (
+                                <span className="flex items-center gap-1 text-rose-400">
+                                    <WifiOff size={12} /> No
+                                </span>
+                            )
+                        }
                     />
-                )}
-                {data.cname && (
-                    <Row label="CNAME" value={<span className="font-mono">{data.cname}</span>} />
-                )}
-                <Row
-                    label="Checked"
-                    value={<span>{new Date(data.checkedAt).toLocaleTimeString()}</span>}
-                />
-            </div>
+                    <Row label="Expected IP" value={<span className="font-mono">{verify.data.expectedIp}</span>} />
+                    {verify.data.resolvedIps.length > 0 && (
+                        <Row
+                            label="Resolved IPs"
+                            value={<span className="font-mono">{verify.data.resolvedIps.join(', ')}</span>}
+                        />
+                    )}
+                    {verify.data.cname && (
+                        <Row label="CNAME" value={<span className="font-mono">{verify.data.cname}</span>} />
+                    )}
+                    <Row
+                        label="Checked"
+                        value={<span>{new Date(verify.data.checkedAt).toLocaleTimeString()}</span>}
+                    />
+                </div>
+            )}
         </div>
     );
 }
+
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
     return (
@@ -207,9 +225,11 @@ function DomainCard({ domain, vpsIp }: { domain: Domain & { deployment?: any }; 
     const toggleHttps = useToggleAutoHttps();
     const [expanded, setExpanded] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [autoHttpsEnabled, setAutoHttpsEnabled] = useState(false);
 
     const isDeleted = domain.status === 'DELETED';
     const sslIssued = domain.sslStatus === 'ISSUED';
+    // LOW FIX #14: sslFailed is now used — shows a warning banner with Retry SSL action.
     const sslFailed = domain.sslStatus === 'FAILED';
     const isSubdomain = domain.domainName.split('.').length > 2;
 
@@ -276,6 +296,25 @@ function DomainCard({ domain, vpsIp }: { domain: Domain & { deployment?: any }; 
             {/* Expanded panel */}
             {expanded && !isDeleted && (
                 <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+                    {/* LOW FIX #14: SSL failed warning banner with Retry action */}
+                    {sslFailed && (
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2">
+                            <div className="flex items-center gap-2 text-xs text-rose-300">
+                                <AlertTriangle size={13} />
+                                SSL issuance failed. Check DNS propagation then retry.
+                            </div>
+                            <Button
+                                id={`ssl-retry-${domain.id}`}
+                                variant="secondary"
+                                className="shrink-0 border-rose-400/25 text-rose-200 hover:bg-rose-500/15 text-xs py-1"
+                                onClick={() => issueSSL.mutate(domain.id)}
+                                loading={issueSSL.isPending}
+                            >
+                                <RefreshCw size={12} /> Retry SSL
+                            </Button>
+                        </div>
+                    )}
+
                     {/* DNS Status */}
                     <DnsStatusPanel domain={domain} vpsIp={vpsIp} />
 
@@ -293,41 +332,58 @@ function DomainCard({ domain, vpsIp }: { domain: Domain & { deployment?: any }; 
                             </Button>
                         )}
 
-                        {/* Auto-HTTPS toggle */}
+                        {/* Auto-HTTPS toggle — HIGH FIX #8: proper enable/disable */}
                         {sslIssued && (
                             <Button
                                 id={`auto-https-${domain.id}`}
                                 variant="secondary"
-                                onClick={() =>
-                                    toggleHttps.mutate({ domainId: domain.id, enabled: true })
+                                className={autoHttpsEnabled
+                                    ? 'border-amber-400/25 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15'
+                                    : 'border-cyan-300/20 bg-cyan-300/5 text-cyan-200 hover:bg-cyan-300/10'
                                 }
+                                onClick={() => {
+                                    const next = !autoHttpsEnabled;
+                                    toggleHttps.mutate(
+                                        { domainId: domain.id, enabled: next },
+                                        { onSuccess: () => setAutoHttpsEnabled(next) }
+                                    );
+                                }}
                                 loading={toggleHttps.isPending}
                             >
-                                <Zap size={14} /> Enable Auto-HTTPS
+                                <Zap size={14} />
+                                {autoHttpsEnabled ? 'Disable Auto-HTTPS' : 'Enable Auto-HTTPS'}
                             </Button>
                         )}
 
-                        {/* Delete */}
+                        {/* LOW FIX #15: Keep confirm dialog visible while deletion is
+                            in flight so the user sees a spinner instead of the dialog
+                            disappearing and leaving no feedback. */}
                         {confirmDelete ? (
                             <div className="flex items-center gap-2">
-                                <span className="text-xs text-rose-300">Are you sure?</span>
-                                <Button
-                                    id={`domain-delete-confirm-${domain.id}`}
-                                    variant="danger"
-                                    onClick={() => {
-                                        remove.mutate(domain.id);
-                                        setConfirmDelete(false);
-                                    }}
-                                    loading={remove.isPending}
-                                >
-                                    Yes, remove
-                                </Button>
-                                <Button
-                                    variant="secondary"
-                                    onClick={() => setConfirmDelete(false)}
-                                >
-                                    <X size={14} />
-                                </Button>
+                                <span className="text-xs text-rose-300">
+                                    {remove.isPending ? 'Removing…' : 'Are you sure?'}
+                                </span>
+                                {!remove.isPending && (
+                                    <>
+                                        <Button
+                                            id={`domain-delete-confirm-${domain.id}`}
+                                            variant="danger"
+                                            onClick={() => remove.mutate(domain.id)}
+                                            loading={remove.isPending}
+                                        >
+                                            Yes, remove
+                                        </Button>
+                                        <Button
+                                            variant="secondary"
+                                            onClick={() => setConfirmDelete(false)}
+                                        >
+                                            <X size={14} />
+                                        </Button>
+                                    </>
+                                )}
+                                {remove.isPending && (
+                                    <RefreshCw size={14} className="animate-spin text-rose-400" />
+                                )}
                             </div>
                         ) : (
                             <Button
@@ -398,9 +454,12 @@ export default function DomainsPage() {
         return map;
     }, [deployments.data]);
 
-    const activeCount = (domains.data || []).filter((d) => d.status === 'ACTIVE').length;
-    const sslCount = (domains.data || []).filter((d) => d.sslStatus === 'ISSUED').length;
-    const failedCount = (domains.data || []).filter((d) => d.status === 'FAILED' || d.sslStatus === 'FAILED').length;
+    // LOW FIX #16: Exclude DELETED domains from all metric counts — previously
+    // "Total Domains" included soft-deleted records which was misleading.
+    const activeDomains = (domains.data || []).filter((d) => d.status !== 'DELETED');
+    const activeCount = activeDomains.filter((d) => d.status === 'ACTIVE').length;
+    const sslCount = activeDomains.filter((d) => d.sslStatus === 'ISSUED').length;
+    const failedCount = activeDomains.filter((d) => d.status === 'FAILED' || d.sslStatus === 'FAILED').length;
 
     return (
         <div className="space-y-6">
@@ -425,13 +484,13 @@ export default function DomainsPage() {
 
             {/* Metrics */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <MetricCard title="Total Domains" value={domains.data?.length || 0} icon={<Globe size={18} />} />
+                <MetricCard title="Total Domains" value={activeDomains.length} icon={<Globe size={18} />} />
                 <MetricCard title="Active" value={activeCount} icon={<CheckCircle2 size={18} />} accent="emerald" />
                 <MetricCard title="Issues" value={failedCount} icon={<AlertTriangle size={18} />} accent={failedCount > 0 ? 'rose' : undefined} />
             </div>
 
-            {/* SSL Summary banner */}
-            {domains.data && domains.data.length > 0 && (
+            {/* SSL Summary banner — only shown when there are active (non-deleted) domains */}
+            {activeDomains.length > 0 && (
                 <Panel>
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <div className="flex items-center gap-3">
@@ -441,7 +500,7 @@ export default function DomainsPage() {
                             <div>
                                 <p className="text-sm font-black text-white">SSL Coverage</p>
                                 <p className="text-xs text-slate-400">
-                                    {sslCount} of {domains.data.length} domain{domains.data.length !== 1 ? 's' : ''} secured
+                                    {sslCount} of {activeDomains.length} domain{activeDomains.length !== 1 ? 's' : ''} secured
                                 </p>
                             </div>
                         </div>
@@ -449,11 +508,11 @@ export default function DomainsPage() {
                             <div className="h-2 w-40 overflow-hidden rounded-full bg-slate-800">
                                 <div
                                     className="h-full rounded-full bg-emerald-400 transition-all"
-                                    style={{ width: `${domains.data.length ? (sslCount / domains.data.length) * 100 : 0}%` }}
+                                    style={{ width: `${activeDomains.length ? (sslCount / activeDomains.length) * 100 : 0}%` }}
                                 />
                             </div>
                             <span className="text-xs font-black text-slate-300">
-                                {domains.data.length ? Math.round((sslCount / domains.data.length) * 100) : 0}%
+                                {activeDomains.length ? Math.round((sslCount / activeDomains.length) * 100) : 0}%
                             </span>
                         </div>
                     </div>

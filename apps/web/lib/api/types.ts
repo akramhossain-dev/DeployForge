@@ -78,9 +78,12 @@ export type Domain = {
     status: string;
     sslStatus?: string;
     nginxConfigPath?: string | null;
+    /** Whether the HTTP → HTTPS Auto-HTTPS redirect is currently active on the VPS nginx config. */
+    autoHttps?: boolean;
     createdAt: string;
     updatedAt: string;
 };
+
 
 export type VpsConnectionPayload = {
     name?: string;

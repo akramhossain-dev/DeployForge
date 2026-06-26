@@ -4,6 +4,7 @@ import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
 import dns from 'dns';
 import { promisify } from 'util';
+import { Prisma } from '@deployforge/database';
 
 const resolveA = promisify(dns.resolve4);
 const resolveCname = promisify(dns.resolveCname);
@@ -75,6 +76,8 @@ export class DomainService {
         if (existing) throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
 
         const vps = deployment.vps;
+        if (!vps) throw domainError('domain_bind', 'The VPS linked to this deployment no longer exists. Please re-attach a VPS before adding a domain.', 'VPS_NOT_FOUND');
+
         const ssh = new SSHService();
         try {
             const auth = vps.authType === 'key' || vps.authType === 'ssh_key'
@@ -97,39 +100,60 @@ export class DomainService {
                 throw parseSshDomainError(output);
             }
 
-            await prisma.domain.updateMany({
-                where: { deploymentId, domainName: { not: cleanDomain } },
-                data: { status: 'DELETED' },
-            });
-            await prisma.deployment.update({
-                where: { id: deploymentId },
-                data: { domain: cleanDomain, hostType: 'domain' },
-            });
+            try {
+                const savedDomain = await prisma.$transaction(async (tx) => {
+                    // Re-check uniqueness inside the transaction with a FOR UPDATE-equivalent
+                    const conflict = await tx.domain.findFirst({
+                        where: {
+                            domainName: cleanDomain,
+                            deploymentId: { not: deploymentId },
+                            deployment: { status: { not: 'DELETED' } },
+                        },
+                    });
+                    if (conflict) throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
 
-            const current = await prisma.domain.findUnique({ where: { domainName: cleanDomain } });
-            if (current) {
-                return prisma.domain.update({
-                    where: { id: current.id },
-                    data: {
-                        deploymentId,
-                        vpsId: vps.id,
-                        domainName: cleanDomain,
-                        status: 'ACTIVE',
-                        sslStatus: 'NONE',
-                        nginxConfigPath: configPath,
-                    },
+                    await tx.domain.updateMany({
+                        where: { deploymentId, domainName: { not: cleanDomain } },
+                        data: { status: 'DELETED' },
+                    });
+                    await tx.deployment.update({
+                        where: { id: deploymentId },
+                        data: { domain: cleanDomain, hostType: 'domain' },
+                    });
+
+                    const current = await tx.domain.findUnique({ where: { domainName: cleanDomain } });
+                    if (current) {
+                        return tx.domain.update({
+                            where: { id: current.id },
+                            data: {
+                                deploymentId,
+                                vpsId: vps.id,
+                                domainName: cleanDomain,
+                                status: 'ACTIVE',
+                                sslStatus: 'NONE',
+                                nginxConfigPath: configPath,
+                            },
+                        });
+                    }
+
+                    return tx.domain.create({
+                        data: {
+                            deploymentId,
+                            vpsId: vps.id,
+                            domainName: cleanDomain,
+                            status: 'ACTIVE',
+                            nginxConfigPath: configPath,
+                        },
+                    });
                 });
-            }
 
-            return await prisma.domain.create({
-                data: {
-                    deploymentId,
-                    vpsId: vps.id,
-                    domainName: cleanDomain,
-                    status: 'ACTIVE',
-                    nginxConfigPath: configPath,
-                },
-            });
+                return savedDomain;
+            } catch (err: any) {
+                if (err?.code === 'P2002' || err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+                    throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
+                }
+                throw err;
+            }
 
         } finally {
             ssh.disconnect();
@@ -146,9 +170,6 @@ export class DomainService {
         const vps = domain.vps;
         let nginxCleanupWarning: string | null = null;
 
-        // CRITICAL FIX #4: Surface SSH errors instead of silently swallowing them.
-        // The domain is still marked DELETED in the DB (best-effort), but we return
-        // a warning so the caller knows manual nginx cleanup may be needed.
         if (vps && domain.nginxConfigPath) {
             const ssh = new SSHService();
             try {
@@ -195,15 +216,10 @@ export class DomainService {
             include: { vps: true },
         });
 
-        // CRITICAL FIX #2: Remove the dead-code verifyDomainOwnership call.
-        // The route already calls verifyDomainOwnership before reaching this method,
-        // so a missing domain here simply means not found for this user.
         if (!domain) {
             throw Object.assign(new Error('Domain not found'), { statusCode: 404, errorCode: 'DOMAIN_NOT_FOUND' });
         }
 
-        // CRITICAL FIX #1: Domain must be ACTIVE before Certbot can serve the HTTP challenge.
-        // A PENDING or FAILED domain has no nginx config yet, so Certbot would immediately fail.
         if (domain.status !== 'ACTIVE') {
             throw Object.assign(
                 new Error(`Domain is not active (current status: ${domain.status}). Ensure the domain is attached and nginx is configured before issuing SSL.`),
@@ -224,9 +240,14 @@ export class DomainService {
 
             await ssh.connect({ host: vps.ipAddress, port: vps.port, username: vps.username, ...auth });
 
+            const certbotEmail = config.superAdmin?.email
+                || config.email?.fromEmail
+                || `admin@${domain.domainName}`;
+
             const { code, stdout, stderr } = await ssh.execute(
-                `certbot --nginx -d ${domain.domainName} --non-interactive --agree-tos --email admin@${domain.domainName}`
+                `certbot --nginx -d ${domain.domainName} --non-interactive --agree-tos --email ${certbotEmail}`
             );
+
 
             if (code === 0) {
                 await prisma.domain.update({ where: { id: domainId }, data: { sslStatus: 'ISSUED' } });
@@ -250,9 +271,6 @@ export class DomainService {
             include: { vps: true },
         });
         if (!domain) throw Object.assign(new Error('Domain not found'), { statusCode: 404 });
-
-        // CRITICAL FIX #3 (partial guard): Only enforce SSL requirement when ENABLING.
-        // Disabling must always be allowed regardless of SSL state (e.g. after cert expiry).
         if (enabled && domain.sslStatus !== 'ISSUED') {
             throw Object.assign(
                 new Error('SSL must be issued before enabling Auto-HTTPS'),
@@ -273,9 +291,6 @@ export class DomainService {
 
             await ssh.connect({ host: vps.ipAddress, port: vps.port, username: vps.username, ...auth });
 
-            // CRITICAL FIX #3: Use a DEDICATED redirect config file instead of appending
-            // to the main config. This makes enable/disable fully idempotent — writing
-            // the same file twice is safe, and disabling simply removes the file.
             const redirectConfigPath = (domain.nginxConfigPath || `/etc/nginx/conf.d/deployforge-${domain.deploymentId}.conf`)
                 .replace('.conf', '-redirect.conf');
 

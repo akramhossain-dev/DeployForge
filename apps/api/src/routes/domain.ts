@@ -14,8 +14,29 @@ const sslIssueParamsSchema = z.object({
     domainId: z.string().uuid({ message: 'Invalid domain ID format' }),
 });
 
+const DOMAIN_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const domainNameValidator = z
+    .string()
+    .min(1, 'Domain name is required')
+    .max(253, 'Domain name is too long')
+    .toLowerCase()
+    .trim()
+    .refine((v) => !v.startsWith('http'), { message: 'Domain must not include a protocol (http/https)' })
+    .refine((v) => !v.includes('/') && !v.includes(' ') && !v.includes('_'), { message: 'Domain contains invalid characters' })
+    .refine((v) => v.includes('.') && !v.includes('..'), { message: 'Domain must be a valid FQDN' })
+    .refine(
+        (v) => {
+            const labels = v.split('.');
+            const tld = labels[labels.length - 1];
+            return labels.length >= 2
+                && labels.every((l) => DOMAIN_LABEL_RE.test(l))
+                && /^[a-z]{2,63}$/.test(tld);
+        },
+        { message: 'Domain format is invalid' }
+    );
+
 const verifyDnsParamsSchema = z.object({
-    domainName: z.string().min(1, 'Domain name is required'),
+    domainName: domainNameValidator,
 });
 
 const verifyDnsQuerySchema = z.object({
@@ -132,8 +153,14 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, _reply) => {
         const { deploymentId } = z.object({ deploymentId: z.string().uuid() }).parse(request.params);
+        // MEDIUM FIX #13: Exclude DELETED records — they were previously returned and
+        // required the frontend to filter, leaking soft-deleted data unnecessarily.
         const domains = await prisma.domain.findMany({
-            where: { deploymentId, deployment: { userId: request.user.id } },
+            where: {
+                deploymentId,
+                deployment: { userId: request.user.id },
+                status: { not: 'DELETED' },
+            },
             orderBy: { createdAt: 'desc' },
         });
         const subdomains = domains
@@ -151,10 +178,17 @@ export default async function domainRoutes(fastify: FastifyInstance) {
     // Detailed DNS verification
     fastify.get('/verify-dns/:domainName', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, _reply) => {
-        const { domainName } = verifyDnsParamsSchema.parse(request.params);
-        const { vpsIp } = verifyDnsQuerySchema.parse(request.query);
-        const result = await DomainService.verifyDNSDetailed(domainName, vpsIp);
-        return { success: true, data: result };
+    }, async (request, reply) => {
+        try {
+            const { domainName } = verifyDnsParamsSchema.parse(request.params);
+            const { vpsIp } = verifyDnsQuerySchema.parse(request.query);
+            const result = await DomainService.verifyDNSDetailed(domainName, vpsIp);
+            return { success: true, data: result };
+        } catch (err: any) {
+            return reply.status(400).send({
+                success: false,
+                error: { code: err.errorCode || 'DNS_CHECK_FAILED', message: err.message || 'DNS verification failed' },
+            });
+        }
     });
 }
