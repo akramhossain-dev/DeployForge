@@ -107,6 +107,47 @@ export type VpsConnectionResult = {
     };
 };
 
+export type VpsServerInfo = {
+    hostname: string;
+    publicIp: string;
+    privateIp: string;
+    os: string;
+    kernel: string;
+    architecture: string;
+    cpuModel: string;
+    cpuCores: number;
+    ramTotal: number;   // kB
+    ramUsed: number;    // kB
+    ramFree: number;    // kB
+    swapTotal: number;  // kB
+    swapUsed: number;   // kB
+    diskTotal: string;
+    diskUsed: string;
+    diskFree: string;
+    diskPercent: string;
+    uptimeSeconds: number;
+    uptimeFormatted: string;
+    bootTime: string;
+    timezone: string;
+};
+
+export type VpsLiveMetrics = {
+    cpuPercent: number;
+    ramPercent: number;
+    ramUsedMb: number;
+    ramTotalMb: number;
+    diskPercent: number;
+    diskReadKb: number;
+    diskWriteKb: number;
+    netRxMb: number;
+    netTxMb: number;
+    loadAvg1: number;
+    loadAvg5: number;
+    loadAvg15: number;
+    temperature: number | null;
+    collectedAt: string;
+};
+
 export type Project = {
     id: string;
     name: string;

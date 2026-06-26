@@ -217,6 +217,31 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
             return sendVpsError(reply, error);
         }
     });
+    fastify.get('/:id/info', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 6, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        try {
+            const { id } = vpsParamsSchema.parse(request.params);
+            const info = await VPSService.getServerInfo(request.user!.id, id);
+            return { success: true, data: info };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
+    });
+
+    fastify.get('/:id/live-metrics', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        try {
+            const { id } = vpsParamsSchema.parse(request.params);
+            const metrics = await VPSService.getLiveMetrics(request.user!.id, id);
+            return { success: true, data: metrics };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
+    });
 }
 
 function sendVpsError(reply: FastifyReply, error: unknown) {

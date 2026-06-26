@@ -295,6 +295,170 @@ export class VPSService {
         }
     }
 
+    static async getServerInfo(userId: string, vpsId: string) {
+        const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
+        if (!vps) throw new VPSConnectionFailure('VPS not found', 'VPS_NOT_FOUND');
+
+        const ssh = new SSHService();
+        try {
+            await ssh.connect({
+                host: vps.ipAddress,
+                port: vps.port,
+                username: vps.username,
+                ...buildStoredAuth(vps),
+            });
+
+            // Run two sequential calls — each combines related commands into
+            // a single SSH channel using printf/echo and double-quote-only awk.
+            // This keeps well below OpenSSH MaxSessions=10 and avoids all
+            // single-quote nesting issues inside the JS string.
+
+            const [r1, r2] = await Promise.all([
+                ssh.execute(
+                    'printf "HOSTNAME=%s\\n" "$(hostname 2>/dev/null)";' +
+                    'printf "KERNEL=%s\\n"   "$(uname -r 2>/dev/null)";' +
+                    'printf "ARCH=%s\\n"     "$(uname -m 2>/dev/null)";' +
+                    'printf "NPROC=%s\\n"    "$(nproc 2>/dev/null)";' +
+                    'printf "MEM_TOTAL=%s\\n" "$(awk "/MemTotal/{print \\$2}" /proc/meminfo)";' +
+                    'printf "MEM_AVAIL=%s\\n" "$(awk "/MemAvailable/{print \\$2}" /proc/meminfo)";' +
+                    'printf "SWAP_TOTAL=%s\\n" "$(awk "/SwapTotal/{print \\$2}" /proc/meminfo)";' +
+                    'printf "SWAP_FREE=%s\\n"  "$(awk "/SwapFree/{print \\$2}" /proc/meminfo)";' +
+                    'printf "UPTIME=%s\\n"     "$(awk "{print \\$1}" /proc/uptime)";' +
+                    'printf "PRIVATE_IP=%s\\n" "$(hostname -I 2>/dev/null | awk "{print \\$1}")"'
+                ),
+                ssh.execute(
+                    'printf "CPU_MODEL=%s\\n" "$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed "s/^ //")";' +
+                    'printf "OS=%s\\n" "$(. /etc/os-release 2>/dev/null && printf "%s" "$PRETTY_NAME" || echo Linux)";' +
+                    'printf "TIMEZONE=%s\\n" "$(cat /etc/timezone 2>/dev/null | head -1 || echo UTC)";' +
+                    'printf "BOOT=%s\\n" "$(uptime -s 2>/dev/null || echo -)";' +
+                    'df -h / 2>/dev/null | awk "NR==2{printf \\"DISK_TOTAL=%s\\\\nDISK_USED=%s\\\\nDISK_FREE=%s\\\\nDISK_PCT=%s\\\\n\\", \\$2, \\$3, \\$4, \\$5}"'
+                ),
+            ]);
+
+            // Parse key=value blocks
+            function parseBlock(raw: string): Record<string, string> {
+                const out: Record<string, string> = {};
+                for (const line of raw.split('\n')) {
+                    const eq = line.indexOf('=');
+                    if (eq === -1) continue;
+                    const key = line.slice(0, eq).trim();
+                    const val = line.slice(eq + 1).trim();
+                    if (key) out[key] = val;
+                }
+                return out;
+            }
+
+            const b1 = parseBlock(r1.stdout);
+            const b2 = parseBlock(r2.stdout);
+
+            const hostname  = b1.HOSTNAME  || vps.ipAddress;
+            const uname     = b1.KERNEL    || '';
+            const architecture = b1.ARCH   || 'x86_64';
+            const cpuCores  = b1.NPROC     || '1';
+            const memTotal  = b1.MEM_TOTAL || '0';
+            const memFree   = b1.MEM_AVAIL || '0';
+            const swapTotal = b1.SWAP_TOTAL || '0';
+            const swapFree  = b1.SWAP_FREE  || '0';
+            const uptime    = b1.UPTIME    || '0';
+            const privateIp = b1.PRIVATE_IP || vps.ipAddress;
+
+            const cpuModel  = b2.CPU_MODEL  || 'Unknown CPU';
+            const diskTotal = b2.DISK_TOTAL || 'N/A';
+            const diskUsed  = b2.DISK_USED  || 'N/A';
+            const diskFree  = b2.DISK_FREE  || 'N/A';
+            const diskPercent = b2.DISK_PCT || '0%';
+            const osName    = b2.OS         || 'Linux';
+            const timezone  = b2.TIMEZONE   || 'UTC';
+            const bootTime  = b2.BOOT       || '-';
+
+            const memTotalKb = parseInt(memTotal, 10) || 0;
+            const memFreeKb  = parseInt(memFree,  10) || 0;
+            const memUsedKb  = memTotalKb - memFreeKb;
+            const swapTotalKb = parseInt(swapTotal, 10) || 0;
+            const swapFreeKb  = parseInt(swapFree,  10) || 0;
+            const swapUsedKb  = swapTotalKb - swapFreeKb;
+            const uptimeSec   = parseFloat(uptime) || 0;
+            const days    = Math.floor(uptimeSec / 86400);
+            const hours   = Math.floor((uptimeSec % 86400) / 3600);
+            const minutes = Math.floor((uptimeSec % 3600) / 60);
+
+            return {
+                hostname,
+                publicIp: vps.ipAddress,
+                privateIp: privateIp || vps.ipAddress,
+                os: osName,
+                kernel: uname,
+                architecture,
+                cpuModel: cpuModel || 'Unknown CPU',
+                cpuCores: parseInt(cpuCores, 10) || 1,
+                ramTotal: memTotalKb,
+                ramUsed:  memUsedKb,
+                ramFree:  memFreeKb,
+                swapTotal: swapTotalKb,
+                swapUsed:  swapUsedKb,
+                diskTotal:   diskTotal   || 'N/A',
+                diskUsed:    diskUsed    || 'N/A',
+                diskFree:    diskFree    || 'N/A',
+                diskPercent: diskPercent || '0%',
+                uptimeSeconds:  uptimeSec,
+                uptimeFormatted: `${days}d ${hours}h ${minutes}m`,
+                bootTime,
+                timezone,
+            };
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
+    static async getLiveMetrics(userId: string, vpsId: string) {
+        const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
+        if (!vps) throw new VPSConnectionFailure('VPS not found', 'VPS_NOT_FOUND');
+
+        const ssh = new SSHService();
+        try {
+            await ssh.connect({
+                host: vps.ipAddress,
+                port: vps.port,
+                username: vps.username,
+                ...buildStoredAuth(vps),
+            });
+
+            const [cpuRaw, memRaw, diskRaw, loadRaw, netRaw, diskIoRaw, tempRaw] = await Promise.all([
+                ssh.execute(`top -bn1 | grep 'Cpu(s)' | awk '{for(i=1;i<=NF;i++){if($i~/id/){idle=$(i-1); sub(",",".",idle); print 100-idle}}}'`).then(r => r.stdout.trim()),
+                ssh.execute(`free | awk '/Mem:/{printf "%.1f %.1f %.1f", $3/$2*100, $3/1024, $2/1024}'`).then(r => r.stdout.trim()),
+                ssh.execute(`df / | tail -1 | awk '{print $5}' | tr -d '%'`).then(r => r.stdout.trim()),
+                ssh.execute(`cat /proc/loadavg | awk '{print $1, $2, $3}'`).then(r => r.stdout.trim()),
+                ssh.execute(`cat /proc/net/dev | awk 'NR>2 && !/lo/{rx+=$2; tx+=$10} END{print rx, tx}'`).then(r => r.stdout.trim()),
+                ssh.execute(`cat /proc/diskstats | awk '{if($3~/^(s|v|h|xv)d[a-z]$/ && $3!~/[0-9]$/){read+=$6; write+=$10}} END{print read, write}'`).then(r => r.stdout.trim()).catch(() => '0 0'),
+                ssh.execute(`cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | awk '{printf "%.1f", $1/1000}' || echo ''`).then(r => r.stdout.trim()).catch(() => ''),
+            ]);
+
+            const [memPercent, memUsedMb, memTotalMb] = (memRaw || '0 0 0').split(' ').map(Number);
+            const [loadAvg1, loadAvg5, loadAvg15] = (loadRaw || '0 0 0').split(' ').map(Number);
+            const [netRxBytes, netTxBytes] = (netRaw || '0 0').split(' ').map(Number);
+            const [diskReadSectors, diskWriteSectors] = (diskIoRaw || '0 0').split(' ').map(Number);
+
+            return {
+                cpuPercent: parseFloat(cpuRaw) || 0,
+                ramPercent: parseFloat(String(memPercent)) || 0,
+                ramUsedMb: memUsedMb || 0,
+                ramTotalMb: memTotalMb || 0,
+                diskPercent: parseFloat(diskRaw) || 0,
+                diskReadKb: Math.round((diskReadSectors * 512) / 1024),
+                diskWriteKb: Math.round((diskWriteSectors * 512) / 1024),
+                netRxMb: parseFloat((netRxBytes / (1024 * 1024)).toFixed(2)),
+                netTxMb: parseFloat((netTxBytes / (1024 * 1024)).toFixed(2)),
+                loadAvg1: loadAvg1 || 0,
+                loadAvg5: loadAvg5 || 0,
+                loadAvg15: loadAvg15 || 0,
+                temperature: tempRaw ? parseFloat(tempRaw) : null,
+                collectedAt: new Date().toISOString(),
+            };
+        } finally {
+            ssh.disconnect();
+        }
+    }
+
     static startScheduledHealthChecks() {
         
         this.runAllHealthChecks().catch(() => undefined);

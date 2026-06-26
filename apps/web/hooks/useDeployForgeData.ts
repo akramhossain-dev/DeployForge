@@ -24,6 +24,8 @@ import type {
     Vps,
     VpsConnectionPayload,
     VpsConnectionResult,
+    VpsServerInfo,
+    VpsLiveMetrics,
 } from '@/lib/api/types';
 
 function handleMutationError(title: string, error: any, deploymentId?: string) {
@@ -508,6 +510,27 @@ export function useDeleteVps() {
             queryClient.invalidateQueries({ queryKey: queryKeys.vps });
         },
         onError: (err) => handleMutationError('VPS Deletion Failed', err),
+    });
+}
+
+export function useVpsServerInfo(vpsId?: string) {
+    return useQuery({
+        queryKey: ['vps', vpsId, 'info'] as const,
+        queryFn: () => api.get<VpsServerInfo>(`/vps/${vpsId}/info`).then((res: any) => res.data ?? res),
+        enabled: !!vpsId,
+        staleTime: 60000,
+        retry: false,
+    });
+}
+
+export function useVpsLiveMetrics(vpsId?: string, enabled = true) {
+    return useQuery({
+        queryKey: ['vps', vpsId, 'live-metrics'] as const,
+        queryFn: () => api.get<VpsLiveMetrics>(`/vps/${vpsId}/live-metrics`).then((res: any) => res.data ?? res),
+        enabled: !!vpsId && enabled,
+        refetchInterval: 3000,
+        staleTime: 0,
+        retry: false,
     });
 }
 

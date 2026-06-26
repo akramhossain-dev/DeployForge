@@ -57,4 +57,13 @@
     scrollbar-color: rgb(51 65 85) transparent;
     scrollbar-width: thin;
   }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
