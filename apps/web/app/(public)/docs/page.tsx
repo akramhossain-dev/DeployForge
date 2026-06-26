@@ -154,13 +154,13 @@ export default function DocsPage() {
                         <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                             <Link
                                 href={ctaHref}
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-white px-6 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02]"
+                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-lg transition-all hover:scale-[1.02] hover:shadow-white/10"
                             >
                                 {ctaLabel} <ArrowRight size={17} />
                             </Link>
                             <Link
                                 href="/features"
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/10 px-6 text-sm font-bold text-white backdrop-blur-md transition-colors hover:bg-white/15"
+                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-6 text-sm font-bold text-white backdrop-blur-md transition-colors hover:bg-white/15"
                             >
                                 View Features
                             </Link>
@@ -172,9 +172,9 @@ export default function DocsPage() {
             <section className="border-y border-white/10 bg-white/[0.03] px-4 py-12 sm:px-6 lg:px-8">
                 <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[18rem_1fr]">
                     <aside className="lg:sticky lg:top-24 lg:self-start">
-                        <div className="rounded-lg border border-white/10 bg-slate-900/70 p-4">
-                            <div className="flex items-center gap-2 text-sm font-black text-white">
-                                <Braces className="text-cyan-300" size={18} />
+                        <div className="rounded-2xl border border-white/[0.08] bg-slate-900/60 p-4 shadow-lg backdrop-blur-sm">
+                            <div className="flex items-center gap-2 px-2 text-sm font-black text-white">
+                                <Braces className="text-cyan-400" size={18} />
                                 Contents
                             </div>
                             <nav className="mt-4 flex flex-col gap-1">
@@ -182,7 +182,7 @@ export default function DocsPage() {
                                     <a
                                         key={id}
                                         href={`#${id}`}
-                                        className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+                                        className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
                                     >
                                         {label}
                                     </a>
@@ -195,9 +195,10 @@ export default function DocsPage() {
                         {sections.map((section) => {
                             const Icon = section.icon;
                             return (
-                                <article key={section.id} id={section.id} className="scroll-mt-24 rounded-lg border border-white/10 bg-slate-900/70 p-6 sm:p-7">
+                                <article key={section.id} id={section.id} className="relative overflow-hidden scroll-mt-24 rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-6 sm:p-7 shadow-lg shadow-black/20">
+                                    <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/40 to-transparent" />
                                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-cyan-300/15 bg-cyan-300/10 text-cyan-200">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200 shadow-sm">
                                             <Icon size={22} />
                                         </div>
                                         <div>
@@ -207,7 +208,7 @@ export default function DocsPage() {
                                     </div>
                                     <div className="mt-6 grid gap-3">
                                         {section.items.map((item) => (
-                                            <div key={item} className="rounded-lg border border-white/10 bg-slate-950/55 p-4">
+                                            <div key={item} className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4 transition-colors hover:border-white/[0.12]">
                                                 <p className="text-sm leading-6 text-slate-300">{item}</p>
                                             </div>
                                         ))}
@@ -220,23 +221,26 @@ export default function DocsPage() {
             </section>
 
             <section className="px-4 py-20 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-8 shadow-2xl shadow-cyan-950/30 sm:p-10 lg:flex lg:items-center lg:justify-between">
-                    <div>
-                        <div className="flex items-center gap-3 text-cyan-100">
-                            <KeyRound size={22} />
-                            <p className="text-sm font-black uppercase tracking-wide">From docs to deployment</p>
+                <div className="mx-auto max-w-7xl">
+                    <div className="relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/[0.08] via-cyan-400/[0.03] to-transparent p-8 shadow-2xl shadow-cyan-950/20 sm:p-10 lg:flex lg:items-center lg:justify-between">
+                        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/60 via-cyan-400/20 to-transparent" />
+                        <div>
+                            <div className="flex items-center gap-2 text-cyan-400">
+                                <KeyRound size={16} />
+                                <p className="text-[10px] font-black uppercase tracking-widest">From docs to deployment</p>
+                            </div>
+                            <h2 className="mt-4 text-3xl font-black tracking-tight text-white">Use the guide, then open the console.</h2>
+                            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                                Start from login when you need a session, or return directly to the dashboard when DeployForge already knows you.
+                            </p>
                         </div>
-                        <h2 className="mt-4 text-3xl font-black tracking-tight text-white">Use the guide, then open the console.</h2>
-                        <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/75">
-                            Start from login when you need a session, or return directly to the dashboard when DeployForge already knows you.
-                        </p>
+                        <Link
+                            href={ctaHref}
+                            className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-lg transition-all hover:scale-[1.02] hover:shadow-white/10 lg:mt-0 lg:shrink-0"
+                        >
+                            {ctaLabel} <ArrowRight size={17} />
+                        </Link>
                     </div>
-                    <Link
-                        href={ctaHref}
-                        className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-white px-6 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02] lg:mt-0"
-                    >
-                        {ctaLabel} <ArrowRight size={17} />
-                    </Link>
                 </div>
             </section>
         </main>

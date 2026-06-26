@@ -145,14 +145,17 @@ export default function FeaturesPage() {
                         {featureBlocks.map((feature) => {
                             const Icon = feature.icon;
                             return (
-                                <article key={feature.title} className="rounded-lg border border-white/10 bg-slate-900/70 p-6 transition-colors hover:border-white/20">
-                                    <Icon className={feature.accent} size={26} />
-                                    <h2 className="mt-5 text-lg font-black text-white">{feature.title}</h2>
-                                    <p className="mt-3 text-sm leading-6 text-slate-400">{feature.description}</p>
-                                    <ul className="mt-5 space-y-3">
+                                <article key={feature.title} className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-6 transition-all hover:border-white/[0.18] hover:shadow-lg hover:shadow-black/20">
+                                    <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-current/30 to-transparent opacity-60" />
+                                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl border border-current/20 bg-current/10 ${feature.accent}`}>
+                                        <Icon size={20} />
+                                    </div>
+                                    <h2 className="mt-5 text-base font-black text-white">{feature.title}</h2>
+                                    <p className="mt-2 text-sm leading-6 text-slate-400">{feature.description}</p>
+                                    <ul className="mt-4 space-y-2">
                                         {feature.points.map((point) => (
-                                            <li key={point} className="flex gap-2 text-sm leading-5 text-slate-300">
-                                                <CheckCircle2 className="mt-0.5 shrink-0 text-cyan-300" size={15} />
+                                            <li key={point} className="flex gap-2 text-xs leading-5 text-slate-300">
+                                                <CheckCircle2 className="mt-0.5 shrink-0 text-cyan-400" size={12} />
                                                 <span>{point}</span>
                                             </li>
                                         ))}
@@ -173,12 +176,13 @@ export default function FeaturesPage() {
                     />
                     <div className="mt-12 grid gap-4 lg:grid-cols-4">
                         {workflow.map(([title, description], index) => (
-                            <article key={title} className="rounded-lg border border-white/10 bg-slate-900/55 p-6">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-sm font-black text-slate-950">
+                            <article key={title} className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-6">
+                                <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/40 to-transparent" />
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-sm font-black text-slate-950 shadow-lg">
                                     {index + 1}
                                 </div>
-                                <h2 className="mt-6 text-lg font-black text-white">{title}</h2>
-                                <p className="mt-3 text-sm leading-6 text-slate-400">{description}</p>
+                                <h2 className="mt-5 text-base font-black text-white">{title}</h2>
+                                <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
                             </article>
                         ))}
                     </div>
@@ -199,11 +203,11 @@ export default function FeaturesPage() {
                             <Metric icon={<Gauge size={18} />} label="Ops" value="BullMQ" />
                         </div>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-2">
                         {architecture.map(([title, description]) => (
-                            <article key={title} className="rounded-lg border border-white/10 bg-slate-950/70 p-5">
-                                <h3 className="text-base font-black text-white">{title}</h3>
-                                <p className="mt-3 text-sm leading-6 text-slate-400">{description}</p>
+                            <article key={title} className="rounded-2xl border border-white/[0.08] bg-slate-950/60 p-5 transition-colors hover:border-white/[0.14]">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-cyan-400">{title}</p>
+                                <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
                             </article>
                         ))}
                     </div>
@@ -211,23 +215,26 @@ export default function FeaturesPage() {
             </section>
 
             <section className="px-4 py-20 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-8 shadow-2xl shadow-cyan-950/30 sm:p-10 lg:flex lg:items-center lg:justify-between">
-                    <div>
-                        <div className="flex items-center gap-3 text-cyan-100">
-                            <Workflow size={22} />
-                            <p className="text-sm font-black uppercase tracking-wide">Ready for the deployment loop</p>
+                <div className="mx-auto max-w-7xl">
+                    <div className="relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/[0.08] via-cyan-400/[0.03] to-transparent p-8 shadow-2xl shadow-cyan-950/20 sm:p-10 lg:flex lg:items-center lg:justify-between">
+                        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/60 via-cyan-400/20 to-transparent" />
+                        <div>
+                            <div className="flex items-center gap-2 text-cyan-400">
+                                <Workflow size={16} />
+                                <p className="text-[10px] font-black uppercase tracking-widest">Ready for the deployment loop</p>
+                            </div>
+                            <h2 className="mt-4 text-3xl font-black tracking-tight text-white">Start deploying with infrastructure you control.</h2>
+                            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                                Move into the authenticated console when you are signed in, or start from login to connect GitHub and add your first VPS.
+                            </p>
                         </div>
-                        <h2 className="mt-4 text-3xl font-black tracking-tight text-white">Start deploying with infrastructure you control.</h2>
-                        <p className="mt-3 max-w-2xl text-sm leading-6 text-cyan-50/75">
-                            Move into the authenticated console when you are signed in, or start from login to connect GitHub and add your first VPS.
-                        </p>
+                        <Link
+                            href={ctaHref}
+                            className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-lg transition-all hover:scale-[1.02] hover:shadow-white/10 lg:mt-0 lg:shrink-0"
+                        >
+                            {ctaLabel} <ArrowRight size={17} />
+                        </Link>
                     </div>
-                    <Link
-                        href={ctaHref}
-                        className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-white px-6 text-sm font-black text-slate-950 transition-transform hover:scale-[1.02] lg:mt-0"
-                    >
-                        {ctaLabel} <ArrowRight size={17} />
-                    </Link>
                 </div>
             </section>
         </main>
