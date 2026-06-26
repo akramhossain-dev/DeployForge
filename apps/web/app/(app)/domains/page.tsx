@@ -164,7 +164,7 @@ function DnsStatusPanel({ domain, vpsIp }: { domain: Domain; vpsIp?: string }) {
             </div>
 
             {!dnsEnabled && (
-                <p className="text-slate-600 italic">Click "Check DNS" to verify propagation.</p>
+                <p className="text-slate-600 italic">Click &quot;Check DNS&quot; to verify propagation.</p>
             )}
 
             {verify.isLoading && (

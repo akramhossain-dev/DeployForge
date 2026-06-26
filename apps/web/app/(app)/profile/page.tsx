@@ -2,19 +2,39 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { User, Mail, Calendar, Key, Save, Github } from 'lucide-react';
+import { Calendar, Github, Key, KeyRound, Mail, Save, Shield, User } from 'lucide-react';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
-import { Button, Panel, PageHeader } from '@/components/ui';
+import { Button, PageHeader, Panel, SkeletonBlock, inputClassName } from '@/components/ui';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 
+function ReadonlyField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+    return (
+        <div>
+            <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600">{label} <span className="ml-1 rounded bg-white/[0.04] px-1.5 py-0.5 text-[9px] normal-case tracking-normal text-slate-600">read-only</span></p>
+            <div className="flex h-10 items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 text-sm text-slate-500">
+                <span className="text-slate-600 shrink-0">{icon}</span>
+                <span className="truncate">{value}</span>
+            </div>
+        </div>
+    );
+}
+
+function getInitials(name: string, username: string) {
+    const src = (name || username || 'U').trim();
+    const parts = src.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    if (parts[0]?.length >= 2) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0]?.[0] || 'U').toUpperCase();
+}
+
 export default function ProfilePage() {
-    const auth = useAuthSession();
-    const addToast = useToastStore((state) => state.addToast);
-    
-    const [name, setName] = useState('');
+    const auth     = useAuthSession();
+    const addToast = useToastStore(s => s.addToast);
+
+    const [name,    setName]    = useState('');
     const [username, setUsername] = useState('');
-    const [email, setEmail] = useState('');
+    const [email,   setEmail]   = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -27,179 +47,130 @@ export default function ProfilePage() {
 
     if (auth.isLoading) {
         return (
-            <div className="flex h-64 items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+            <div className="space-y-6">
+                <SkeletonBlock className="h-12 max-w-sm" />
+                <div className="grid gap-6 lg:grid-cols-3">
+                    <SkeletonBlock className="h-60" />
+                    <SkeletonBlock className="h-60 lg:col-span-2" />
+                </div>
             </div>
         );
     }
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name.trim()) {
-            addToast({ title: 'Validation Error', description: 'Full name is required', severity: 'error' });
-            return;
-        }
-
+        if (!name.trim()) { addToast({ title: 'Validation Error', description: 'Full name is required', severity: 'error' }); return; }
         setIsSaving(true);
         try {
             await api.patch('/profile', { name });
-            addToast({ title: 'Success', description: 'Profile updated successfully', severity: 'success' });
+            addToast({ title: 'Saved', description: 'Profile updated successfully', severity: 'success' });
             await auth.refetch();
         } catch (err: any) {
             addToast({ title: 'Error', description: err.message || 'Failed to update profile', severity: 'error' });
-        } finally {
-            setIsSaving(false);
-        }
+        } finally { setIsSaving(false); }
     };
 
-    const getInitials = () => {
-        const displayName = (name || username || 'User').trim();
-        const parts = displayName.split(/\s+/).filter(Boolean);
-        if (parts.length >= 2) {
-            return (parts[0][0] + parts[1][0]).toUpperCase();
-        }
-        if (parts.length === 1) {
-            const word = parts[0];
-            if (word.length >= 2) {
-                return word.substring(0, 2).toUpperCase();
-            }
-            return word.charAt(0).toUpperCase();
-        }
-        return 'DF';
-    };
-
-    const gitHubUsername = auth.user?.githubUsername || 'Not connected';
-    const gitHubAvatar = auth.user?.githubAvatar;
+    const gitHubAvatar   = auth.user?.githubAvatar;
+    const gitHubUsername = auth.user?.githubUsername;
+    const initials       = getInitials(name, username);
 
     return (
         <div className="space-y-6">
-            <PageHeader title="My Profile" description="View and manage your public profile information." />
+            <PageHeader title="My Profile" description="View and manage your public display name and account identity." />
 
-            <div className="grid gap-6 md:grid-cols-3">
-                {}
-                <Panel className="flex flex-col items-center justify-center p-6 text-center md:col-span-1">
-                    <h3 className="mb-4 font-bold text-white">Profile Picture</h3>
-                    
-                    <div className="relative group mb-6">
-                        <div className="h-32 w-32 overflow-hidden rounded-full border-2 border-cyan-500 bg-slate-900 flex items-center justify-center font-bold text-4xl text-cyan-400 select-none">
-                            {gitHubAvatar ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={gitHubAvatar} alt="GitHub Avatar" className="h-full w-full object-cover" />
-                            ) : (
-                                getInitials()
-                            )}
-                        </div>
-                    </div>
+            <div className="grid gap-6 lg:grid-cols-3">
+                {/* ── Avatar card ── */}
+                <Panel className="relative overflow-hidden flex flex-col items-center py-8 text-center">
+                    <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-300/30 to-transparent" />
 
-                    <div className="text-xs text-slate-400 space-y-1 mb-6">
+                    {/* Avatar */}
+                    <div className="h-24 w-24 overflow-hidden rounded-2xl border-2 border-white/[0.1] bg-slate-900 flex items-center justify-center shadow-xl">
                         {gitHubAvatar ? (
-                            <p className="text-emerald-400 font-semibold">Using active GitHub profile avatar</p>
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={gitHubAvatar} alt="GitHub Avatar" className="h-full w-full object-cover" />
                         ) : (
-                            <p>Connect your GitHub account in settings to display your GitHub avatar</p>
+                            <span className="text-3xl font-black text-slate-300">{initials}</span>
                         )}
                     </div>
 
-                    <div className="w-full pt-4 border-t border-white/5">
-                        <Link href="/settings/security" className="block w-full">
-                            <Button variant="secondary" className="w-full text-xs">
-                                <Key size={14} className="mr-1.5" /> Change Password
+                    {/* Name + handle */}
+                    <p className="mt-4 font-black text-white text-lg">{name || 'Your Name'}</p>
+                    {username && <p className="text-[11px] text-slate-500">@{username}</p>}
+
+                    {/* GitHub badge */}
+                    <div className="mt-3">
+                        {gitHubAvatar ? (
+                            <span className="flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-2.5 py-1 text-[10px] font-black text-emerald-300">
+                                <Github size={10} /> GitHub avatar active
+                            </span>
+                        ) : (
+                            <span className="text-[10px] text-slate-600">Connect GitHub to use your avatar</span>
+                        )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="mt-6 w-full space-y-2 border-t border-white/[0.06] pt-5">
+                        <Link href="/settings/security" className="block">
+                            <Button variant="secondary" className="w-full h-9 text-xs">
+                                <KeyRound size={13} /> Change Password
+                            </Button>
+                        </Link>
+                        <Link href="/settings" className="block">
+                            <Button variant="secondary" className="w-full h-9 text-xs">
+                                <Shield size={13} /> Connected Accounts
                             </Button>
                         </Link>
                     </div>
                 </Panel>
 
-                {}
-                <Panel className="md:col-span-2">
-                    <h3 className="mb-4 font-bold text-white">Profile Information</h3>
-                    
-                    <form onSubmit={handleSave} className="space-y-4">
+                {/* ── Info form ── */}
+                <Panel className="lg:col-span-2">
+                    <div className="mb-5 flex items-center gap-3 border-b border-white/[0.06] pb-4">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/8 text-cyan-200">
+                            <User size={15} />
+                        </div>
                         <div>
-                            <label className="block text-sm font-semibold text-slate-300 mb-1">Full Name</label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-3 text-slate-500"><User size={16} /></span>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="w-full bg-slate-950 border border-white/10 rounded-md py-2 pl-9 pr-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
-                                    placeholder="Full Name"
-                                />
-                            </div>
+                            <h2 className="font-black text-white">Profile Information</h2>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Username and email can only be changed by an admin.</p>
                         </div>
+                    </div>
 
+                    <form onSubmit={handleSave} className="space-y-4">
+                        {/* Editable: name */}
+                        <label>
+                            <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">Full Name</p>
+                            <input
+                                type="text" value={name} onChange={e => setName(e.target.value)}
+                                autoComplete="name" placeholder="Your display name"
+                                className={inputClassName}
+                            />
+                        </label>
+
+                        {/* Read-only grid */}
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-500 mb-1">Username (Read-Only)</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-3 text-slate-600">@</span>
-                                    <input
-                                        type="text"
-                                        value={username}
-                                        readOnly
-                                        disabled
-                                        className="w-full bg-slate-950/50 border border-white/5 rounded-md py-2 pl-9 pr-3 text-slate-500 cursor-not-allowed text-sm select-none"
-                                        placeholder="username"
-                                    />
-                                </div>
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-500 mb-1">Email Address (Read-Only)</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-3 text-slate-600"><Mail size={16} /></span>
-                                    <input
-                                        type="email"
-                                        value={email}
-                                        readOnly
-                                        disabled
-                                        className="w-full bg-slate-950/50 border border-white/5 rounded-md py-2 pl-9 pr-3 text-slate-500 cursor-not-allowed text-sm select-none"
-                                        placeholder="email@example.com"
-                                    />
-                                </div>
-                            </div>
+                            <ReadonlyField icon={<span className="text-xs">@</span>} label="Username" value={username || '—'} />
+                            <ReadonlyField icon={<Mail size={13} />} label="Email Address" value={email || '—'} />
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <ReadonlyField icon={<Github size={13} />} label="GitHub Account" value={gitHubUsername ? `@${gitHubUsername}` : 'Not connected'} />
+                            <ReadonlyField icon={<Key size={13} />}    label="Avatar Source"  value={gitHubAvatar ? 'GitHub Avatar' : 'Initials (no GitHub)'} />
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2 pt-2">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-500 mb-1">GitHub Account (Read-Only)</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-3 text-slate-600"><Github size={16} /></span>
-                                    <input
-                                        type="text"
-                                        value={gitHubUsername}
-                                        readOnly
-                                        disabled
-                                        className="w-full bg-slate-950/50 border border-white/5 rounded-md py-2 pl-9 pr-3 text-slate-500 cursor-not-allowed text-sm select-none"
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-500 mb-1">GitHub Avatar URL (Read-Only)</label>
-                                <input
-                                    type="text"
-                                    value={gitHubAvatar || 'No Avatar connected'}
-                                    readOnly
-                                    disabled
-                                    className="w-full bg-slate-950/50 border border-white/5 rounded-md py-2 px-3 text-slate-500 cursor-not-allowed text-sm select-none truncate"
-                                />
-                            </div>
+                        {/* Meta timestamps */}
+                        <div className="flex flex-wrap gap-5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[11px] text-slate-600">
+                            <span className="flex items-center gap-1.5">
+                                <Calendar size={11} />
+                                Joined: {auth.user?.createdAt ? new Date(auth.user.createdAt).toLocaleDateString() : '—'}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <Key size={11} />
+                                Last login: {auth.user?.lastLoginAt ? new Date(auth.user.lastLoginAt).toLocaleString() : '—'}
+                            </span>
                         </div>
 
-                        <div className="pt-6 border-t border-white/5 grid gap-4 sm:grid-cols-2 text-xs text-slate-400">
-                            <div className="flex items-center gap-2">
-                                <Calendar size={14} className="text-slate-500" />
-                                <span>Account Created Date: {auth.user?.createdAt ? new Date(auth.user.createdAt).toLocaleDateString() : 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Key size={14} className="text-slate-500" />
-                                <span>Last Login: {auth.user?.lastLoginAt ? new Date(auth.user.lastLoginAt).toLocaleString() : 'N/A'}</span>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end pt-4">
+                        <div className="flex justify-end border-t border-white/[0.06] pt-4">
                             <Button type="submit" loading={isSaving}>
-                                <Save size={16} className="mr-1.5" /> Save Changes
+                                <Save size={14} /> Save Changes
                             </Button>
                         </div>
                     </form>
