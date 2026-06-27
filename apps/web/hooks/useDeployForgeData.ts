@@ -134,7 +134,7 @@ export function usePublicStats() {
 export function useGitHubProfile() {
     return useQuery({
         queryKey: queryKeys.githubProfile,
-        queryFn: () => api.get<GitHubProfile | null>('/github/profile'),
+        queryFn: () => api.get<GitHubProfile | null>('/auth/github/profile'),
         retry: false,
     });
 }
@@ -142,7 +142,7 @@ export function useGitHubProfile() {
 export function useRepositories(enabled = true) {
     return useQuery({
         queryKey: queryKeys.repositories,
-        queryFn: () => api.get<Repository[]>('/github/repos'),
+        queryFn: () => api.get<Repository[]>('/auth/github/repos'),
         enabled,
         retry: false,
     });
@@ -152,7 +152,7 @@ export function useSyncRepositories() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: () => api.post<{ count: number }>('/github/repos/sync'),
+        mutationFn: () => api.post<{ count: number }>('/auth/github/repos/sync'),
         onSuccess: () => {
             handleMutationSuccess('Repositories Synced', 'Successfully synchronized your GitHub repositories.');
             queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
@@ -166,7 +166,7 @@ export function useDisconnectGitHub() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: () => api.delete<{ message: string }>('/github/disconnect'),
+        mutationFn: () => api.delete<{ message: string }>('/auth/github/disconnect'),
         onSuccess: () => {
             handleMutationSuccess('GitHub Disconnected', 'Successfully disconnected your GitHub account.');
             queryClient.setQueryData(queryKeys.githubProfile, null);

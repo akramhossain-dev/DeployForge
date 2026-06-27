@@ -83,7 +83,7 @@ export default function SettingsPage() {
 
     async function connectGitHub() {
         setConnectError(null); setIsConnecting(true);
-        try { const r = await api.get<{ url: string }>('/github/connect'); window.location.href = r.url; }
+        try { const r = await api.get<{ url: string }>('/auth/github/connect'); window.location.href = r.url; }
         catch (err: any) { setConnectError(err.message || 'Unable to start GitHub OAuth.'); }
         finally { setIsConnecting(false); }
     }

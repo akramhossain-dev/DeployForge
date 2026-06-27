@@ -20,7 +20,7 @@ export default function RepositoriesPage() {
         setConnectError(null);
         setIsConnecting(true);
         try {
-            const response = await api.get<{ url: string }>('/github/connect');
+            const response = await api.get<{ url: string }>('/auth/github/connect');
             window.location.href = response.url;
         } catch (err: any) {
             setConnectError(err.message || 'Unable to start GitHub OAuth.');

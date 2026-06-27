@@ -36,7 +36,12 @@ let csrfToken: string | null = null;
 function handleUnauthorized(path: string) {
     if (typeof window === 'undefined') return;
 
+    // Clear stale auth cookies so middleware won't redirect based on them
+    document.cookie = 'accessToken=; Path=/; Max-Age=0; SameSite=Lax';
+    document.cookie = 'refreshToken=; Path=/; Max-Age=0; SameSite=Lax';
+
     if (path.startsWith('/admin')) {
+        document.cookie = 'adminAccessToken=; Path=/; Max-Age=0; SameSite=Lax';
         useAdminAuthStore.getState().logoutAdmin();
         if (!window.location.pathname.startsWith('/admin/login')) {
             window.location.assign('/admin/login');
@@ -45,7 +50,11 @@ function handleUnauthorized(path: string) {
     }
 
     useAuthStore.getState().logout();
-    if (window.location.pathname !== '/') {
+    const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/about', '/features', '/docs', '/contact', '/terms', '/privacy-policy'];
+    const currentPath = window.location.pathname;
+    const isPublicPath = currentPath === '/' || publicPaths.some((p) => currentPath.startsWith(p));
+    
+    if (!isPublicPath) {
         window.location.assign('/');
     }
 }

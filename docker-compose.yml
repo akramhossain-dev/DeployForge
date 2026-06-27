@@ -26,6 +26,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--requirepass", "${REDIS_PASSWORD:-deployforge_redis_pass_123}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-deployforge_redis_pass_123}
     volumes:
       - redis_data:/data
     ports:
@@ -154,8 +156,13 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # 'dollar' is used inside the nginx template to escape Nginx-native variables
+      # so envsubst only expands ${DOMAIN} and leaves $host, $scheme, etc. intact.
+      dollar: "$$"
+      DOMAIN: ${DOMAIN:-localhost}
     volumes:
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx.conf:/etc/nginx/templates/default.conf.template:ro
       - certbot_webroot:/var/www/certbot:ro
       - certbot_certs:/etc/letsencrypt:ro
     depends_on:

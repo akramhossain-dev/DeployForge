@@ -14,7 +14,8 @@ const csrfCookieName = 'csrfToken';
 const csrfHeaderName = 'x-csrf-token';
 const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const skipCsrfPaths = new Set([
-    '/api/auth/csrf',
+    '/auth/csrf',
+    '/auth/refresh',
     '/api/webhooks/github',
 ]);
 

@@ -13,10 +13,36 @@ const wsQuerySchema = z.object({
     token: z.string().min(1, 'Token is required').optional(),
 });
 
+// H-7: Per-user WebSocket connection tracking to prevent resource exhaustion
+const MAX_WS_PER_USER = 20;
+const userConnectionCounts = new Map<string, number>();
+
+function acquireWsSlot(userId: string): boolean {
+    const current = userConnectionCounts.get(userId) || 0;
+    if (current >= MAX_WS_PER_USER) return false;
+    userConnectionCounts.set(userId, current + 1);
+    return true;
+}
+
+function releaseWsSlot(userId: string): void {
+    const current = userConnectionCounts.get(userId) || 0;
+    if (current <= 1) {
+        userConnectionCounts.delete(userId);
+    } else {
+        userConnectionCounts.set(userId, current - 1);
+    }
+}
+
 export default async function wsRoutes(fastify: FastifyInstance) {
     fastify.get('/deployments/:id/logs', { websocket: true }, async (connection, request) => {
         const session = await authorizeDeploymentSocket(request, connection);
         if (!session) return;
+
+        if (!acquireWsSlot(session.userId)) {
+            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Too many concurrent connections' }));
+            connection.socket.close();
+            return;
+        }
 
         let lastSeen = new Date(0);
         const sendLogs = async () => {
@@ -49,12 +75,19 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 
         connection.socket.on('close', () => {
             deploymentEventEmitter.off(DEPLOYMENT_EVENTS.LOG_ADDED, onLogAdded);
+            releaseWsSlot(session.userId);
         });
     });
 
     fastify.get('/deployments/:id/status', { websocket: true }, async (connection, request) => {
         const session = await authorizeDeploymentSocket(request, connection);
         if (!session) return;
+
+        if (!acquireWsSlot(session.userId)) {
+            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Too many concurrent connections' }));
+            connection.socket.close();
+            return;
+        }
 
         let lastStatus = '';
         let lastUpdatedAt = '';
@@ -91,6 +124,7 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 
         connection.socket.on('close', () => {
             deploymentEventEmitter.off(DEPLOYMENT_EVENTS.STATUS_UPDATED, onStatusUpdated);
+            releaseWsSlot(session.userId);
         });
     });
 
@@ -107,6 +141,12 @@ export default async function wsRoutes(fastify: FastifyInstance) {
         }
 
         const userId = session.userId;
+
+        if (!acquireWsSlot(userId)) {
+            connection.socket.send(JSON.stringify({ event: 'notification:error', message: 'Too many concurrent connections' }));
+            connection.socket.close();
+            return;
+        }
 
         // Send initial unread count
         const unreadCount = await prisma.notification.count({ where: { userId, isRead: false } });
@@ -127,6 +167,7 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 
         connection.socket.on('close', () => {
             monitoringEventEmitter.off(MONITORING_EVENTS.ALERT_CREATED, onAlertCreated);
+            releaseWsSlot(userId);
         });
     });
 }

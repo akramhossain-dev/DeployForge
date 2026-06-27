@@ -72,8 +72,7 @@ export function middleware(request: NextRequest) {
     const authPages = ['/login', '/register', '/forgot-password', '/reset-password'];
     if (authPages.includes(pathname)) {
         const token = request.cookies.get('accessToken')?.value;
-        const refreshToken = request.cookies.get('refreshToken')?.value;
-        if ((token && !isTokenExpired(token)) || refreshToken) {
+        if (token && !isTokenExpired(token)) {
             return NextResponse.redirect(new URL('/dashboard', request.url));
         }
     }

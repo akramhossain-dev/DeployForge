@@ -1,6 +1,7 @@
 import prisma from '@deployforge/database';
 import { PasswordService } from '@deployforge/security';
 import { config } from '../config/env';
+import { logger } from '../utils/logger';
 
 export class SuperAdminService {
     static async ensureSuperAdmin() {
@@ -8,7 +9,7 @@ export class SuperAdminService {
         const superAdminPassword = config.superAdmin.password;
 
         if (!superAdminEmail || !superAdminPassword) {
-            console.warn('[super-admin] Super Admin credentials not configured in environment variables.');
+            logger.warn('[super-admin] Super Admin credentials not configured in environment variables.');
             return;
         }
 
@@ -34,14 +35,14 @@ export class SuperAdminService {
                 const updateData: { email: string; passwordHash?: string } = { email: superAdminEmail };
                 if (!passwordUnchanged) {
                     updateData.passwordHash = await PasswordService.hash(superAdminPassword);
-                    console.log('[super-admin] Super Admin password updated (change detected).');
+                    logger.info('[super-admin] Super Admin password updated (change detected).');
                 }
 
                 await prisma.adminUser.update({
                     where: { id: existingSuperAdmin.id },
                     data: updateData,
                 });
-                console.log(`[super-admin] Super Admin account synced: ${superAdminEmail}`);
+                logger.info(`[super-admin] Super Admin account synced: ${superAdminEmail}`);
                 return;
             }
 
@@ -53,15 +54,15 @@ export class SuperAdminService {
                     where: { id: userWithEmail.id },
                     data: { role: 'SUPER_ADMIN', passwordHash },
                 });
-                console.log(`[super-admin] Existing admin ${superAdminEmail} promoted to SUPER_ADMIN.`);
+                logger.info(`[super-admin] Existing admin ${superAdminEmail} promoted to SUPER_ADMIN.`);
             } else {
                 await prisma.adminUser.create({
                     data: { email: superAdminEmail, passwordHash, role: 'SUPER_ADMIN' },
                 });
-                console.log(`[super-admin] Created Super Admin account: ${superAdminEmail}`);
+                logger.info(`[super-admin] Created Super Admin account: ${superAdminEmail}`);
             }
         } catch (error) {
-            console.error('[super-admin] Error ensuring Super Admin account:', error);
+            logger.error({ err: error }, '[super-admin] Error ensuring Super Admin account');
         }
     }
 }
