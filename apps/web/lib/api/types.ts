@@ -341,3 +341,58 @@ export type FileSearchResult = {
 };
 
 export type FileProperties = Record<string, string>;
+
+export type AlertLevel = 'INFO' | 'SUCCESS' | 'WARNING' | 'CRITICAL';
+
+export type AlertType =
+    | 'CPU_HIGH'
+    | 'RAM_HIGH'
+    | 'DISK_HIGH'
+    | 'SWAP_HIGH'
+    | 'SERVER_OFFLINE'
+    | 'SERVER_RECONNECTED'
+    | 'HIGH_LOAD'
+    | 'DEPLOYMENT_FAILED'
+    | 'DEPLOYMENT_COMPLETED'
+    | 'SSL_EXPIRING'
+    | 'BACKUP_FAILED'
+    | 'BACKUP_COMPLETED';
+
+export type AppNotification = {
+    id: string;
+    userId: string;
+    type: AlertType;
+    level: AlertLevel;
+    title: string;
+    message: string;
+    serverName?: string | null;
+    resourceValue?: number | null;
+    vpsId?: string | null;
+    vps?: { id: string; name: string; ipAddress: string } | null;
+    isRead: boolean;
+    createdAt: string;
+};
+
+export type NotificationListResponse = {
+    notifications: AppNotification[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+};
+
+export type AlertSettings = {
+    id: string;
+    userId: string;
+    cpuThreshold: number;
+    ramThreshold: number;
+    diskThreshold: number;
+    swapThreshold: number;
+    emailAlerts: boolean;
+    browserAlerts: boolean;
+    realtimeAlerts: boolean;
+    createdAt: string;
+    updatedAt: string;
+};

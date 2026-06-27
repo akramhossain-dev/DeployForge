@@ -64,7 +64,7 @@ export class ValidationService {
     }
 
     static async healthCheck(ssh: SSHService, deploymentId: string, port: number) {
-        await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if wget -qO- --timeout=2 http://127.0.0.1:${port}/health >/dev/null 2>&1 || wget -qO- --timeout=2 http://127.0.0.1:${port}/ >/dev/null 2>&1; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
+        await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/health >/dev/null 2>&1 || wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/ >/dev/null 2>&1; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
     }
 
     static async healthCheckStatic(ssh: SSHService, deploymentId: string, hosting: StaticHostingResult) {
@@ -74,7 +74,7 @@ export class ValidationService {
               ? 'http://127.0.0.1/index.html'
               : `http://127.0.0.1/site/${deploymentId}/index.html`;
         const hostHeader = new URL(hosting.url).host;
-        await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 10); do if wget -qO- --timeout=2 --header=${shellQuote(`Host: ${hostHeader}`)} ${shellQuote(url)} >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1`, 'static_hosting', 'STATIC_HEALTH_CHECK_FAILED');
+        await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 10); do if wget -qO- --timeout=2 --tries=1 --header=${shellQuote(`Host: ${hostHeader}`)} ${shellQuote(url)} >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1`, 'static_hosting', 'STATIC_HEALTH_CHECK_FAILED');
     }
 
     static async validateStaticAssets(ssh: SSHService, deploymentId: string, staticHosting: StaticHostingResult, vps: any, domainName?: string) {

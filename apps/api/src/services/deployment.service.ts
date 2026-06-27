@@ -254,12 +254,15 @@ export class DeploymentService {
             });
 
             let lockfileHash = 'nolock';
-            const hashTarget = detected.lockfile || 'package.json';
-            const checkTargetCmd = `if [ -f ${shellQuote(`${workDir}/${hashTarget}`)} ]; then if command -v sha256sum >/dev/null 2>&1; then sha256sum ${shellQuote(`${workDir}/${hashTarget}`)} | awk '{print $1}'; else md5sum ${shellQuote(`${workDir}/${hashTarget}`)} | awk '{print $1}'; fi; else echo "missing"; fi`;
-            const { stdout: hashOut } = await ssh.execute(checkTargetCmd);
-            const cleanHash = hashOut.trim();
-            if (cleanHash && cleanHash !== 'missing') {
-                lockfileHash = cleanHash;
+            const isDockerProject = detected.framework === 'DOCKER' || detected.framework === 'DOCKER_COMPOSE';
+            if (!isDockerProject) {
+                const hashTarget = detected.lockfile || 'package.json';
+                const checkTargetCmd = `if [ -f ${shellQuote(`${workDir}/${hashTarget}`)} ]; then if command -v sha256sum >/dev/null 2>&1; then sha256sum ${shellQuote(`${workDir}/${hashTarget}`)} | awk '{print $1}'; else md5sum ${shellQuote(`${workDir}/${hashTarget}`)} | awk '{print $1}'; fi; else echo "missing"; fi`;
+                const { stdout: hashOut } = await ssh.execute(checkTargetCmd);
+                const cleanHash = hashOut.trim();
+                if (cleanHash && cleanHash !== 'missing') {
+                    lockfileHash = cleanHash;
+                }
             }
 
             let sourceHash = '';
@@ -320,7 +323,11 @@ export class DeploymentService {
                         await runCommand(ssh, deploymentId, 'build', `if [ -d ${shellQuote(workDir)}/node_modules ]; then mkdir -p ${shellQuote(`${cacheDir}/dependencies/${lockfileHash}`)} && cp -a ${shellQuote(workDir)}/node_modules ${shellQuote(`${cacheDir}/dependencies/${lockfileHash}/`)}; fi`).catch(() => undefined);
                     }
                 } else {
-                    await LoggingService.log(deploymentId, 'No package.json or lockfile found; skipping dependency cache', 'build');
+                    if (isDockerProject) {
+                        await LoggingService.log(deploymentId, 'Docker-based project; skipping host-side dependency cache', 'build');
+                    } else {
+                        await LoggingService.log(deploymentId, 'No package.json or lockfile found; skipping dependency cache', 'build');
+                    }
                 }
             }
             
@@ -953,7 +960,7 @@ export class DeploymentService {
         const siteDir = `${root}/site`;
         const siteLink = `${siteDir}/${deploymentId}`;
         const logPath = `${root}/static-server.log`;
-        const command = `mkdir -p ${shellQuote(siteDir)} && ln -sfn ${shellQuote(staticDir)} ${shellQuote(siteLink)} && if command -v python3 >/dev/null 2>&1; then server_kind=python; elif command -v npx >/dev/null 2>&1; then server_kind=npx; else echo STATIC_FALLBACK_RUNTIME_MISSING; exit 46; fi; for port in $(seq 8979 8999); do if command -v ss >/dev/null 2>&1; then listening=$(ss -ltn "( sport = :$port )" | tail -n +2 | wc -l); else listening=$(netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Ec "[:.]$port$" || true); fi; if [ "$listening" = "0" ]; then if [ "$server_kind" = "python" ]; then nohup python3 -m http.server "$port" --bind 0.0.0.0 --directory ${shellQuote(root)} > ${shellQuote(logPath)} 2>&1 & else nohup npx --yes serve ${shellQuote(root)} -l "$port" > ${shellQuote(logPath)} 2>&1 & fi; echo $! > ${shellQuote(`${root}/static-server.pid`)}; sleep 2; fi; if wget -qO- --timeout=2 "http://127.0.0.1:$port/site/${deploymentId}/" >/dev/null 2>&1; then echo "PORT=$port"; exit 0; fi; done; echo STATIC_FALLBACK_PORT_UNAVAILABLE; exit 47`;
+        const command = `mkdir -p ${shellQuote(siteDir)} && ln -sfn ${shellQuote(staticDir)} ${shellQuote(siteLink)} && if command -v python3 >/dev/null 2>&1; then server_kind=python; elif command -v npx >/dev/null 2>&1; then server_kind=npx; else echo STATIC_FALLBACK_RUNTIME_MISSING; exit 46; fi; for port in $(seq 8979 8999); do if command -v ss >/dev/null 2>&1; then listening=$(ss -ltn "( sport = :$port )" | tail -n +2 | wc -l); else listening=$(netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Ec "[:.]$port$" || true); fi; if [ "$listening" = "0" ]; then if [ "$server_kind" = "python" ]; then nohup python3 -m http.server "$port" --bind 0.0.0.0 --directory ${shellQuote(root)} > ${shellQuote(logPath)} 2>&1 & else nohup npx --yes serve ${shellQuote(root)} -l "$port" > ${shellQuote(logPath)} 2>&1 & fi; echo $! > ${shellQuote(`${root}/static-server.pid`)}; sleep 2; fi; if wget -qO- --timeout=2 --tries=1 "http://127.0.0.1:$port/site/${deploymentId}/" >/dev/null 2>&1; then echo "PORT=$port"; exit 0; fi; done; echo STATIC_FALLBACK_PORT_UNAVAILABLE; exit 47`;
         const { stdout } = await runCommand(ssh, deploymentId, 'system', command, 'static_hosting', 'STATIC_FALLBACK_FAILED');
         const fallbackPort = Number(stdout.match(/PORT=(\d+)/)?.[1] || 8979);
         await LoggingService.log(deploymentId, `Fallback static server active at http://${ipAddress}:${fallbackPort}/site/${deploymentId}/`, 'system', 'warn');

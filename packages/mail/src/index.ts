@@ -204,4 +204,87 @@ export class MailService {
             html,
         });
     }
+
+    async sendAlertEmail(email: string, alert: {
+        level: 'INFO' | 'SUCCESS' | 'WARNING' | 'CRITICAL';
+        title: string;
+        message: string;
+        serverName?: string;
+        resourceValue?: number;
+        timestamp?: string;
+    }) {
+        const levelColors: Record<string, { bg: string; text: string; border: string }> = {
+            INFO: { bg: '#e0f2fe', text: '#0369a1', border: '#7dd3fc' },
+            SUCCESS: { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
+            WARNING: { bg: '#fef9c3', text: '#a16207', border: '#fde047' },
+            CRITICAL: { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' },
+        };
+        const colors = levelColors[alert.level] || levelColors.WARNING;
+        const ts = alert.timestamp || new Date().toISOString();
+
+        const html = `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px 24px; text-align: center;">
+          <h1 style="color: #22d3ee; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">⚡ DeployForge Alert</h1>
+        </div>
+        <div style="padding: 24px;">
+          <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; padding: 14px 18px; border-radius: 6px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 13px; font-weight: 700; color: ${colors.text}; text-transform: uppercase; letter-spacing: 0.5px;">${alert.level}</p>
+            <p style="margin: 6px 0 0; font-size: 16px; font-weight: 700; color: #0f172a;">${alert.title}</p>
+          </div>
+          <p style="color: #334155; font-size: 14px; line-height: 1.7; margin: 0 0 16px;">${alert.message}</p>
+          ${alert.serverName ? `<div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 6px; margin-bottom: 10px;"><span style="color: #64748b; font-size: 12px; font-weight: 600;">Server:</span><span style="color: #0f172a; font-size: 13px; font-weight: 700;">${alert.serverName}</span></div>` : ''}
+          ${alert.resourceValue !== undefined ? `<div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 6px; margin-bottom: 10px;"><span style="color: #64748b; font-size: 12px; font-weight: 600;">Value:</span><span style="color: #0f172a; font-size: 13px; font-weight: 700;">${alert.resourceValue}%</span></div>` : ''}
+          <div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 6px;"><span style="color: #64748b; font-size: 12px; font-weight: 600;">Time:</span><span style="color: #0f172a; font-size: 13px;">${new Date(ts).toLocaleString()}</span></div>
+        </div>
+        <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; text-align: center;">
+          <p style="font-size: 11px; color: #94a3b8; margin: 0;">&copy; DeployForge. You can manage alert preferences in your dashboard settings.</p>
+        </div>
+      </div>
+    `;
+
+        await this.sendWithRetry({
+            from: `"DeployForge Alerts" <${this.fromEmail}>`,
+            to: email,
+            subject: `[${alert.level}] ${alert.title}`,
+            html,
+        });
+    }
+
+    async sendDeploymentAlert(email: string, deployment: {
+        name?: string;
+        status: 'SUCCESS' | 'FAILED';
+        serverName?: string;
+    }) {
+        const isFailed = deployment.status === 'FAILED';
+        await this.sendAlertEmail(email, {
+            level: isFailed ? 'CRITICAL' : 'SUCCESS',
+            title: isFailed ? 'Deployment Failed' : 'Deployment Completed',
+            message: isFailed
+                ? `Your deployment "${deployment.name || 'Unknown'}" has failed. Please check the deployment logs for more details.`
+                : `Your deployment "${deployment.name || 'Unknown'}" has completed successfully and is now live.`,
+            serverName: deployment.serverName,
+        });
+    }
+
+    async sendSSLExpiryAlert(email: string, domain: string, daysLeft: number) {
+        await this.sendAlertEmail(email, {
+            level: daysLeft <= 7 ? 'CRITICAL' : 'WARNING',
+            title: 'SSL Certificate Expiring Soon',
+            message: `The SSL certificate for <strong>${domain}</strong> will expire in <strong>${daysLeft} days</strong>. Please renew it to avoid service disruption.`,
+            resourceValue: daysLeft,
+        });
+    }
+
+    async sendBackupAlert(email: string, status: 'COMPLETED' | 'FAILED', serverName?: string) {
+        const isFailed = status === 'FAILED';
+        await this.sendAlertEmail(email, {
+            level: isFailed ? 'CRITICAL' : 'SUCCESS',
+            title: isFailed ? 'Backup Failed' : 'Backup Completed',
+            message: isFailed
+                ? `A scheduled backup has failed${serverName ? ` on server "${serverName}"` : ''}. Please investigate and retry manually if needed.`
+                : `A scheduled backup has completed successfully${serverName ? ` on server "${serverName}"` : ''}.`,
+            serverName,
+        });
+    }
 }

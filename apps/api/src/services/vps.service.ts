@@ -3,6 +3,7 @@ import { EncryptionService } from '@deployforge/security';
 import { SSHConnectionError, SSHService } from '@deployforge/vps';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
+import { AlertService } from './alert.service';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -239,6 +240,8 @@ export class VPSService {
         const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
         if (!vps) throw new Error('VPS not found');
 
+        const previousStatus = vps.status;
+
         const ssh = new SSHService();
         try {
             await ssh.connect({
@@ -283,12 +286,39 @@ export class VPSService {
                 data: { status: 'active', lastCheckedAt: new Date() },
             });
 
+            // Alert engine: check thresholds
+            const swapResult = await ssh.execute(`free | awk '/Swap:/{if($2>0) printf "%.1f", $3/$2*100; else print "0"}'`).catch(() => ({ stdout: '0' }));
+            const loadResult = await ssh.execute(`cat /proc/loadavg | awk '{print $1}'`).catch(() => ({ stdout: '0' }));
+            const swapUsage = parseFloat((swapResult as any).stdout?.trim()) || 0;
+            const loadAvg1 = parseFloat((loadResult as any).stdout?.trim()) || 0;
+
+            AlertService.checkThresholds(vps.userId, vpsId, vps.name, {
+                cpuUsage: health.cpuUsage,
+                memoryUsage: health.memoryUsage,
+                diskUsage: health.diskUsage,
+                swapUsage,
+                loadAvg1,
+            }).catch(err => logger.warn({ err, vpsId }, 'Alert threshold check failed'));
+
+            // If server was previously offline, emit reconnected alert
+            if (previousStatus === 'failed') {
+                AlertService.handleServerReconnected(vps.userId, vpsId, vps.name)
+                    .catch(err => logger.warn({ err, vpsId }, 'Server reconnected alert failed'));
+            }
+
             return health;
         } catch (err) {
             await prisma.vPS.update({
                 where: { id: vpsId },
                 data: { status: 'failed', lastCheckedAt: new Date() },
             });
+
+            // Alert engine: server offline
+            if (previousStatus === 'active') {
+                AlertService.handleServerOffline(vps.userId, vpsId, vps.name)
+                    .catch(alertErr => logger.warn({ err: alertErr, vpsId }, 'Server offline alert failed'));
+            }
+
             throw err;
         } finally {
             ssh.disconnect();

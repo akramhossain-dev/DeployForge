@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-    FolderOpen, Github, Globe, LayoutDashboard,
+    Bell, FolderOpen, Github, Globe, LayoutDashboard,
     LogOut, Menu, Rocket, Server, Settings, Terminal, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useMe } from '@/hooks/useDeployForgeData';
 import { Button, SkeletonBlock } from '@/components/ui';
 import api from '@/lib/api/client';
+import { NotificationDropdown } from '@/components/layout/NotificationDropdown';
 
 interface DashboardLayoutProps { children: ReactNode; }
 
@@ -36,6 +37,7 @@ const NAV_GROUPS = [
     {
         label: 'System',
         items: [
+            { name: 'Notifications', icon: Bell, href: '/notifications' },
             { name: 'Settings', icon: Settings, href: '/settings' },
         ],
     },
@@ -122,6 +124,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                     <span className={`h-1.5 w-1.5 rounded-full ${me.isError ? 'bg-rose-400' : 'bg-emerald-400 animate-pulse'}`} />
                                     API
                                 </div>
+                                <NotificationDropdown />
                                 <Button variant="secondary" onClick={() => me.refetch()} loading={me.isFetching} className="h-9 text-xs">
                                     Refresh
                                 </Button>

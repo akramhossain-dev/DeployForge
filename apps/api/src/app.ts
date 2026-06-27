@@ -362,6 +362,8 @@ export async function buildApp() {
     await app.register(import('./routes/monitoring'), { prefix: '/monitor' });
     await app.register(import('./routes/terminal'), { prefix: '/terminal' });
     await app.register(import('./routes/file-manager'), { prefix: '/file-manager' });
+    await app.register(import('./routes/notifications'), { prefix: '/notifications' });
+    await app.register(import('./routes/alert-settings'), { prefix: '/alert-settings' });
     await app.register(import('./routes/health'));
 
     return app;
