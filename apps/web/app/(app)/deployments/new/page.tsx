@@ -1,14 +1,14 @@
 'use client';
 
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
-import { CheckCircle2, Github, PackagePlus, Plus, Trash2, UploadCloud } from 'lucide-react';
-import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, inputClassName } from '@/components/ui';
-import { useCreateGithubDeployment, useCreateUploadDeployment, useRepositories, useVpsList } from '@/hooks/useDeployForgeData';
+import { CheckCircle2, Github, PackagePlus, Plus, Trash2, UploadCloud, Edit2, Search, ArrowUpDown, Copy, AlertCircle } from 'lucide-react';
+import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, inputClassName, PasswordInput } from '@/components/ui';
+import { useCreateGithubDeployment, useCreateUploadDeployment, useRepositories, useVpsList, type EnvFile } from '@/hooks/useDeployForgeData';
+import { useToastStore } from '@/lib/store/useToastStore';
 
 type EnvName = 'production' | 'development';
-type EnvRow = { id: string; key: string; value: string };
 type ExecutionMode = 'production' | 'sandbox';
 
 export default function NewDeploymentPage() {
@@ -54,7 +54,9 @@ function GithubDeployForm() {
     const [domainName, setDomainName] = useState('');
     const [mode, setMode] = useState<ExecutionMode>('production');
     const [useEnv, setUseEnv] = useState(false);
-    const [envRows, setEnvRows] = useState<EnvRow[]>([]);
+    const [envFiles, setEnvFiles] = useState<EnvFile[]>([
+        { path: '.env', variables: {} }
+    ]);
 
     const selectedRepo = repositories.data?.find((repo) => repo.id === repositoryId);
     const selectedVps = vps.data?.find((server) => server.id === vpsId);
@@ -88,9 +90,39 @@ function GithubDeployForm() {
                 isValid = false;
             }
         }
-        if (useEnv && hasInvalidEnvRows(envRows)) {
-            newErrors.env = 'One or more environment variable keys are invalid';
-            isValid = false;
+        if (useEnv) {
+            const totalVars = envFiles.reduce((sum, f) => sum + Object.keys(f.variables || {}).length, 0);
+            if (envFiles.length > 20) {
+                newErrors.env = 'Maximum limit of 20 environment files exceeded';
+                isValid = false;
+            } else if (totalVars > 200) {
+                newErrors.env = 'Maximum limit of 200 environment variables exceeded';
+                isValid = false;
+            } else {
+                const validateKey = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
+                const validatePath = (path: string) => {
+                    if (!path.trim()) return false;
+                    if (path.startsWith('/') || path.startsWith('\\') || /^[a-zA-Z]:/.test(path)) return false;
+                    if (path.split(/[/\\]/).some(p => p === '..')) return false;
+                    const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+                    const fileName = normalized.split('/').pop() || '';
+                    return fileName.startsWith('.env');
+                };
+                for (const file of envFiles) {
+                    if (!validatePath(file.path)) {
+                        newErrors.env = `Invalid path: ${file.path}. Must end with a file starting with .env and contain no traversal.`;
+                        isValid = false;
+                        break;
+                    }
+                    const keys = Object.keys(file.variables || {});
+                    const invalidKey = keys.find(k => !validateKey(k));
+                    if (invalidKey) {
+                        newErrors.env = `Invalid variable key "${invalidKey}" in ${file.path}. Must start with a letter/underscore and contain only A-Z, 0-9, _.`;
+                        isValid = false;
+                        break;
+                    }
+                }
+            }
         }
 
         setErrors(newErrors);
@@ -114,7 +146,7 @@ function GithubDeployForm() {
                 environment,
                 autoDeploy,
                 domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined,
-                env: useEnv ? envRowsToRecord(envRows) : {},
+                env: useEnv ? { version: 2, files: envFiles } : { version: 2, files: [] },
                 mode
             });
             router.push(`/deployments/${deployment.id}`);
@@ -243,7 +275,7 @@ function GithubDeployForm() {
                     <p className="mt-1">Sandbox runs use direct ephemeral port access and skip Nginx/domain routing.</p>
                 </div>
             )}
-            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} error={errors.env} />
+            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} files={envFiles} setFiles={setEnvFiles} error={errors.env} />
             <Button onClick={submit} loading={deploy.isPending} disabled={isSubmitting}>
                 <Github size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy repository'}
             </Button>
@@ -269,7 +301,9 @@ function UploadDeployForm() {
     const [domainName, setDomainName] = useState('');
     const [mode, setMode] = useState<ExecutionMode>('production');
     const [useEnv, setUseEnv] = useState(false);
-    const [envRows, setEnvRows] = useState<EnvRow[]>([]);
+    const [envFiles, setEnvFiles] = useState<EnvFile[]>([
+        { path: '.env', variables: {} }
+    ]);
 
     const isValid = !!file && /\.(zip|tar\.gz|tgz)$/i.test(file.name);
     const progress = deploy.isPending ? 75 : deploy.isSuccess ? 100 : file ? 35 : 0;
@@ -302,9 +336,39 @@ function UploadDeployForm() {
                 isValidForm = false;
             }
         }
-        if (useEnv && hasInvalidEnvRows(envRows)) {
-            newErrors.env = 'One or more environment variable keys are invalid';
-            isValidForm = false;
+        if (useEnv) {
+            const totalVars = envFiles.reduce((sum, f) => sum + Object.keys(f.variables || {}).length, 0);
+            if (envFiles.length > 20) {
+                newErrors.env = 'Maximum limit of 20 environment files exceeded';
+                isValidForm = false;
+            } else if (totalVars > 200) {
+                newErrors.env = 'Maximum limit of 200 environment variables exceeded';
+                isValidForm = false;
+            } else {
+                const validateKey = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
+                const validatePath = (path: string) => {
+                    if (!path.trim()) return false;
+                    if (path.startsWith('/') || path.startsWith('\\') || /^[a-zA-Z]:/.test(path)) return false;
+                    if (path.split(/[/\\]/).some(p => p === '..')) return false;
+                    const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+                    const fileName = normalized.split('/').pop() || '';
+                    return fileName.startsWith('.env');
+                };
+                for (const file of envFiles) {
+                    if (!validatePath(file.path)) {
+                        newErrors.env = `Invalid path: ${file.path}. Must end with a file starting with .env and contain no traversal.`;
+                        isValidForm = false;
+                        break;
+                    }
+                    const keys = Object.keys(file.variables || {});
+                    const invalidKey = keys.find(k => !validateKey(k));
+                    if (invalidKey) {
+                        newErrors.env = `Invalid variable key "${invalidKey}" in ${file.path}. Must start with a letter/underscore and contain only A-Z, 0-9, _.`;
+                        isValidForm = false;
+                        break;
+                    }
+                }
+            }
         }
 
         setErrors(newErrors);
@@ -326,7 +390,7 @@ function UploadDeployForm() {
                 name: projectName || file.name.replace(/\.(zip|tar\.gz|tgz)$/i, ''),
                 environment,
                 domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined,
-                env: useEnv ? envRowsToRecord(envRows) : {},
+                env: useEnv ? { version: 2, files: envFiles } : { version: 2, files: [] },
                 mode
             });
             router.push(`/deployments/${deployment.id}`);
@@ -446,7 +510,7 @@ function UploadDeployForm() {
                     <p className="mt-1">Sandbox runs use direct ephemeral port access and skip Nginx/domain routing.</p>
                 </div>
             )}
-            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} rows={envRows} setRows={setEnvRows} error={errors.env} />
+            <EnvironmentVariablesEditor enabled={useEnv} setEnabled={setUseEnv} files={envFiles} setFiles={setEnvFiles} error={errors.env} />
             <Button onClick={submit} loading={deploy.isPending} disabled={isSubmitting}>
                 <PackagePlus size={16} /> {mode === 'sandbox' ? 'Run sandbox' : 'Deploy upload'}
             </Button>
@@ -544,77 +608,491 @@ function ExecutionModeSelector({ mode, setMode }: { mode: ExecutionMode; setMode
 function EnvironmentVariablesEditor({
     enabled,
     setEnabled,
-    rows,
-    setRows,
+    files,
+    setFiles,
     error,
 }: {
     enabled: boolean;
     setEnabled: (value: boolean) => void;
-    rows: EnvRow[];
-    setRows: (rows: EnvRow[]) => void;
+    files: EnvFile[];
+    setFiles: (files: EnvFile[]) => void;
     error?: string;
 }) {
-    const invalid = enabled && hasInvalidEnvRows(rows);
+    const [activeFileIndex, setActiveFileIndex] = useState(0);
+    const [showAddFile, setShowAddFile] = useState(false);
+    const [newFilePath, setNewFilePath] = useState('');
+    const [renamingIndex, setRenamingIndex] = useState<number | null>(null);
+    const [renamingPath, setRenamingPath] = useState('');
+    const [isBulkEdit, setIsBulkEdit] = useState(false);
+    const [bulkText, setBulkText] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'none' | 'key'>('none');
+    const [showConfirmOverwrite, setShowConfirmOverwrite] = useState(false);
 
-    function addRow() {
-        setRows([...rows, { id: crypto.randomUUID(), key: '', value: '' }]);
-    }
+    const activeFile = files[activeFileIndex] || { path: '.env', variables: {} };
 
-    function updateRow(id: string, patch: Partial<EnvRow>) {
-        setRows(rows.map((row) => row.id === id ? { ...row, ...patch } : row));
-    }
+    useEffect(() => {
+        if (isBulkEdit) {
+            const text = Object.entries(activeFile.variables || {})
+                .map(([k, v]) => `${k}=${v}`)
+                .join('\n');
+            setBulkText(text);
+        }
+    }, [isBulkEdit, activeFileIndex, activeFile.variables]);
 
-    function removeRow(id: string) {
-        setRows(rows.filter((row) => row.id !== id));
-    }
+    const validateKey = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
+    const validatePath = (path: string) => {
+        if (!path.trim()) return false;
+        if (path.startsWith('/') || path.startsWith('\\') || /^[a-zA-Z]:/.test(path)) return false;
+        if (path.split(/[/\\]/).some(p => p === '..')) return false;
+        const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+        const fileName = normalized.split('/').pop() || '';
+        return fileName.startsWith('.env');
+    };
+
+    const handleAddFile = () => {
+        const path = newFilePath.trim();
+        if (!validatePath(path)) {
+            useToastStore.getState().addToast({
+                title: 'Invalid File Path',
+                description: 'Path must end with a file starting with .env (e.g. apps/client/.env) and contain no traversal.',
+                severity: 'error'
+            });
+            return;
+        }
+        if (files.some(f => f.path === path)) {
+            useToastStore.getState().addToast({
+                title: 'Duplicate File',
+                description: 'This environment file already exists.',
+                severity: 'warning'
+            });
+            return;
+        }
+        const updated = [...files, { path, variables: {} }];
+        setFiles(updated);
+        setActiveFileIndex(updated.length - 1);
+        setNewFilePath('');
+        setShowAddFile(false);
+    };
+
+    const handleRenameFile = (index: number) => {
+        const path = renamingPath.trim();
+        if (!validatePath(path)) {
+            useToastStore.getState().addToast({
+                title: 'Invalid File Path',
+                description: 'Path must end with a file starting with .env and contain no traversal.',
+                severity: 'error'
+            });
+            return;
+        }
+        if (files.some((f, idx) => f.path === path && idx !== index)) {
+            useToastStore.getState().addToast({
+                title: 'Duplicate File',
+                description: 'An environment file with that path already exists.',
+                severity: 'warning'
+            });
+            return;
+        }
+        const updated = [...files];
+        updated[index] = { ...updated[index], path };
+        setFiles(updated);
+        setRenamingIndex(null);
+        setRenamingPath('');
+    };
+
+    const handleDeleteFile = (index: number) => {
+        if (files[index].path === '.env') return;
+        const updated = files.filter((_, idx) => idx !== index);
+        setFiles(updated);
+        setActiveFileIndex(0);
+    };
+
+    const handleUpdateVarKey = (oldKey: string, newKey: string) => {
+        if (oldKey === newKey) return;
+        const trimmedNewKey = newKey.trim();
+        const variables = { ...activeFile.variables };
+        const val = variables[oldKey];
+        delete variables[oldKey];
+        if (trimmedNewKey) {
+            variables[trimmedNewKey] = val || '';
+        }
+        const updated = [...files];
+        updated[activeFileIndex] = { ...activeFile, variables };
+        setFiles(updated);
+    };
+
+    const handleUpdateVarValue = (key: string, value: string) => {
+        const variables = { ...activeFile.variables, [key]: value };
+        const updated = [...files];
+        updated[activeFileIndex] = { ...activeFile, variables };
+        setFiles(updated);
+    };
+
+    const handleAddVar = () => {
+        let baseKey = 'NEW_VAR';
+        let counter = 1;
+        let finalKey = baseKey;
+        while (finalKey in (activeFile.variables || {})) {
+            finalKey = `${baseKey}_${counter}`;
+            counter++;
+        }
+        const variables = { ...activeFile.variables, [finalKey]: '' };
+        const updated = [...files];
+        updated[activeFileIndex] = { ...activeFile, variables };
+        setFiles(updated);
+    };
+
+    const handleDuplicateVar = (key: string, value: string) => {
+        let baseKey = `${key}_COPY`;
+        let counter = 1;
+        let finalKey = baseKey;
+        while (finalKey in (activeFile.variables || {})) {
+            finalKey = `${baseKey}_${counter}`;
+            counter++;
+        }
+        const variables = { ...activeFile.variables, [finalKey]: value };
+        const updated = [...files];
+        updated[activeFileIndex] = { ...activeFile, variables };
+        setFiles(updated);
+    };
+
+    const handleDeleteVar = (key: string) => {
+        const variables = { ...activeFile.variables };
+        delete variables[key];
+        const updated = [...files];
+        updated[activeFileIndex] = { ...activeFile, variables };
+        setFiles(updated);
+    };
+
+    const handleBulkImport = () => {
+        const lines = bulkText.split('\n');
+        const parsed: Record<string, string> = {};
+        for (const line of lines) {
+            const index = line.indexOf('=');
+            if (index !== -1) {
+                const k = line.substring(0, index).trim();
+                const v = line.substring(index + 1);
+                if (k) parsed[k] = v;
+            }
+        }
+
+        const keys = Object.keys(parsed);
+        const hasConflicts = keys.some(k => k in (activeFile.variables || {}));
+        if (hasConflicts) {
+            setShowConfirmOverwrite(true);
+            return;
+        }
+
+        const variables = { ...activeFile.variables, ...parsed };
+        const updated = [...files];
+        updated[activeFileIndex] = { ...activeFile, variables };
+        setFiles(updated);
+        setIsBulkEdit(false);
+    };
+
+    const confirmBulkImport = () => {
+        const lines = bulkText.split('\n');
+        const parsed: Record<string, string> = {};
+        for (const line of lines) {
+            const index = line.indexOf('=');
+            if (index !== -1) {
+                const k = line.substring(0, index).trim();
+                const v = line.substring(index + 1);
+                if (k) parsed[k] = v;
+            }
+        }
+        const variables = { ...activeFile.variables, ...parsed };
+        const updated = [...files];
+        updated[activeFileIndex] = { ...activeFile, variables };
+        setFiles(updated);
+        setShowConfirmOverwrite(false);
+        setIsBulkEdit(false);
+    };
+
+    const filteredVariables = Object.entries(activeFile.variables || {})
+        .filter(([k]) => k.toLowerCase().includes(searchQuery.toLowerCase()))
+        .sort((a, b) => {
+            if (sortBy === 'key') return a[0].localeCompare(b[0]);
+            return 0;
+        });
+
+    const totalVariables = files.reduce((sum, f) => sum + Object.keys(f.variables || {}).length, 0);
 
     return (
-        <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4">
+        <div className="rounded-lg border border-white/10 bg-slate-950/45 p-4 space-y-4">
             <label className="flex items-center justify-between gap-4">
                 <span>
                     <span className="block font-black text-white">Environment Variables <span className="text-slate-500">(Optional)</span></span>
-                    <span className="mt-1 block text-sm text-slate-400">Values are encrypted and masked after deploy.</span>
+                    <span className="mt-1 block text-sm text-slate-400">Scoped multi-file configurations. Values are encrypted and securely masked.</span>
                 </span>
                 <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="h-5 w-5 accent-cyan-300" />
             </label>
-            {enabled ? (
-                <div className="mt-4 space-y-3">
-                    {rows.length === 0 ? (
-                        <div className="rounded-md border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-slate-500">No environment variables added.</div>
-                    ) : (
-                        <div className="space-y-2">
-                            {rows.map((row) => (
-                                <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] gap-2">
-                                    <input value={row.key} onChange={(event) => updateRow(row.id, { key: event.target.value })} placeholder="KEY" className={inputClassName} />
-                                    <input value={row.value} onChange={(event) => updateRow(row.id, { value: event.target.value })} placeholder="Value" className={inputClassName} />
-                                    <button type="button" onClick={() => removeRow(row.id)} className="flex h-11 items-center justify-center rounded-md border border-white/10 bg-white/[0.04] text-slate-300 hover:text-rose-200" aria-label="Remove environment variable">
-                                        <Trash2 size={16} />
-                                    </button>
+
+            {enabled && (
+                <div className="border border-white/10 rounded-lg overflow-hidden bg-slate-950/80">
+                    <div className="flex flex-col lg:flex-row min-h-[400px]">
+                        {/* Sidebar: Files List */}
+                        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-4 border-b lg:border-b-0 lg:border-r border-white/[0.08] p-4 bg-white/[0.01]">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-black uppercase tracking-wider text-slate-500">Env Files</span>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => setShowAddFile(!showAddFile)}
+                                >
+                                    <Plus size={12} /> Add
+                                </Button>
+                            </div>
+
+                            {showAddFile && (
+                                <div className="space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                                    <p className="text-[10px] font-bold text-cyan-300">File path (relative to repo root)</p>
+                                    <input
+                                        value={newFilePath}
+                                        onChange={(e) => setNewFilePath(e.target.value)}
+                                        placeholder="apps/server/.env"
+                                        className={inputClassName}
+                                    />
+                                    <div className="flex justify-end gap-1.5">
+                                        <Button type="button" variant="secondary" className="h-7 px-2 text-xs" onClick={() => { setShowAddFile(false); setNewFilePath(''); }}>Cancel</Button>
+                                        <Button type="button" variant="primary" className="h-7 px-2 text-xs" onClick={handleAddFile}>Create</Button>
+                                    </div>
                                 </div>
-                            ))}
+                            )}
+
+                            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 terminal-scrollbar max-h-[220px] lg:max-h-none">
+                                {files.map((file, idx) => {
+                                    const isActive = idx === activeFileIndex;
+                                    const isRenaming = renamingIndex === idx;
+
+                                    return (
+                                        <div
+                                            key={file.path}
+                                            onClick={() => !isRenaming && setActiveFileIndex(idx)}
+                                            className={clsx(
+                                                'group flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer border transition-colors',
+                                                isActive
+                                                    ? 'bg-cyan-500/10 border-cyan-400/30 text-cyan-200'
+                                                    : 'bg-white/[0.02] border-white/[0.05] text-slate-400 hover:bg-white/[0.04] hover:text-white'
+                                            )}
+                                        >
+                                            {isRenaming ? (
+                                                <div className="flex items-center gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
+                                                    <input
+                                                        value={renamingPath}
+                                                        onChange={(e) => setRenamingPath(e.target.value)}
+                                                        className={clsx(inputClassName, 'h-7 py-0 px-2 text-xs')}
+                                                    />
+                                                    <Button type="button" variant="primary" className="h-7 w-7 p-0 shrink-0 text-xs" onClick={() => handleRenameFile(idx)}>✓</Button>
+                                                    <Button type="button" variant="secondary" className="h-7 w-7 p-0 shrink-0 text-xs" onClick={() => { setRenamingIndex(null); setRenamingPath(''); }}>✕</Button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <span className="truncate font-mono">{file.path}</span>
+                                                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 transition-opacity">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setRenamingIndex(idx);
+                                                                setRenamingPath(file.path);
+                                                            }}
+                                                            className="p-1 hover:text-white"
+                                                            title="Rename file"
+                                                        >
+                                                            <Edit2 size={11} />
+                                                        </button>
+                                                        {file.path !== '.env' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteFile(idx);
+                                                                }}
+                                                                className="p-1 hover:text-rose-400"
+                                                                title="Delete file"
+                                                            >
+                                                                <Trash2 size={11} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="text-[10px] text-slate-500 border-t border-white/[0.08] pt-2">
+                                {files.length}/20 files. Total variables: {totalVariables}/200.
+                            </div>
                         </div>
-                    )}
-                    {error ? <p className="text-xs font-bold text-rose-400">{error}</p> : invalid ? <p className="text-xs font-bold text-rose-200">Keys must start with a letter or underscore and contain only letters, numbers, and underscores.</p> : null}
-                    <Button type="button" variant="secondary" onClick={addRow}><Plus size={16} /> Add row</Button>
+
+                        {/* Editor Panel */}
+                        <div className="flex-1 flex flex-col gap-4 overflow-hidden p-4">
+                            <div className="flex items-center justify-between border-b border-white/[0.05] pb-2">
+                                <div className="flex flex-col">
+                                    <h4 className="text-sm font-bold text-white font-mono">{activeFile.path}</h4>
+                                    <span className="text-[10px] text-slate-500">
+                                        {Object.keys(activeFile.variables || {}).length} variables
+                                    </span>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        className="h-8 px-3 text-xs"
+                                        onClick={() => setIsBulkEdit(!isBulkEdit)}
+                                    >
+                                        {isBulkEdit ? 'Table Editor' : 'Bulk Edit / Text'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {isBulkEdit ? (
+                                // Bulk Text Area Editor
+                                <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+                                    <p className="text-xs text-slate-400">
+                                        Paste key-value pairs formatted as <code>KEY=VALUE</code>, one per line.
+                                    </p>
+                                    <textarea
+                                        value={bulkText}
+                                        onChange={(e) => setBulkText(e.target.value)}
+                                        className={clsx(
+                                            inputClassName,
+                                            'min-h-[200px] flex-1 font-mono text-xs p-3 leading-relaxed resize-none bg-slate-950/80 border-white/[0.08] focus:border-cyan-500/50 terminal-scrollbar'
+                                        )}
+                                        placeholder="API_KEY=supersecretkey&#10;DEBUG=true"
+                                    />
+                                    <div className="flex justify-end gap-2 shrink-0">
+                                        <Button type="button" variant="secondary" className="h-8 px-3 text-xs" onClick={() => setIsBulkEdit(false)}>Cancel</Button>
+                                        <Button type="button" variant="primary" className="h-8 px-3 text-xs" onClick={handleBulkImport}>Import & Merge</Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                // Table Editor
+                                <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+                                    {/* Filters */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <div className="relative flex-1">
+                                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                            <input
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                placeholder="Search keys..."
+                                                className={clsx(inputClassName, 'pl-9 h-9')}
+                                            />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="h-9 shrink-0 px-2 text-xs"
+                                            onClick={() => setSortBy(v => v === 'none' ? 'key' : 'none')}
+                                            title="Sort A-Z"
+                                        >
+                                            <ArrowUpDown size={14} className={sortBy === 'key' ? 'text-cyan-300' : 'text-slate-500'} />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            className="h-9 shrink-0 px-3 text-xs"
+                                            onClick={handleAddVar}
+                                        >
+                                            <Plus size={14} /> Add Variable
+                                        </Button>
+                                    </div>
+
+                                    {/* Variables List */}
+                                    <div className="flex-1 overflow-y-auto border border-white/[0.06] rounded-lg divide-y divide-white/[0.05] bg-white/[0.01] pr-1 terminal-scrollbar max-h-[300px]">
+                                        {filteredVariables.length === 0 ? (
+                                            <div className="py-12 text-center text-xs text-slate-500 italic">
+                                                {searchQuery ? 'No matching variables found.' : 'No environment variables configured.'}
+                                            </div>
+                                        ) : (
+                                            filteredVariables.map(([key, val]) => {
+                                                const isKeyValid = validateKey(key);
+                                                return (
+                                                    <div key={key} className="flex flex-col sm:flex-row gap-3 p-3 items-start sm:items-center">
+                                                        {/* Key Input */}
+                                                        <div className="flex-1 w-full space-y-1">
+                                                            <input
+                                                                defaultValue={key}
+                                                                onBlur={(e) => handleUpdateVarKey(key, e.target.value)}
+                                                                placeholder="VARIABLE_KEY"
+                                                                className={clsx(
+                                                                    inputClassName,
+                                                                    'font-mono text-xs h-8',
+                                                                    !isKeyValid && 'border-rose-500/50 bg-rose-500/5 focus:border-rose-500'
+                                                                )}
+                                                            />
+                                                            {!isKeyValid && (
+                                                                <p className="text-[10px] font-semibold text-rose-400">
+                                                                    Must start with letter/underscore and contain only A-Z, 0-9, _.
+                                                                </p>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Value Input */}
+                                                        <div className="flex-1 w-full">
+                                                            <PasswordInput
+                                                                value={val}
+                                                                onChange={(e) => handleUpdateVarValue(key, e.target.value)}
+                                                                placeholder="variable_value"
+                                                                className={clsx(inputClassName, 'font-mono text-xs h-8 pr-12')}
+                                                            />
+                                                        </div>
+
+                                                        {/* Actions */}
+                                                        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                                                            <Button
+                                                                type="button"
+                                                                variant="secondary"
+                                                                className="h-8 w-8 p-0 text-xs"
+                                                                onClick={() => handleDuplicateVar(key, val)}
+                                                                title="Duplicate"
+                                                            >
+                                                                <Copy size={12} />
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant="secondary"
+                                                                className="h-8 w-8 p-0 hover:text-rose-400 text-xs"
+                                                                onClick={() => handleDeleteVar(key)}
+                                                                title="Delete"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
-            ) : null}
+            )}
+
+            {error && <p className="text-xs font-semibold text-rose-400">{error}</p>}
+
+            {/* Overwrite Confirmation */}
+            {showConfirmOverwrite && (
+                <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-4 space-y-3">
+                    <p className="text-xs text-yellow-200">
+                        Some variables you are importing already exist in this file. Importing will overwrite their current values.
+                    </p>
+                    <div className="flex justify-end gap-2">
+                        <Button type="button" variant="secondary" className="h-7 px-3 text-xs" onClick={() => setShowConfirmOverwrite(false)}>Cancel</Button>
+                        <Button type="button" variant="primary" className="h-7 px-3 text-xs" onClick={confirmBulkImport}>Overwrite & Merge</Button>
+                    </div>
+                </div>
+            )}
         </div>
     );
-}
-
-function envRowsToRecord(rows: EnvRow[]) {
-    return rows.reduce<Record<string, string>>((acc, row) => {
-        const key = row.key.trim();
-        if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) acc[key] = row.value;
-        return acc;
-    }, {});
-}
-
-function hasInvalidEnvRows(rows: EnvRow[]) {
-    return rows.some((row) => {
-        const key = row.key.trim();
-        return key.length > 0 && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
-    });
 }
 
 function isValidDomainInput(value: string) {

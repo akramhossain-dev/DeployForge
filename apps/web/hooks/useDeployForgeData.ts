@@ -79,6 +79,8 @@ export const queryKeys = {
     adminMonitoring: ['admin', 'monitoring'] as const,
     adminLogs: (params?: Record<string, string>) => ['admin', 'logs', params || {}] as const,
     adminSettings: ['admin', 'settings'] as const,
+    deploymentEnv: (id: string) => ['deployments', id, 'env'] as const,
+    deploymentEnvHistory: (id: string) => ['deployments', id, 'env', 'history'] as const,
 };
 
 function withQuery(path: string, params?: Record<string, string>) {
@@ -307,7 +309,7 @@ export function useToggleAutoHttps() {
 export function useCreateGithubDeployment() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (payload: { repositoryId: string; vpsId: string; branch: string; environment: 'production' | 'development'; autoDeploy: boolean; domainName?: string; env?: Record<string, string>; mode?: 'production' | 'sandbox' }) =>
+        mutationFn: (payload: { repositoryId: string; vpsId: string; branch: string; environment: 'production' | 'development'; autoDeploy: boolean; domainName?: string; env?: any; mode?: 'production' | 'sandbox' }) =>
             api.post<Deployment>('/deploy/github', payload),
         onSuccess: (deployment) => {
             handleMutationSuccess('Deployment Triggered', 'GitHub deployment has been successfully queued.');
@@ -321,7 +323,7 @@ export function useCreateGithubDeployment() {
 export function useCreateUploadDeployment() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (payload: { file: File; vpsId: string; projectId?: string; name: string; environment: 'production' | 'development'; domainName?: string; env?: Record<string, string>; mode?: 'production' | 'sandbox' }) => {
+        mutationFn: (payload: { file: File; vpsId: string; projectId?: string; name: string; environment: 'production' | 'development'; domainName?: string; env?: any; mode?: 'production' | 'sandbox' }) => {
             const form = new FormData();
             form.set('vpsId', payload.vpsId);
             form.set('name', payload.name);
@@ -329,7 +331,9 @@ export function useCreateUploadDeployment() {
             form.set('mode', payload.mode || 'production');
             if (payload.projectId) form.set('projectId', payload.projectId);
             if (payload.domainName) form.set('domainName', payload.domainName);
-            if (payload.env && Object.keys(payload.env).length > 0) form.set('env', JSON.stringify(payload.env));
+            if (payload.env) {
+                form.set('env', typeof payload.env === 'string' ? payload.env : JSON.stringify(payload.env));
+            }
             form.set('file', payload.file);
             return api.post<Deployment>('/deploy/upload', form);
         },
@@ -667,5 +671,68 @@ export function useAdminTestVpsConnection() {
             queryClient.invalidateQueries({ queryKey: queryKeys.adminVps });
         },
         onError: (err) => handleMutationError('Connection Check Failed', err),
+    });
+}
+
+export type EnvFile = {
+    path: string;
+    variables: Record<string, string>;
+};
+
+export type DeploymentEnvResponse = {
+    version: number;
+    files: EnvFile[];
+};
+
+export type DeploymentEnvHistoryEntry = {
+    id: string;
+    version: string;
+    status: string;
+    createdAt: string;
+    env: DeploymentEnvResponse;
+    deploymentNumber: number;
+};
+
+export function useDeploymentEnv(deploymentId?: string) {
+    return useQuery({
+        queryKey: queryKeys.deploymentEnv(deploymentId || 'none'),
+        queryFn: () => api.get<DeploymentEnvResponse>(`/deployments/${deploymentId}/env`),
+        enabled: !!deploymentId,
+    });
+}
+
+export function useUpdateDeploymentEnv() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ deploymentId, env }: { deploymentId: string; env: DeploymentEnvResponse }) =>
+            api.put<{ message: string }>(`/deployments/${deploymentId}/env`, env),
+        onSuccess: (_, { deploymentId }) => {
+            handleMutationSuccess('Environment Saved', 'Environment variables updated successfully.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentEnv(deploymentId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployment(deploymentId) });
+        },
+        onError: (err) => handleMutationError('Save Failed', err),
+    });
+}
+
+export function useDeploymentEnvHistory(deploymentId?: string) {
+    return useQuery({
+        queryKey: queryKeys.deploymentEnvHistory(deploymentId || 'none'),
+        queryFn: () => api.get<DeploymentEnvHistoryEntry[]>(`/deployments/${deploymentId}/env/history`),
+        enabled: !!deploymentId,
+    });
+}
+
+export function useRedeploy() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (deploymentId: string) =>
+            api.post<Deployment>(`/deployments/${deploymentId}/redeploy`, {}),
+        onSuccess: (newDeployment) => {
+            handleMutationSuccess('Redeployment Triggered', 'Redeployment job successfully created.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployment(newDeployment.id) });
+        },
+        onError: (err) => handleMutationError('Redeploy Failed', err),
     });
 }

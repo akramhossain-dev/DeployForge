@@ -27,7 +27,7 @@ const githubDeploySchema = z.object({
     mode: z.enum(['production', 'sandbox']).optional().default('production'),
     autoDeploy: z.boolean().optional().default(true),
     domainName: z.string().trim().optional(),
-    env: z.record(z.string()).optional().default({}),
+    env: z.any().optional(),
 });
 
 const wsParamsSchema = z.object({
@@ -383,10 +383,10 @@ function parseEnvField(value?: string) {
     if (!value) return {};
     try {
         const parsed = JSON.parse(value);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        if (!parsed || typeof parsed !== 'object') {
             throw new DeploymentError('uploading', 'Environment variables must be a JSON object', 'INVALID_ENV_FORMAT');
         }
-        return parsed as Record<string, string>;
+        return parsed;
     } catch (err) {
         if (err instanceof DeploymentError) throw err;
         throw new DeploymentError('uploading', 'Environment variables must be valid JSON', 'INVALID_ENV_FORMAT');

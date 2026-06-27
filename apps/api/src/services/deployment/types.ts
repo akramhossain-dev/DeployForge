@@ -21,7 +21,7 @@ export type GitHubDeploymentSource = {
     accessToken?: string;
     skipWebhookRegistration?: boolean;
     domainName?: string;
-    env?: Record<string, string>;
+    env?: any;
     mode?: DeploymentMode;
 };
 
@@ -32,7 +32,7 @@ export type UploadedFileDeploymentSource = {
     uploadPath: string;
     originalFileName: string;
     domainName?: string;
-    env?: Record<string, string>;
+    env?: any;
     mode?: DeploymentMode;
 };
 

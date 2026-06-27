@@ -5,6 +5,7 @@ import { config } from '../config/env';
 import { LoggingService } from './logging.service';
 import { verifyDeploymentOwnership } from '../utils/authz';
 import { CacheService } from './cache.service';
+import { EnvironmentService } from './deployment/environment.service';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -17,7 +18,7 @@ export class RollbackService {
     }
 
     static async rollback(userId: string, deploymentId: string, historyId?: string) {
-        
+
         await verifyDeploymentOwnership(userId, deploymentId);
 
         const deployment = await prisma.deployment.findFirst({
@@ -85,14 +86,20 @@ export class RollbackService {
                 const containerName = `df-${deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${deploymentId.slice(0, 8)}`;
                 const appPort = ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '') ? 80 : 3000;
                 await removeContainerIfExists(ssh, containerName);
-                const { stdout: newContainerId } = await ssh.execute(`docker run -d --name ${shellQuote(containerName)} --restart unless-stopped --security-opt no-new-privileges --cap-drop ALL -p ${deployment.port}:${appPort} ${shellQuote(history.imageTag)}`);
+
+                // Inject environment variables from history
+                const hasEnv = await EnvironmentService.injectEnvironment(ssh, vps.username, deploymentId, '', history.env);
+                const envFlag = hasEnv ? ` --env-file ${shellQuote(EnvironmentService.getEnvPath(vps.username, deploymentId))}` : '';
+
+                const { stdout: newContainerId } = await ssh.execute(`docker run -d --name ${shellQuote(containerName)} --restart unless-stopped --security-opt no-new-privileges --cap-drop ALL -p ${deployment.port}:${appPort}${envFlag} ${shellQuote(history.imageTag)}`);
 
                 await prisma.deployment.update({
                     where: { id: deploymentId },
                     data: {
                         status: 'ROLLED_BACK',
                         containerId: newContainerId.trim(),
-                        commitHash: history.version
+                        commitHash: history.version,
+                        env: history.env
                     },
                 });
 

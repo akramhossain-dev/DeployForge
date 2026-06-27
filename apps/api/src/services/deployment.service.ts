@@ -76,7 +76,7 @@ export class DeploymentService {
         }
     }
 
-    static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: Record<string, string>; mode?: string } = {}) {
+    static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: any; mode?: string } = {}) {
         const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
         const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
         if (!project || !vps) throw new DeploymentError('pending', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
@@ -135,7 +135,7 @@ export class DeploymentService {
         return deployment;
     }
 
-    static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: Record<string, string>; mode?: string }) {
+    static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: any; mode?: string }) {
         const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
         const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
         if (!project || !vps) throw new DeploymentError('uploading', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
@@ -332,12 +332,12 @@ export class DeploymentService {
             }
             
             await LoggingService.log(deploymentId, 'Analysing project and preparing build environment...', 'build');
-            const hasEnv = await EnvironmentService.injectEnvironment(ssh, deploymentId, workDir, deployment.env);
+            const hasEnv = await EnvironmentService.injectEnvironment(ssh, vps.username, deploymentId, workDir, deployment.env);
             
             if (hasEnv) {
                 
                 const envTarget = detected.framework === ('DOCKER_COMPOSE' as any) ? '.env' : '.env.deployforge';
-                await runCommand(ssh, deploymentId, 'system', `cp ${shellQuote(EnvironmentService.getEnvPath(deploymentId))} ${shellQuote(`${workDir}/${envTarget}`)}`);
+                await runCommand(ssh, deploymentId, 'system', `cp ${shellQuote(EnvironmentService.getEnvPath(vps.username, deploymentId))} ${shellQuote(`${workDir}/${envTarget}`)}`);
             }
 
             try {
@@ -457,7 +457,7 @@ export class DeploymentService {
                         } else {
                             await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
                             await this.assertRemotePortAvailable(ssh, deploymentId, port!);
-                            createdContainerId = await this.deployContainer(ssh, deploymentId, workDir, dockerName, imageTag, port!, detected.appPort, hasEnv, isSandbox);
+                            createdContainerId = await this.deployContainer(ssh, vps.username, deploymentId, workDir, dockerName, imageTag, port!, detected.appPort, hasEnv, isSandbox);
                             await LoggingService.log(deploymentId, `Container started: ${createdContainerId.slice(0, 12)}`, 'system');
                         }
 
@@ -789,8 +789,8 @@ export class DeploymentService {
                 const appPort = ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '') ? 80 : 3000;
                 const resumeDir = `/tmp/deployforge-resume-${deploymentId}`;
                 await runCommand(ssh, deploymentId, 'system', `rm -rf ${shellQuote(resumeDir)} && mkdir -p ${shellQuote(resumeDir)}`);
-                const hasEnv = await EnvironmentService.injectEnvironment(ssh, deploymentId, resumeDir, deployment.env);
-                const containerId = await this.deployContainer(ssh, deploymentId, resumeDir, dockerName, deployment.history[0].imageTag!, port, appPort, hasEnv);
+                const hasEnv = await EnvironmentService.injectEnvironment(ssh, deployment.vps.username, deploymentId, resumeDir, deployment.env);
+                const containerId = await this.deployContainer(ssh, deployment.vps.username, deploymentId, resumeDir, dockerName, deployment.history[0].imageTag!, port, appPort, hasEnv);
                 await prisma.deployment.update({ where: { id: deploymentId }, data: { containerId, port } });
                 deployment.containerId = containerId;
                 deployment.port = port;
@@ -1354,9 +1354,9 @@ print(' '.join(map(str, sorted(list(set(ports))))))
         return `compose:${projectName}`;
     }
 
-    private static async deployContainer(ssh: SSHService, deploymentId: string, workDir: string, dockerName: string, imageTag: string, hostPort: number, appPort: number, hasEnv: boolean, isSandbox = false) {
+    private static async deployContainer(ssh: SSHService, username: string, deploymentId: string, workDir: string, dockerName: string, imageTag: string, hostPort: number, appPort: number, hasEnv: boolean, isSandbox = false) {
         await this.removeContainerIfExists(ssh, deploymentId, dockerName, 'Removed previous container with matching Docker name', false);
-        const envFlag = hasEnv ? ` --env-file ${shellQuote(EnvironmentService.getEnvPath(deploymentId))}` : '';
+        const envFlag = hasEnv ? ` --env-file ${shellQuote(EnvironmentService.getEnvPath(username, deploymentId))}` : '';
         const restartPolicy = isSandbox ? 'no' : 'unless-stopped';
         const createCommand = `docker create --name ${shellQuote(dockerName)} --restart ${restartPolicy} --read-only --tmpfs /tmp:rw,noexec,nosuid,size=128m --tmpfs /app/.next/cache:rw,noexec,nosuid,size=128m --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=64m --tmpfs /var/run:rw,noexec,nosuid,size=16m --security-opt no-new-privileges --cap-drop ALL -p ${hostPort}:${appPort}${envFlag} ${shellQuote(imageTag)}`;
         const { stdout } = await runCommand(ssh, deploymentId, 'system', createCommand, 'container_create', 'DOCKER_CREATE_FAILED');
@@ -1492,7 +1492,7 @@ print(' '.join(map(str, sorted(list(set(ports))))))
         const baseDir = `/home/${shellPath(deployment.vps.username)}/deployforge/${safeProjectName}`;
         const releasePattern = `${baseDir}/releases/*-${deployment.id.slice(0, 8)}`;
         const staticPattern = `${baseDir}/static/*-${deployment.id.slice(0, 8)}`;
-        const command = `rm -rf ${releasePattern} ${staticPattern}; if [ -L ${shellQuote(`${baseDir}/current`)} ] && readlink ${shellQuote(`${baseDir}/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/current`)}; fi; if [ -L ${shellQuote(`${baseDir}/static/current`)} ] && readlink ${shellQuote(`${baseDir}/static/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/static/current`)}; fi; rm -f ${shellQuote(`/etc/deployforge/envs/${deployment.id}.env`)}`;
+        const command = `rm -rf ${releasePattern} ${staticPattern}; if [ -L ${shellQuote(`${baseDir}/current`)} ] && readlink ${shellQuote(`${baseDir}/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/current`)}; fi; if [ -L ${shellQuote(`${baseDir}/static/current`)} ] && readlink ${shellQuote(`${baseDir}/static/current`)} | grep -q ${shellQuote(deployment.id.slice(0, 8))}; then rm -f ${shellQuote(`${baseDir}/static/current`)}; fi; rm -f ${shellQuote(EnvironmentService.getEnvPath(deployment.vps.username, deployment.id))}`;
         await ssh.execute(command).catch(() => undefined);
     }
 

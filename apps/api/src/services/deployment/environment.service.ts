@@ -14,10 +14,136 @@ export class EnvironmentService {
         return encryptionService.decrypt({ iv, tag, content });
     }
 
-    static encryptEnv(env?: Record<string, string>) {
-        const normalized = this.normalizeEnv(env || {});
-        const encrypted = encryptionService.encrypt(JSON.stringify(normalized));
+    static validatePath(filePath: string): string {
+        const trimmed = filePath.trim();
+        if (!trimmed) {
+            throw new DeploymentError('building', 'Environment file path cannot be empty', 'INVALID_ENV_PATH');
+        }
+        // Reject absolute paths
+        if (trimmed.startsWith('/') || trimmed.startsWith('\\') || /^[a-zA-Z]:/.test(trimmed)) {
+            throw new DeploymentError('building', `Absolute paths are not allowed: ${trimmed}`, 'INVALID_ENV_PATH');
+        }
+        // Reject path traversal
+        if (trimmed.split(/[/\\]/).some(part => part === '..')) {
+            throw new DeploymentError('building', `Path traversal is not allowed: ${trimmed}`, 'INVALID_ENV_PATH');
+        }
+        // Normalize backslashes to forward slashes, remove multiple slashes and leading dot-slashes
+        const normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
+        if (!normalized || normalized === '.' || normalized === '.env') {
+            return '.env';
+        }
+        const fileName = normalized.split('/').pop() || '';
+        if (!fileName.startsWith('.env')) {
+            throw new DeploymentError('building', `Environment file name must start with .env: ${fileName}`, 'INVALID_ENV_PATH');
+        }
+        return normalized;
+    }
+
+    static encryptEnv(env?: any) {
+        if (!env) {
+            return this.encryptRaw(JSON.stringify({ version: 2, files: [{ path: '.env', variables: {} }] }));
+        }
+
+        let toEncrypt: any;
+        if (env && env.version === 2 && Array.isArray(env.files)) {
+            if (env.files.length > 20) {
+                throw new DeploymentError('building', 'Maximum limit of 20 environment files exceeded', 'ENV_LIMIT_EXCEEDED');
+            }
+            let totalVars = 0;
+            const normalizedFiles = env.files.map((file: any) => {
+                const path = this.validatePath(file.path || '.env');
+                const variables = this.normalizeEnv(file.variables || {});
+                totalVars += Object.keys(variables).length;
+                return { path, variables };
+            });
+            if (totalVars > 200) {
+                throw new DeploymentError('building', 'Maximum limit of 200 environment variables exceeded', 'ENV_LIMIT_EXCEEDED');
+            }
+            toEncrypt = {
+                version: 2,
+                files: normalizedFiles
+            };
+        } else {
+            // Legacy / flat env
+            const variables = this.normalizeEnv(env || {});
+            toEncrypt = {
+                version: 2,
+                files: [
+                    {
+                        path: '.env',
+                        variables
+                    }
+                ]
+            };
+        }
+
+        const plainText = JSON.stringify(toEncrypt);
+        if (plainText.length > 131072) {
+            throw new DeploymentError('building', 'Environment variables payload size exceeds limit', 'ENV_PAYLOAD_TOO_LARGE');
+        }
+
+        return this.encryptRaw(plainText);
+    }
+
+    private static encryptRaw(plainText: string) {
+        const encrypted = encryptionService.encrypt(plainText);
         return `${encrypted.iv}:${encrypted.tag}:${encrypted.content}`;
+    }
+
+    static getDecryptedEnv(encryptedEnv?: string | null) {
+        if (!encryptedEnv) {
+            return {
+                version: 2,
+                files: [
+                    {
+                        path: '.env',
+                        variables: {}
+                    }
+                ]
+            };
+        }
+
+        try {
+            let decrypted: string;
+            const trimmed = encryptedEnv.trim();
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                decrypted = trimmed;
+            } else {
+                decrypted = this.decrypt(encryptedEnv);
+            }
+            const parsed = JSON.parse(decrypted);
+
+            if (parsed && parsed.version === 2 && Array.isArray(parsed.files)) {
+                return {
+                    version: 2,
+                    files: parsed.files.map((file: any) => ({
+                        path: this.validatePath(file.path || '.env'),
+                        variables: this.normalizeEnv(file.variables || {})
+                    }))
+                };
+            }
+
+            // Legacy flat format
+            return {
+                version: 2,
+                files: [
+                    {
+                        path: '.env',
+                        variables: this.normalizeEnv(parsed || {})
+                    }
+                ]
+            };
+        } catch {
+            return {
+                version: 2,
+                files: [
+                    {
+                        path: '.env',
+                        variables: {}
+                    }
+                ]
+            };
+        }
     }
 
     static normalizeEnv(env: unknown): Record<string, string> {
@@ -38,58 +164,73 @@ export class EnvironmentService {
     static envPreview(encryptedEnv?: string | null) {
         if (!encryptedEnv) return [];
         try {
-            let decrypted: string;
-            const trimmed = encryptedEnv.trim();
-            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-                decrypted = trimmed;
-            } else {
-                decrypted = this.decrypt(encryptedEnv);
+            const parsed = this.getDecryptedEnv(encryptedEnv);
+            const result: { key: string; value: string; path: string }[] = [];
+            for (const file of parsed.files) {
+                for (const key of Object.keys(file.variables)) {
+                    result.push({ key, value: '********', path: file.path });
+                }
             }
-            const parsed = JSON.parse(decrypted);
-            return Object.keys(this.normalizeEnv(parsed)).map((key) => ({ key, value: '********' }));
+            return result;
         } catch {
             return [];
         }
     }
 
-    static getEnvPath(deploymentId: string) {
-        return `/etc/deployforge/envs/${deploymentId}.env`;
+    static getEnvPath(username: string, deploymentId: string) {
+        return `/home/${username}/deployforge/envs/${deploymentId}.env`;
     }
 
-    static async injectEnvironment(ssh: SSHService, deploymentId: string, workDir: string, encryptedEnv?: string | null) {
+    static async injectEnvironment(ssh: SSHService, username: string, deploymentId: string, workDir: string, encryptedEnv?: string | null) {
         if (!encryptedEnv) {
             return false;
         }
 
-        let env: Record<string, string>;
+        let parsed: ReturnType<typeof EnvironmentService.getDecryptedEnv>;
         try {
-            let decrypted: string;
-            const trimmed = encryptedEnv.trim();
-            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-                decrypted = trimmed;
-            } else {
-                decrypted = this.decrypt(encryptedEnv);
-            }
-            env = this.normalizeEnv(JSON.parse(decrypted));
+            parsed = this.getDecryptedEnv(encryptedEnv);
         } catch {
             throw new DeploymentError('building', 'Deployment environment variables are invalid', 'ENV_DECRYPT_FAILED');
         }
 
-        const lines = Object.entries(env).map(([key, value]) => `${key}=${value}`);
+        let mergedEnv: Record<string, string> = {};
+        let totalFilesWritten = 0;
 
-        if (lines.length === 0) {
+        for (const file of parsed.files) {
+            const filePath = file.path || '.env';
+            const variables = file.variables || {};
+
+            mergedEnv = { ...mergedEnv, ...variables };
+
+            if (workDir) {
+                const relativePath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+                const absolutePath = `${workDir}/${relativePath}`;
+                const fileLines = Object.entries(variables).map(([k, v]) => `${k}=${v}`);
+
+                const dirName = absolutePath.substring(0, absolutePath.lastIndexOf('/'));
+                if (dirName && dirName !== workDir) {
+                    await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(dirName)}`);
+                }
+
+                const writeCmd = `umask 077 && cat > ${shellQuote(absolutePath)} <<'EOF'\n${fileLines.join('\n')}\nEOF\nchmod 600 ${shellQuote(absolutePath)}`;
+                await runCommand(ssh, deploymentId, 'system', writeCmd);
+                totalFilesWritten++;
+            }
+        }
+
+        const lines = Object.entries(mergedEnv).map(([key, value]) => `${key}=${value}`);
+        if (lines.length === 0 && totalFilesWritten === 0) {
             return false;
         }
 
-        const envPath = this.getEnvPath(deploymentId);
-
-        const setupSecureDir = `mkdir -p /etc/deployforge/envs && chmod 700 /etc/deployforge/envs`;
+        const envPath = this.getEnvPath(username, deploymentId);
+        const setupSecureDir = `mkdir -p /home/${username}/deployforge/envs && chmod 700 /home/${username}/deployforge/envs`;
         await runCommand(ssh, deploymentId, 'system', setupSecureDir);
 
         const writeEnvCmd = `umask 077 && cat > ${shellQuote(envPath)} <<'EOF'\n${lines.join('\n')}\nEOF\nchmod 600 ${shellQuote(envPath)}`;
         await runCommand(ssh, deploymentId, 'system', writeEnvCmd);
 
-        await LoggingService.log(deploymentId, `Injected ${lines.length} environment variables to secure storage`, 'system');
+        await LoggingService.log(deploymentId, `Injected ${parsed.files.length} environment files and merged runtime variables to secure storage`, 'system');
         return true;
     }
 }

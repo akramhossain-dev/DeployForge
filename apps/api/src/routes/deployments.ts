@@ -5,6 +5,7 @@ import { DeploymentService } from '../services/deployment.service';
 import { RollbackService } from '../services/rollback.service';
 import { formatDeploymentResponse } from '../utils/sanitizers';
 import { apiError, apiMessage, apiSuccess } from '../utils/http';
+import { EnvironmentService } from '../services/deployment/environment.service';
 
 const deploymentParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid deployment ID format' }),
@@ -45,8 +46,119 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         return apiSuccess(formatDeploymentResponse(deployment));
     });
 
+    fastify.get('/:id/env', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        const deployment = await prisma.deployment.findFirst({
+            where: { id, userId: request.user.id }
+        });
+        if (!deployment) {
+            return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
+        }
+        const env = EnvironmentService.getDecryptedEnv(deployment.env);
+        return apiSuccess(env);
+    });
+
+    fastify.put('/:id/env', {
+        config: { rateLimit: { max: 15, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        const deployment = await prisma.deployment.findFirst({
+            where: { id, userId: request.user.id }
+        });
+        if (!deployment) {
+            return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
+        }
+
+        const body = request.body as any;
+        if (!body || body.version !== 2 || !Array.isArray(body.files)) {
+            return apiError(reply, 400, 'BAD_REQUEST', 'Invalid environment configuration payload format. Must be version 2.');
+        }
+
+        try {
+            const encrypted = EnvironmentService.encryptEnv(body);
+            await prisma.deployment.update({
+                where: { id },
+                data: { env: encrypted }
+            });
+            return apiSuccess({ message: 'Environment variables updated. Restart or redeploy the application to apply changes.' });
+        } catch (err: any) {
+            return apiError(reply, 400, err.errorCode || 'VALIDATION_FAILED', err.message || 'Validation failed');
+        }
+    });
+
+    fastify.get('/:id/env/history', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        const deployment = await prisma.deployment.findFirst({
+            where: { id, userId: request.user.id }
+        });
+        if (!deployment) {
+            return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
+        }
+
+        const histories = await prisma.deploymentHistory.findMany({
+            where: { deploymentId: id, status: { in: ['SUCCESS', 'ROLLED_BACK'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 20
+        });
+
+        const historyWithEnv = histories.map((h, index) => {
+            const env = EnvironmentService.getDecryptedEnv(h.env);
+            return {
+                id: h.id,
+                version: h.version,
+                status: h.status,
+                createdAt: h.createdAt,
+                env,
+                deploymentNumber: histories.length - index
+            };
+        });
+
+        return apiSuccess(historyWithEnv);
+    });
+
+    fastify.post('/:id/redeploy', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        const deployment = await prisma.deployment.findFirst({
+            where: { id, userId: request.user.id },
+            include: { project: true }
+        });
+        if (!deployment) {
+            return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
+        }
+
+        const sourceType = deployment.sourceType || (deployment.project.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
+        if (sourceType !== 'github') {
+            return apiError(reply, 400, 'REDEPLOY_NOT_SUPPORTED', 'Redeployment is only supported for GitHub repositories.');
+        }
+
+        try {
+            const decEnv = EnvironmentService.getDecryptedEnv(deployment.env);
+            const result = await DeploymentService.deployProject(request.user.id, {
+                type: 'github_repo',
+                projectId: deployment.projectId,
+                vpsId: deployment.vpsId,
+                branch: deployment.branch || 'main',
+                commitHash: undefined,
+                skipWebhookRegistration: true,
+                domainName: deployment.domain || undefined,
+                env: decEnv as any,
+                mode: deployment.mode as any
+            });
+
+            return apiSuccess(result);
+        } catch (err: any) {
+            return apiError(reply, 500, 'REDEPLOY_FAILED', err.message || 'Redeployment failed');
+        }
+    });
+
     fastify.post('/:id/rollback', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         const { historyId } = rollbackBodySchema.parse(request.body);
@@ -60,7 +172,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/restart', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -73,7 +185,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/start', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -85,7 +197,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/stop', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -97,7 +209,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/pause', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -109,7 +221,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.post('/:id/resume', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -121,7 +233,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     });
 
     fastify.delete('/:id', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         try {
@@ -136,6 +248,6 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
 function sendLifecycleError(reply: any, err: any, fallbackCode: string) {
     const status = err.statusCode || (err.errorCode === 'DEPLOYMENT_NOT_FOUND' ? 404
         : ['INVALID_STATE_TRANSITION', 'NO_CONTAINER', 'NO_RUNNING_CONTAINER', 'CONTAINER_NOT_FOUND'].includes(err.errorCode) ? 409
-          : 500);
+            : 500);
     return apiError(reply, status, err.errorCode || fallbackCode, err.message || 'Lifecycle action failed');
 }
