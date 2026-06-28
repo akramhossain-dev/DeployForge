@@ -153,7 +153,7 @@ export default function RepositoriesPage() {
 
                             {/* Action row */}
                             <div className="mt-4 border-t border-white/[0.05] pt-3">
-                                <Link href={`/deployments/new`}>
+                                <Link href={`/deployments/new?repo=${encodeURIComponent(repo.fullName)}&branch=${encodeURIComponent(repo.defaultBranch)}`}>
                                     <Button variant="secondary" className="h-8 text-xs w-full">
                                         <Rocket size={13} /> Deploy this repo
                                     </Button>

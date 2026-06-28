@@ -7,7 +7,7 @@ import {
     Cpu, HardDrive, MemoryStick, Wifi, WifiOff, Rocket,
     Shield, Database, ChevronLeft, ChevronRight,
 } from 'lucide-react';
-import { Button, Panel, PageHeader } from '@/components/ui';
+import { Button, Panel, PageHeader, AppModal } from '@/components/ui';
 import {
     useNotifications,
     useMarkAsRead,
@@ -87,6 +87,7 @@ export default function NotificationsPage() {
     const [filters, setFilters] = useState<Record<string, string>>({});
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
+    const [showClearAllModal, setShowClearAllModal] = useState(false);
 
     // Build query params
     const queryParams = useMemo(() => {
@@ -176,8 +177,7 @@ export default function NotificationsPage() {
                         <Button
                             variant="secondary"
                             className="h-9 text-xs text-rose-400 hover:text-rose-300"
-                            onClick={() => { if (confirm('Delete all notifications?')) deleteAll.mutate(); }}
-                            loading={deleteAll.isPending}
+                            onClick={() => setShowClearAllModal(true)}
                         >
                             <Trash2 size={14} /> Clear All
                         </Button>
@@ -244,6 +244,46 @@ export default function NotificationsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Clear All Confirmation Modal */}
+            <AppModal
+                title="Clear All Notifications"
+                open={showClearAllModal}
+                onClose={() => setShowClearAllModal(false)}
+                size="sm"
+            >
+                <div className="space-y-4">
+                    <div className="flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-rose-200">
+                        <AlertCircle className="mt-0.5 shrink-0 text-rose-400" size={20} />
+                        <p className="text-xs leading-relaxed">
+                            Are you sure you want to delete all notifications? This action is permanent and cannot be undone.
+                        </p>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                        <Button
+                            variant="secondary"
+                            className="h-9 text-xs"
+                            onClick={() => setShowClearAllModal(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="danger"
+                            className="h-9 text-xs"
+                            onClick={() => {
+                                deleteAll.mutate(undefined, {
+                                    onSuccess: () => {
+                                        setShowClearAllModal(false);
+                                    }
+                                });
+                            }}
+                            loading={deleteAll.isPending}
+                        >
+                            <Trash2 size={14} /> Clear All
+                        </Button>
+                    </div>
+                </div>
+            </AppModal>
         </div>
     );
 }

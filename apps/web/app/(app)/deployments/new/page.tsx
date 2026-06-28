@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState, useRef, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import { CheckCircle2, Github, PackagePlus, Plus, Trash2, UploadCloud, Edit2, Search, ArrowUpDown, Copy, AlertCircle } from 'lucide-react';
 import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, inputClassName, PasswordInput } from '@/components/ui';
@@ -12,6 +12,14 @@ type EnvName = 'production' | 'development';
 type ExecutionMode = 'production' | 'sandbox';
 
 export default function NewDeploymentPage() {
+    return (
+        <Suspense fallback={<Panel><SkeletonBlock className="h-80" /></Panel>}>
+            <NewDeploymentPageContent />
+        </Suspense>
+    );
+}
+
+function NewDeploymentPageContent() {
     const [tab, setTab] = useState<'github' | 'upload'>('github');
 
     return (
@@ -35,6 +43,10 @@ export default function NewDeploymentPage() {
 
 function GithubDeployForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const repoParam = searchParams.get('repo');
+    const branchParam = searchParams.get('branch');
+
     const repositories = useRepositories();
     const vps = useVpsList();
     const deploy = useCreateGithubDeployment();
@@ -47,6 +59,19 @@ function GithubDeployForm() {
 
     const [repositoryId, setRepositoryId] = useState('');
     const [branch, setBranch] = useState('main');
+
+    // Auto-fill repository and branch from query params
+    useEffect(() => {
+        if (repositories.data && repoParam) {
+            const matchedRepo = repositories.data.find(
+                (r) => r.fullName.toLowerCase() === repoParam.toLowerCase() || r.id === repoParam
+            );
+            if (matchedRepo) {
+                setRepositoryId(matchedRepo.id);
+                setBranch(branchParam || matchedRepo.defaultBranch || 'main');
+            }
+        }
+    }, [repositories.data, repoParam, branchParam]);
     const [environment, setEnvironment] = useState<EnvName>('production');
     const [vpsId, setVpsId] = useState('');
     const [autoDeploy, setAutoDeploy] = useState(true);
