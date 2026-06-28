@@ -987,7 +987,7 @@ export class DeploymentService {
     }
 
     private static getVpsAuth(vps: any) {
-        return vps.authType === 'key' || vps.authType === 'ssh_key'
+        return vps.authType === 'key'
             ? { privateKey: EnvironmentService.decrypt(vps.encryptedPrivateKey!) }
             : { password: EnvironmentService.decrypt(vps.encryptedPassword!) };
     }

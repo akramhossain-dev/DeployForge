@@ -47,4 +47,4 @@ export interface Deployment {
 }
 
 export type VpsStatus = 'active' | 'inactive' | 'failed';
-export type VpsAuthType = 'key' | 'password' | 'ssh_key';
+export type VpsAuthType = 'key' | 'password';

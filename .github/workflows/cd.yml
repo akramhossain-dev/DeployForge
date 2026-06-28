@@ -1,0 +1,104 @@
+name: CD — Deploy to Production
+
+# Triggers: only when CI passes on main AND there is a version tag (e.g. v1.2.3)
+# To trigger a deploy: git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Prevent concurrent deploys — cancel in-flight if a newer tag is pushed
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false   # never cancel a running deploy; queue instead
+
+jobs:
+  deploy:
+    name: Deploy to Production VPS
+    runs-on: ubuntu-latest
+    environment: production    # requires GitHub Environment "production" to be configured
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Prerequisites: pnpm + Node (needed to run db:migrate via SSH)
+      # -----------------------------------------------------------------------
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      # -----------------------------------------------------------------------
+      # SSH into the production server and pull + redeploy
+      # -----------------------------------------------------------------------
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            set -e
+
+            echo "==> Navigating to deploy directory"
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "==> Pulling latest code for tag ${{ github.ref_name }}"
+            git fetch --tags
+            git checkout ${{ github.ref_name }}
+
+            echo "==> Pulling latest Docker images"
+            docker compose pull postgres redis
+
+            echo "==> Building application images"
+            docker compose build --no-cache api web
+
+            echo "==> Applying database migrations"
+            docker compose run --rm --no-deps api \
+              npx prisma migrate deploy --schema /app/prisma/schema.prisma
+
+            echo "==> Performing zero-downtime rolling restart"
+            docker compose up -d --no-deps --scale api=1 api
+            docker compose up -d --no-deps --scale web=1 web
+
+            echo "==> Waiting for API health check"
+            timeout 90 bash -c 'until docker compose exec -T api \
+              node -e "fetch(\"http://127.0.0.1:\"+process.env.PORT+\"/live\").then(r=>process.exit(r.ok?0:1))" \
+              2>/dev/null; do sleep 3; done'
+
+            echo "==> Cleaning up unused Docker images"
+            docker image prune -f
+
+            echo "==> Deploy complete — ${{ github.ref_name }}"
+
+      # -----------------------------------------------------------------------
+      # Notify on failure (requires SLACK_WEBHOOK_URL secret — optional)
+      # -----------------------------------------------------------------------
+      - name: Notify Slack on failure
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "🚨 DeployForge production deploy FAILED for tag ${{ github.ref_name }}",
+              "attachments": [{
+                "color": "danger",
+                "fields": [
+                  { "title": "Repository", "value": "${{ github.repository }}", "short": true },
+                  { "title": "Tag", "value": "${{ github.ref_name }}", "short": true },
+                  { "title": "Run URL", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -13,7 +13,7 @@ export type VpsConnectionInput = {
     ipAddress: string;
     port: number;
     username: string;
-    authType: VpsAuthType | 'ssh_key';
+    authType: VpsAuthType;
     password?: string;
     privateKey?: string;
 };

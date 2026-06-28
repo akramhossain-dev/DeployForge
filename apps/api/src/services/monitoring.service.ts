@@ -13,7 +13,7 @@ export class MonitoringService {
 
         const ssh = new SSHService();
         try {
-            const auth = vps.authType === 'key' || vps.authType === 'ssh_key'
+            const auth = vps.authType === 'key'
                 ? { privateKey: this.decrypt(vps.encryptedPrivateKey!) }
                 : { password: this.decrypt(vps.encryptedPassword!) };
 

@@ -69,7 +69,7 @@ export class TerminalService {
         let dbSession: Awaited<ReturnType<typeof prisma.terminalSession.create>> | undefined;
 
         try {
-            const auth = vps.authType === 'key' || vps.authType === 'ssh_key'
+            const auth = vps.authType === 'key'
                 ? { privateKey: this.decrypt(vps.encryptedPrivateKey!) }
                 : { password: this.decrypt(vps.encryptedPassword!) };
 

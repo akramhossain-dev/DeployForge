@@ -180,7 +180,7 @@ services:
       - production   # only starts with: docker compose --profile production up
 
   certbot:
-    image: certbot/certbot:latest
+    image: certbot/certbot:v3.0.1
     restart: "no"
     volumes:
       - certbot_webroot:/var/www/certbot

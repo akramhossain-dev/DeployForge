@@ -32,6 +32,9 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm db:generate
 
+      - name: Run Tests
+        run: pnpm test
+
       - name: Run Lint
         run: pnpm lint
 
@@ -40,3 +43,38 @@ jobs:
 
       - name: Build Project
         run: pnpm build
+
+  docker:
+    name: Docker Build Verification
+    runs-on: ubuntu-latest
+    # Only verify Docker builds on pushes to main (not every PR to save CI minutes)
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          push: false
+          tags: deployforge-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Web Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          push: false
+          tags: deployforge-web:ci
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:3001
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

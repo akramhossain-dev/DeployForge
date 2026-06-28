@@ -37,10 +37,10 @@ export default function VpsPage() {
     const testConn = useTestVpsConnection();
     const deleteVps = useDeleteVps();
 
-    function goTab(id: TabId) {
+    const goTab = useCallback((id: TabId) => {
         setActiveTab(id);
         router.replace(`/vps?tab=${id}`, { scroll: false });
-    }
+    }, [router]);
 
     const handleTest = useCallback(async (id: string) => {
         setTestingId(id);
@@ -57,12 +57,12 @@ export default function VpsPage() {
     const handleViewInfo = useCallback((server: Vps) => {
         setSelectedVps(server);
         goTab('info');
-    }, []);
+    }, [goTab]);
 
     const handleMonitor = useCallback((server: Vps) => {
         setSelectedVps(server);
         goTab('monitor');
-    }, []);
+    }, [goTab]);
 
     // Description for page header based on active tab
     const descriptions: Record<TabId, string> = {

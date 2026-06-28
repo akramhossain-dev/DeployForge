@@ -89,13 +89,19 @@ enum VPSStatus {
 enum VPSAuthType {
   key
   password
-  ssh_key
 }
 
 enum SandboxStatus {
   approved
   warning
   rejected
+}
+
+enum ContactMessageStatus {
+  new
+  read
+  replied
+  archived
 }
 
 enum AlertLevel {
@@ -593,15 +599,15 @@ model DeploymentLog {
 }
 
 model ContactMessage {
-  id        String   @id @default(uuid())
+  id        String               @id @default(uuid())
   name      String
   email     String
   subject   String
   message   String
-  status    String   @default("new")
+  status    ContactMessageStatus @default(new)
   ipAddress String?
   userAgent String?
-  createdAt DateTime @default(now())
+  createdAt DateTime             @default(now())
 
   @@index([email])
   @@index([status])
