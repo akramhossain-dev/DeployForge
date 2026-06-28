@@ -1,6 +1,6 @@
 # 🔌 DeployForge API Reference
 
-The DeployForge backend is powered by a Fastify REST API and WebSocket gateway. 
+The DeployForge backend is powered by a Fastify REST API and WebSocket gateway.
 
 ---
 
@@ -9,555 +9,408 @@ The DeployForge backend is powered by a Fastify REST API and WebSocket gateway.
 ### 1.1 Authentication & CSRF
 * **Cookies:** Authentication uses HttpOnly, secure cookies: `accessToken` (JWT) and `refreshToken` (opaque token).
 * **CSRF Protection:** Non-safe HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`) require a CSRF token.
-  1. Retrieve the CSRF token from the `GET /auth/csrf` endpoint (which sets a `csrfToken` cookie).
-  2. Send the token value in the request header: `X-CSRF-Token: <token>`.
-  3. The backend validates the header against the cookie using timing-safe comparisons.
+  1. Retrieve the CSRF token via `GET /auth/csrf` (sets a `csrfToken` cookie).
+  2. Send the token value in every mutating request header: `X-CSRF-Token: <token>`.
+  3. The backend validates the header against the cookie using timing-safe comparison.
 
 ### 1.2 Response Shapes
 
-#### Success Response
+**Success:**
 ```json
-{
-  "success": true,
-  "data": { ... }
-}
+{ "success": true, "data": { ... } }
 ```
-
-#### Error Response
+**Error:**
 ```json
 {
   "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error description",
-    "context": "Additional debug information (optional)"
-  }
+  "error": { "code": "ERROR_CODE", "message": "Human-readable description" }
 }
 ```
 
+### 1.3 Common Error Codes
+| Code | HTTP | Description |
+|------|------|-------------|
+| `UNAUTHORIZED` | 401 | Missing or invalid access token |
+| `FORBIDDEN` | 403 | Authenticated but insufficient permissions |
+| `NOT_FOUND` | 404 | Resource does not exist |
+| `CONFLICT` | 409 | Duplicate resource (e.g., email already registered) |
+| `VALIDATION_ERROR` | 400 | Invalid request payload |
+| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
+
 ---
 
-## 2. Authentication API (`/auth`)
+## 2. Health & System (`/health`, `/live`, `/ready`, `/metrics`)
+
+### `GET /live`
+* Liveness probe — returns `200 OK` if the process is running.
+
+### `GET /ready`
+* Readiness probe — returns `200 OK` if database and Redis connections are healthy.
+
+### `GET /health`
+* Combined health status: returns JSON with API, database, and Redis states.
+
+### `GET /metrics`
+* Platform request counters and response-time percentiles.
+* **Protected** by `Authorization: Bearer <METRICS_TOKEN>` in production.
+
+---
+
+## 3. Authentication API (`/auth`)
 
 ### `GET /auth/csrf`
-* **Description:** Retrieve a double-submit CSRF token.
-* **Authentication:** None
-* **Rate Limit:** 60 requests / minute
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "csrfToken": "ce4b985f..." }
-  }
-  ```
+Retrieve a double-submit CSRF token.
+* **Auth:** None | **Rate Limit:** 60/min
 
 ### `POST /auth/register`
-* **Description:** Register a new user account.
-* **Authentication:** None
-* **Rate Limit:** 10 requests / minute
-* **Request Body:**
-  ```json
-  {
-    "email": "user@example.com",
-    "password": "securepassword123",
-    "name": "Jane Doe",
-    "termsAccepted": true
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "Registration successful. Please verify your email.",
-    "email": "user@example.com"
-  }
-  ```
+Register a new user account.
+* **Auth:** None | **Rate Limit:** 10/min
+* **Body:** `{ email, password, name, termsAccepted }`
+* **Response:** `{ success, message, email }`
 
 ### `POST /auth/verify-otp`
-* **Description:** Verify the registration OTP token.
-* **Authentication:** None
-* **Rate Limit:** 10 requests / minute
-* **Request Body:**
-  ```json
-  {
-    "email": "user@example.com",
-    "otp": "123456"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "Email verified successfully"
-  }
-  ```
+Verify the email registration OTP.
+* **Body:** `{ email, otp }`
+
+### `POST /auth/resend-otp`
+Resend the email verification OTP.
+* **Body:** `{ email }`
 
 ### `POST /auth/login`
-* **Description:** Authenticate and create a session.
-* **Authentication:** None
-* **Rate Limit:** 10 requests / minute
-* **Request Body:**
-  ```json
-  {
-    "email": "user@example.com",
-    "password": "securepassword123"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "user": { "id": "uuid", "email": "user@example.com", "name": "Jane Doe" }
-  }
-  ```
-* **Cookies Set:** `accessToken`, `refreshToken`
+Authenticate and create a session.
+* **Body:** `{ email, password }`
+* **Sets Cookies:** `accessToken`, `refreshToken`
 
 ### `POST /auth/refresh`
-* **Description:** Rotate tokens using refresh token.
-* **Authentication:** HttpOnly `refreshToken` cookie required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "Session refreshed"
-  }
-  ```
-* **Cookies Set:** New `accessToken`, new `refreshToken` (rotated)
+Rotate tokens using the refresh cookie.
+* **Auth:** `refreshToken` cookie | **Sets Cookies:** new `accessToken`, `refreshToken`
 
 ### `POST /auth/logout`
-* **Description:** Terminate the current session.
-* **Authentication:** Required (Valid Access Token)
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "Logged out successfully"
-  }
-  ```
+Terminate the current session.
+* **Auth:** Required
 
 ### `GET /auth/me`
-* **Description:** Fetch currently authenticated user details.
-* **Authentication:** Required
-* **Rate Limit:** 30 requests / minute
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "user": { "id": "uuid", "email": "user@example.com", "role": "USER" }
-  }
-  ```
+Get currently authenticated user details.
+* **Auth:** Required | **Rate Limit:** 30/min
+
+### `POST /auth/forgot-password`
+Request a password-reset email.
+* **Body:** `{ email }`
+
+### `POST /auth/reset-password`
+Reset password using token from email.
+* **Body:** `{ token, password }`
 
 ---
 
-## 3. VPS Management API (`/vps`)
+## 4. Profile API (`/profile`)
+
+### `GET /profile`
+Get the current user's profile details (name, avatar, GitHub/Google links, verification status).
+* **Auth:** Required
+
+### `PUT /profile`
+Update profile fields (name, username, avatar).
+* **Auth:** Required
+* **Body:** `{ name?, username?, avatarUrl? }`
+
+### `PUT /profile/password`
+Change the authenticated user's password.
+* **Auth:** Required
+* **Body:** `{ currentPassword, newPassword }`
+
+---
+
+## 5. Sessions API (`/sessions`)
+
+### `GET /sessions`
+List all active sessions for the current user.
+* **Auth:** Required
+* **Response:** Array of sessions with device, browser, OS, IP, and last activity.
+
+### `DELETE /sessions/:id`
+Revoke a specific session by ID.
+* **Auth:** Required
+
+### `DELETE /sessions`
+Revoke all sessions except the current one.
+* **Auth:** Required
+
+---
+
+## 6. VPS Management API (`/vps`)
 
 ### `POST /vps/add`
-* **Description:** Add a new target server (VPS).
-* **Authentication:** Required
-* **Rate Limit:** 8 requests / 10 minutes
-* **Request Body:**
-  ```json
-  {
-    "name": "Production VPS 1",
-    "ipAddress": "192.168.1.50",
-    "port": 22,
-    "username": "root",
-    "authType": "key",
-    "password": "optionalpassword",
-    "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n..."
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "id": "vps_uuid", "name": "Production VPS 1", "ipAddress": "192.168.1.50" }
-  }
-  ```
-
-### `POST /vps/test-connection`
-* **Description:** Validate SSH connectivity to a stored or unsaved VPS config.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "id": "vps_uuid"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "Connection succeeded"
-  }
-  ```
+Add a new target VPS.
+* **Auth:** Required | **Rate Limit:** 8/10 min
+* **Body:** `{ name, ipAddress, port, username, authType, password?, privateKey? }`
 
 ### `GET /vps/list`
-* **Description:** List all onboarded VPS instances.
-* **Authentication:** Required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": [ { "id": "vps_uuid", "name": "Prod Server", "status": "CONNECTED" } ]
-  }
-  ```
+List all onboarded VPS instances for the current user.
+* **Auth:** Required
+
+### `GET /vps/:id`
+Get details of a single VPS.
+* **Auth:** Required
+
+### `PUT /vps/:id`
+Update VPS configuration (name, credentials).
+* **Auth:** Required
 
 ### `DELETE /vps/:id`
-* **Description:** Delete a VPS instance from database.
-* **Authentication:** Required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "VPS deleted successfully"
-  }
-  ```
+Delete a VPS record.
+* **Auth:** Required
+
+### `POST /vps/test-connection`
+Validate SSH connectivity to a stored VPS.
+* **Auth:** Required
+* **Body:** `{ id }`
+
+### `GET /vps/:id/health`
+Get the latest health record for a VPS (CPU, RAM, Disk, Docker status).
+* **Auth:** Required
+
+### `GET /vps/:id/metrics`
+Get historical system metrics for a VPS.
+* **Auth:** Required
 
 ---
 
-## 4. Deployments API (`/deploy` & `/deployments`)
+## 7. Deployments API (`/deploy` & `/deployments`)
 
 ### `POST /deploy/github`
-* **Description:** Deploy an application from a synchronized GitHub repository.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "projectId": "project_uuid",
-    "branch": "main",
-    "env": {
-      "PORT": "3000",
-      "NODE_ENV": "production"
-    }
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "id": "deployment_uuid", "status": "QUEUED" }
-  }
-  ```
+Deploy from a synced GitHub repository.
+* **Auth:** Required
+* **Body:** `{ vpsId, projectId, branch, env?, name?, port?, buildCommand?, startCommand?, type? }`
 
 ### `POST /deploy/upload`
-* **Description:** Deploy via archive file (.zip, .tar.gz) upload.
-* **Authentication:** Required (Form-Data containing `file` and `projectId`)
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "id": "deployment_uuid", "status": "QUEUED" }
-  }
-  ```
+Deploy via ZIP/tar.gz file upload.
+* **Auth:** Required
+* **Body:** Multipart form-data with `file`, `vpsId`, `projectId`, `name`, `env?`
 
 ### `POST /deploy/rollback/:id`
-* **Description:** Rollback project to a previous successful deployment.
-* **Authentication:** Required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "Rollback scheduled successfully",
-    "data": { "id": "new_deployment_uuid" }
-  }
-  ```
+Rollback to a previous successful deployment version.
+* **Auth:** Required
 
 ### `GET /deploy/:id/logs`
-* **Description:** Fetch static deployment logs.
-* **Authentication:** Required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": [ { "createdAt": "timestamp", "message": "Cloning repository..." } ]
-  }
-  ```
+Get static deployment logs for a deployment.
+* **Auth:** Required
+
+### `GET /deployments`
+List all deployments for the current user.
+* **Auth:** Required
+
+### `GET /deployments/:id`
+Get full details of a single deployment including history and sandbox.
+* **Auth:** Required
+
+### `DELETE /deployments/:id`
+Delete a deployment and remove its container from the VPS.
+* **Auth:** Required
+
+### `POST /deployments/:id/stop`
+Stop a running deployment container without deleting it.
+* **Auth:** Required
+
+### `POST /deployments/:id/restart`
+Restart a stopped or failed deployment.
+* **Auth:** Required
 
 ---
 
-## 5. Domain & SSL Management API (`/domain`)
+## 8. Domain & SSL Management (`/domain`)
 
 ### `POST /domain/attach`
-* **Description:** Link a domain to a project deployment.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "projectId": "project_uuid",
-    "domainName": "app.customdomain.com"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "id": "domain_uuid", "domainName": "app.customdomain.com", "verified": false }
-  }
-  ```
+Attach a custom domain to a deployment.
+* **Auth:** Required
+* **Body:** `{ deploymentId, domainName }`
 
 ### `POST /domain/ssl/issue/:domainId`
-* **Description:** Issue Let's Encrypt SSL certificate for domain.
-* **Authentication:** Required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "message": "SSL certificate issued and proxy configured successfully"
-  }
-  ```
+Issue a Let's Encrypt SSL certificate for an attached domain.
+* **Auth:** Required
+
+### `GET /domain/list`
+List all domains attached to the user's deployments.
+* **Auth:** Required
+
+### `DELETE /domain/:id`
+Remove a domain and delete the Nginx config from the VPS.
+* **Auth:** Required
 
 ---
 
-## 6. Server Monitoring API (`/monitor`)
+## 9. GitHub Integration (`/auth/github`)
+
+### `GET /auth/github`
+Redirect to GitHub OAuth authorization page.
+
+### `GET /auth/github/callback`
+GitHub OAuth callback — exchanges code for token and links account.
+
+### `GET /auth/github/repos`
+List synced GitHub repositories for the authenticated user.
+* **Auth:** Required
+
+### `POST /auth/github/sync`
+Manually sync the GitHub repository list.
+* **Auth:** Required
+
+### `POST /auth/github/disconnect`
+Disconnect the GitHub OAuth account.
+* **Auth:** Required
+
+---
+
+## 10. Google OAuth (`/auth/google`)
+
+### `GET /auth/google`
+Redirect to Google OAuth authorization page.
+
+### `GET /auth/google/callback`
+Google OAuth callback — exchanges code and creates/links account.
+
+---
+
+## 11. GitHub Webhooks (`/api/webhooks`)
+
+### `POST /api/webhooks/github`
+Receives GitHub push/PR webhook events. Validates `X-Hub-Signature-256` against `GITHUB_WEBHOOK_SECRET`.
+* **Auth:** Webhook signature verification (not user auth)
+
+---
+
+## 12. Server Monitoring (`/monitor`)
 
 ### `GET /monitor/metrics/:vpsId`
-* **Description:** Get CPU, RAM, and Disk metrics history for VPS.
-* **Authentication:** Required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": [
-      { "cpuUsage": 12.5, "ramUsage": 64.2, "diskUsage": 45.1, "createdAt": "timestamp" }
-    ]
-  }
-  ```
+Get CPU, RAM, and Disk metrics history for a VPS.
+* **Auth:** Required
+* **Response:** Array of `{ cpuUsage, memoryUsage, diskUsage, activeContainers, timestamp }`
 
 ---
 
-## 7. Web SSH Terminal Gateway (WebSockets)
+## 13. Notifications (`/notifications`)
 
-### `WS /terminal/:vpsId`
-* **Description:** Establish an interactive shell terminal with the remote VPS.
-* **Authentication:** Handshake validated via one-time query token: `?token=<temp_token>`
-* **Parameters:** `cols`, `rows` for terminal geometry.
+### `GET /notifications`
+Get paginated notifications for the current user.
+* **Auth:** Required
+* **Query:** `?page=1&limit=20&unreadOnly=false`
+
+### `PUT /notifications/:id/read`
+Mark a single notification as read.
+* **Auth:** Required
+
+### `PUT /notifications/read-all`
+Mark all notifications as read.
+* **Auth:** Required
+
+### `DELETE /notifications/:id`
+Delete a notification.
+* **Auth:** Required
 
 ---
 
-## 8. File Manager API (`/file-manager`)
+## 14. Alert Settings (`/alert-settings`)
 
-Provides target VPS filesystem exploration, uploads, downloads, edits, search, and zip utilities.
+### `GET /alert-settings`
+Get the current user's alert rule thresholds.
+* **Auth:** Required
+* **Response:** `{ cpuThreshold, ramThreshold, diskThreshold, swapThreshold, emailAlerts, browserAlerts, realtimeAlerts }`
 
-### `GET /file-manager/:vpsId/info`
-* **Description:** Get connection health state and target user's home directory path.
-* **Authentication:** Required
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "isConnected": true, "homeDir": "/home/ubuntu" }
-  }
-  ```
+### `PUT /alert-settings`
+Update alert thresholds and preferences.
+* **Auth:** Required
+* **Body:** `{ cpuThreshold?, ramThreshold?, diskThreshold?, swapThreshold?, emailAlerts?, browserAlerts?, realtimeAlerts? }`
 
-### `GET /file-manager/:vpsId/list`
-* **Description:** List directory files and folders.
-* **Authentication:** Required
-* **Query Parameters:** `path` (Defaults to `~`)
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": {
-      "path": "/home/ubuntu/project",
-      "entries": [
-        { "name": "src", "path": "/home/ubuntu/project/src", "type": "directory", "size": 4096, "modified": "timestamp", "permissions": "drwxr-xr-x", "extension": "", "mimeType": "" }
-      ]
-    }
-  }
-  ```
+---
 
-### `GET /file-manager/:vpsId/read`
-* **Description:** Read a file's textual or previewable content.
-* **Authentication:** Required
-* **Query Parameters:** `path`
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": {
-      "content": "file text content...",
-      "encoding": "utf8"
-    }
-  }
-  ```
+## 15. Sandbox (`/sandbox`)
 
-### `GET /file-manager/:vpsId/properties`
-* **Description:** Get metadata, sizing, counts, and permissions of a path.
-* **Authentication:** Required
-* **Query Parameters:** `path`
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": {
-      "path": "/home/ubuntu/file.txt",
-      "name": "file.txt",
-      "type": "file",
-      "size": 124,
-      "modified": "timestamp",
-      "permissions": "-rw-r--r--",
-      "owner": "ubuntu",
-      "group": "ubuntu"
-    }
-  }
-  ```
+### `GET /sandbox/:deploymentId`
+Get the sandbox pre-flight analysis result for a deployment.
+* **Auth:** Required
+* **Response:** `{ score, status, issues, estimatedCPU, estimatedRAM, estimatedDisk }`
 
-### `GET /file-manager/:vpsId/search`
-* **Description:** Find files and directories by name.
-* **Authentication:** Required
-* **Query Parameters:** `path` (root path to search), `query` (search term), `extension` (optional extension filter)
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": [
-      { "name": "index.ts", "path": "/home/ubuntu/project/src/index.ts", "type": "file", "size": 1024, "modified": "timestamp" }
-    ]
-  }
-  ```
+---
 
-### `GET /file-manager/:vpsId/download`
-* **Description:** Download single file content.
-* **Authentication:** Required
-* **Query Parameters:** `path`
-* **Response `200 OK`:** Base64 or raw file stream response.
+## 16. Web SSH Terminal (`/terminal` & `/ws`)
 
-### `POST /file-manager/:vpsId/create`
-* **Description:** Create a new empty file or folder.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "path": "/home/ubuntu/project/newfile.js",
-    "type": "file"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "File created" }
-  }
-  ```
+### `POST /terminal/token`
+Generate a one-time token for establishing a WebSocket terminal session.
+* **Auth:** Required
+* **Body:** `{ vpsId }`
+* **Response:** `{ token }` (short-lived, single-use)
 
-### `PUT /file-manager/:vpsId/save`
-* **Description:** Save edits to a text file.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "path": "/home/ubuntu/project/newfile.js",
-    "content": "const x = 10;"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "File saved" }
-  }
-  ```
+### `WS /ws/terminal/:vpsId?token=<token>&cols=<N>&rows=<N>`
+Establish an interactive SSH terminal session with the VPS.
+* **Auth:** One-time query token from `POST /terminal/token`
+* **Protocol:** Binary WebSocket frames forwarded to/from SSH shell.
+* **Params:** `cols`, `rows` for initial terminal geometry.
 
-### `PUT /file-manager/:vpsId/rename`
-* **Description:** Move or rename a file or folder.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "oldPath": "/home/ubuntu/project/old.js",
-    "newPath": "/home/ubuntu/project/new.js"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "Renamed successfully" }
-  }
-  ```
+---
 
-### `PUT /file-manager/:vpsId/copy`
-* **Description:** Copy a file or folder.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "srcPath": "/home/ubuntu/project/source.js",
-    "dstPath": "/home/ubuntu/project/copy.js"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "Copied successfully" }
-  }
-  ```
+## 17. File Manager API (`/file-manager`)
 
-### `DELETE /file-manager/:vpsId/delete`
-* **Description:** Delete files or directories in bulk.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "paths": ["/home/ubuntu/project/temp.js"]
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "Deleted", "errors": [] }
-  }
-  ```
+All endpoints require `Auth: Required` and target a specific `:vpsId`.
 
-### `POST /file-manager/:vpsId/upload`
-* **Description:** Upload a file to the target directory.
-* **Authentication:** Required
-* **Query Parameters:** `path` (target directory)
-* **Request Body:** Multipart `form-data` containing `file`
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "Uploaded", "filename": "uploaded.jpg" }
-  }
-  ```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/file-manager/:vpsId/info` | Connection status & home directory |
+| `GET` | `/file-manager/:vpsId/list?path=` | List directory contents |
+| `GET` | `/file-manager/:vpsId/read?path=` | Read file content |
+| `GET` | `/file-manager/:vpsId/properties?path=` | File metadata, size, permissions |
+| `GET` | `/file-manager/:vpsId/search?path=&query=&extension=` | Search files by name |
+| `GET` | `/file-manager/:vpsId/download?path=` | Download file as binary |
+| `POST` | `/file-manager/:vpsId/create` | Create file or folder `{ path, type }` |
+| `PUT` | `/file-manager/:vpsId/save` | Save file content `{ path, content }` |
+| `PUT` | `/file-manager/:vpsId/rename` | Move/rename `{ oldPath, newPath }` |
+| `PUT` | `/file-manager/:vpsId/copy` | Copy `{ srcPath, dstPath }` |
+| `DELETE` | `/file-manager/:vpsId/delete` | Bulk delete `{ paths: [] }` |
+| `POST` | `/file-manager/:vpsId/upload?path=` | Upload file (multipart `file`) |
+| `POST` | `/file-manager/:vpsId/compress` | Zip items `{ parentDir, paths, archiveName }` |
+| `POST` | `/file-manager/:vpsId/decompress` | Extract zip `{ zipFilePath, destDir }` |
 
-### `POST /file-manager/:vpsId/compress`
-* **Description:** Compress items to a zip archive on remote VPS.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "parentDir": "/home/ubuntu/project",
-    "paths": ["/home/ubuntu/project/src", "/home/ubuntu/project/package.json"],
-    "archiveName": "backup.zip"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "Files compressed successfully" }
-  }
-  ```
+---
 
-### `POST /file-manager/:vpsId/decompress`
-* **Description:** Extract zip archive.
-* **Authentication:** Required
-* **Request Body:**
-  ```json
-  {
-    "zipFilePath": "/home/ubuntu/project/backup.zip",
-    "destDir": "/home/ubuntu/project/extracted"
-  }
-  ```
-* **Response `200 OK`:**
-  ```json
-  {
-    "success": true,
-    "data": { "message": "Archive decompressed successfully" }
-  }
-  ```
+## 18. Admin API (`/admin`)
+
+All admin endpoints require authentication as an `ADMIN` or `SUPER_ADMIN` role via the separate admin session.
+
+### Auth
+* `POST /admin/login` — Admin login with email/password.
+* `POST /admin/logout` — Terminate admin session.
+* `GET /admin/me` — Get current admin profile.
+
+### User Management
+* `GET /admin/users` — List all platform users (paginated).
+* `GET /admin/users/:id` — Get a specific user's details.
+* `PUT /admin/users/:id/role` — Change a user's role.
+* `PUT /admin/users/:id/status` — Suspend or activate a user.
+* `DELETE /admin/users/:id` — Permanently delete a user account.
+
+### Platform Overview
+* `GET /admin/stats` — Platform-wide stats: total users, deployments, VPS nodes, active sessions.
+
+### Deployments
+* `GET /admin/deployments` — List all deployments across all users.
+* `DELETE /admin/deployments/:id` — Force-delete any deployment.
+
+### Audit Logs
+* `GET /admin/audit-logs` — Paginated audit log with filters by user, action, and date.
+
+### Backup & Restore
+* `POST /admin/backup` — Trigger a manual database backup.
+* `GET /admin/backups` — List available backup files.
+* `POST /admin/restore` — Restore from a backup file.
+
+### Contact Messages
+* `GET /admin/contact` — List all contact form submissions.
+* `PUT /admin/contact/:id` — Update message status.
+
+---
+
+## 19. Public API (`/public`)
+
+### `GET /public/stats`
+Publicly accessible platform statistics (total users, deployments, servers — for landing page display).
+* **Auth:** None

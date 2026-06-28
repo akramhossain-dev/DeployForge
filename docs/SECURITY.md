@@ -1,64 +1,108 @@
 # 🔐 DeployForge Security Protocols
 
-DeployForge enforces security controls at the data storage, authentication, network routing, and host execution layers. 
+DeployForge enforces security controls at the data storage, authentication, network routing, and host execution layers.
 
 ---
 
 ## 1. Data Encryption & Storage
 
 ### 1.1 Secrets at Rest (AES-256-GCM)
-All sensitive secrets (VPS root passwords, private keys, GitHub access tokens, environment variables) are encrypted before write operations:
-* **Module:** Managed by `@deployforge/security` (`EncryptionService`).
-* **Algorithm:** AES-256-GCM with a unique 12-byte initialization vector (IV) per entry.
-* **Storage Format:** Stored in database columns as `iv:authTag:encryptedData`.
-* **Key Derivation:** The key is loaded from the `ENCRYPTION_KEY` environment variable.
+All sensitive secrets (VPS passwords, private keys, environment variables) are encrypted before write operations:
+* **Module:** `@deployforge/security` (`EncryptionService`).
+* **Algorithm:** AES-256-GCM with a unique 12-byte IV per entry.
+* **Storage Format:** `iv:authTag:encryptedData` (hex-encoded).
+* **Key Source:** `ENCRYPTION_KEY` env var — must be a 64-character hex string.
+* **Transparent Middleware:** Prisma middleware auto-encrypts/decrypts the `env` field on `Deployment` and `DeploymentHistory` models.
 
 ### 1.2 Password Hashing (Argon2id)
-User password hashes are computed using Argon2id via the `@deployforge/security` password module:
-* **Parameters:** Configured with production-grade settings: memory cost of 64MB (`65536`), time cost of `3` iterations, and parallelism of `4` threads.
-* **Length Validation:** User passwords must be at least `6` characters long.
+* **Algorithm:** Argon2id via `@deployforge/security`.
+* **Parameters:** Memory 64MB, 3 iterations, 4 threads (production-grade).
+* **Minimums:** User passwords ≥ 6 chars; Super Admin password ≥ 8 chars.
 
 ---
 
-## 2. Authentication & Session Security
+## 2. Environment Variable Validation
 
-### 2.1 JWT Access & Opaque Refresh Tokens
-* **Access Tokens (JWT):** Short-lived JWTs (15-minute lifetime) containing the user's ID, role, and a unique `sessionId`.
-* **Refresh Tokens:** Long-lived, cryptographically secure random tokens stored hashed (SHA-256) in the database.
-* **Immediate Session Revocation:** The backend `authGuard` plugin checks the `sessionId` from the JWT against the active database session records on every request. If an administrator disables a user or a user logs out (revoking their session), all matching JWTs are rejected immediately, rather than waiting for expiration.
-* **Token Rotation & Replay Protection:** Requesting a new access token rotates both the access and refresh tokens. If a refresh token is reused, the platform flags it as a replay attack and revokes all active sessions for that user.
-
-### 2.2 Security Auditing & Logs
-Critical actions (authentication attempts, password updates, session cancellations, and role changes) are written to the database `AuditLog` table:
-* **Scope:** Captures categories like `auth`, `sessions`, `password`, `github`, and `account`.
-* **Metadata:** Records client IP address and parses the user-agent string to capture the client's OS, browser, and device profile.
+The API validates all environment variables at startup using Zod (`apps/api/src/config/env.ts`):
+* **Placeholder Detection:** Rejects secrets starting with `replace_with_`, `your_`, `changeme`, etc.
+* **Production Enforcement:** `APP_URL` and `API_URL` must use `https://` and must not point to `localhost` when `NODE_ENV=production`.
+* **Format Checks:** `ENCRYPTION_KEY` must be 64 hex chars; `DATABASE_URL` must be a valid PostgreSQL URI.
+* **Hard Exit:** Any failure causes `process.exit(1)` with descriptive error messages.
 
 ---
 
-## 3. Network & Ingress Security
+## 3. Authentication & Session Security
 
-### 3.1 CSRF Protection
-DeployForge implements a custom double-submit cookie CSRF mechanism:
-* **HMAC Signatures:** The server generates a random token cryptographically signed via HMAC-SHA256.
-* **Double Validation:** The client must send the token in both the `Set-Cookie` cookie and the `X-CSRF-Token` header for state-changing requests.
+### 3.1 JWT Access & Opaque Refresh Tokens
+* **Access Tokens (JWT):** 15-minute lifetime with `userId`, `role`, and `sessionId`.
+* **Refresh Tokens:** Long-lived, stored as SHA-256 hash in database.
+* **Immediate Revocation:** `authGuard` validates `sessionId` against active DB records on every request.
+* **Replay Protection:** Reused refresh tokens trigger full session revocation for that user.
 
-### 3.2 Secure Ingress Headers
-Fastify API servers employ `@fastify/helmet` to inject strict security headers:
-* **Content Security Policy (CSP):** Restricts script executions and connection targets.
-* **Frame Ancestors:** Blocked (`frame-ancestors 'none'`) to prevent clickjacking.
-* **Permissions Policy:** Restricts access to device sensors, cameras, and microphones.
-* **CORS Origin Filtering:** REST API and WebSocket connections are restricted to configured client and server domains in production.
+### 3.2 Admin Authentication (Separate System)
+* **Isolated Model:** `AdminUser` and `AdminSession` are fully separate from regular `User` sessions.
+* **Brute-Force Lockout:** Configurable via `ADMIN_MAX_ATTEMPTS` (default `5`) and `ADMIN_LOCKOUT_TIME` (default `900` seconds).
+* **Separate Secret:** `ADMIN_JWT_SECRET` signs admin tokens — distinct from user `JWT_SECRET`.
+
+### 3.3 Security Audit Logs
+Critical actions are written to the `AuditLog` table:
+* **Scope:** `auth`, `sessions`, `password`, `github`, `account` categories.
+* **Metadata:** IP address, OS, browser, device parsed from user-agent.
 
 ---
 
-## 4. Remote Execution & Runtime Sandboxing
+## 4. Network & Ingress Security
 
-### 4.1 SSH Input Sanitization
-Because DeployForge executes commands on remote servers agentlessly, all command constructions are sanitized to prevent shell injection:
-* **Escape Protocols:** Arguments are escaped using custom, prototype-safe `shellQuote` and `shellPath` helper functions.
-* **Archive Extraction:** Archive extractions are executed inside a secure python3 wrapper script on the target VPS, preventing path traversal attacks.
+### 4.1 CSRF Protection
+Double-submit cookie pattern (`apps/api/src/plugins/csrf.ts`):
+* Token signed via HMAC-SHA256.
+* Client must send token in both `csrfToken` cookie and `X-CSRF-Token` header for all state-changing requests.
+* Comparison uses `crypto.timingSafeEqual` to prevent timing attacks.
 
-### 4.2 Docker Isolation
-Deployed user applications are isolated inside Docker container environments on target hosts:
-* **Capabilities Dropping:** Containers start with `--cap-drop ALL`, removing root privileges within the container.
-* **Privilege Escalation Block:** Enforced via `--security-opt no-new-privileges` to prevent processes from gaining elevated permissions.
+### 4.2 Security Headers (`@fastify/helmet`)
+* **CSP:** `default-src 'none'` — scripts, styles, frames, objects all blocked.
+* **Frame Ancestors:** `'none'` — prevents clickjacking.
+* **HSTS:** `max-age=31536000; includeSubDomains; preload` (production only).
+* **Permissions Policy:** Restricts camera, microphone, geolocation, payment, USB.
+* **Referrer Policy:** `no-referrer`.
+
+### 4.3 Rate Limiting
+* Global: `RATE_LIMIT_MAX` requests per `RATE_LIMIT_WINDOW` (defaults: 100/minute).
+* Sensitive routes have tighter per-route limits.
+* Returns `HTTP 429` with `{ code: "RATE_LIMIT_EXCEEDED" }`.
+
+### 4.4 Prototype Pollution Protection
+A `preValidation` hook rejects any request body, query, or params containing `__proto__`, `prototype`, or `constructor` with `HTTP 400`.
+
+---
+
+## 5. Remote Execution & Runtime Sandboxing
+
+### 5.1 SSH Input Sanitization
+* Shell arguments are escaped via prototype-safe `shellQuote`/`shellPath` helpers in `@deployforge/vps`.
+* Archive extractions use a Python3 wrapper script on the target VPS to prevent path traversal.
+
+### 5.2 Docker Isolation (Application Containers)
+* `--cap-drop ALL` — removes all root-level kernel capabilities.
+* `--security-opt no-new-privileges` — blocks privilege escalation.
+
+### 5.3 Deployment Sandbox (Pre-flight)
+Before execution, the `DeploymentSandbox` system scores the deployment configuration, estimates CPU/RAM/Disk usage, and flags violations. Deployments with status `rejected` are blocked from proceeding.
+
+### 5.4 Control Plane Container Hardening
+Both `api` and `web` Docker services run with:
+* `read_only: true` filesystem (only `/tmp` writable via `tmpfs`).
+* `no-new-privileges: true`.
+* `cap_drop: ALL`.
+
+---
+
+## 6. Metrics Endpoint Protection
+
+The `/metrics` endpoint is protected by an optional Bearer token:
+* **Config:** Set `METRICS_TOKEN` to a random 64-char hex string.
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+* **Usage:** `Authorization: Bearer <METRICS_TOKEN>`
+* If `METRICS_TOKEN` is empty, the endpoint is unprotected (dev-only; not recommended for production).
