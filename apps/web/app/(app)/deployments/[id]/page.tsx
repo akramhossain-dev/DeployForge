@@ -437,7 +437,7 @@ export default function DeploymentDetailsPage() {
                 }
             });
             setEnvModalOpen(false);
-        } catch (e) {}
+        } catch (e) { }
     };
 
     const handleSaveAndRedeploy = async () => {
@@ -464,7 +464,7 @@ export default function DeploymentDetailsPage() {
             const newDep = await redeploy.mutateAsync(id);
             setEnvModalOpen(false);
             router.push(`/deployments/${newDep.id}`);
-        } catch (e) {}
+        } catch (e) { }
     };
 
     const filteredVariables = useMemo(() => {
@@ -711,34 +711,43 @@ export default function DeploymentDetailsPage() {
                             {/* Environment Variables Management */}
                             <Panel>
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-black text-white">Environment</h3>
-                                    <Button variant="secondary" className="h-8 px-3 text-xs" onClick={() => setEnvModalOpen(true)}>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-black text-white">Environment</h3>
+                                        {!envLoading && decEnvResponse?.files && decEnvResponse.files.length > 0 && (
+                                            <span className="rounded-full bg-cyan-500/15 border border-cyan-500/25 px-2 py-0.5 text-[10px] font-bold text-cyan-400">
+                                                {decEnvResponse.files.reduce((s, f) => s + Object.keys(f.variables || {}).length, 0)} vars
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => setEnvModalOpen(true)}
+                                        className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-cyan-500/30 hover:bg-cyan-500/5 hover:text-cyan-300 transition-colors"
+                                    >
                                         Manage
-                                    </Button>
+                                    </button>
                                 </div>
                                 {envLoading ? (
                                     <div className="space-y-2 py-2">
                                         <SkeletonBlock className="h-4 w-full" />
                                         <SkeletonBlock className="h-4 w-3/4" />
                                     </div>
-                                ) : (
-                                    <div className="space-y-0">
-                                        <InfoRow
-                                            label="Environment Files"
-                                            value={<span className="font-bold text-white">{decEnvResponse?.files?.length || 0}</span>}
-                                        />
-                                        <InfoRow
-                                            label="Total Variables"
-                                            value={
-                                                <span className="font-bold text-white">
-                                                    {decEnvResponse?.files?.reduce((sum, f) => sum + Object.keys(f.variables || {}).length, 0) || 0}
+                                ) : decEnvResponse?.files && decEnvResponse.files.length > 0 ? (
+                                    <div className="space-y-3">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {decEnvResponse.files.map((f) => (
+                                                <span key={f.path} className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-[11px] font-mono text-slate-400">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-500/60 shrink-0" />
+                                                    {f.path}
+                                                    <span className="ml-1 rounded-full bg-slate-800 px-1.5 text-[9px] text-slate-500">{Object.keys(f.variables || {}).length}</span>
                                                 </span>
-                                            }
-                                        />
-                                        <InfoRow
-                                            label="Last Updated"
-                                            value={<span className="text-slate-400">{formatDate(current.updatedAt)}</span>}
-                                        />
+                                            ))}
+                                        </div>
+                                        <p className="text-[10px] text-slate-600">Last updated {formatDate(current.updatedAt)}</p>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-white/[0.08] py-6 text-center">
+                                        <p className="text-xs text-slate-600">No environment variables configured.</p>
+                                        <button onClick={() => setEnvModalOpen(true)} className="mt-2 text-[11px] text-cyan-500 hover:text-cyan-400 transition-colors">Add variables</button>
                                     </div>
                                 )}
                             </Panel>
@@ -749,10 +758,10 @@ export default function DeploymentDetailsPage() {
 
             {/* Manage Environment Variables Modal */}
             {envModalOpen ? (
-                <AppModal title="Manage Environment Variables" open={envModalOpen} onClose={() => setEnvModalOpen(false)}>
+                <AppModal title="Manage Environment Variables" open={envModalOpen} onClose={() => setEnvModalOpen(false)} size="xl">
                     <div className="mt-4 flex flex-col md:flex-row gap-6 h-[600px] max-h-[85vh]">
                         {/* Sidebar: Files List */}
-                        <div className="w-full md:w-64 shrink-0 flex flex-col gap-4 border-b md:border-b-0 md:border-r border-white/[0.08] pb-4 md:pb-0 md:pr-4">
+                        <div className="hidden md:flex w-full md:w-64 shrink-0 flex-col gap-4 border-b md:border-b-0 md:border-r border-white/[0.08] pb-4 md:pb-0 md:pr-4">
                             <div className="flex items-center justify-between">
                                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Env Files</h4>
                                 <Button
@@ -803,13 +812,25 @@ export default function DeploymentDetailsPage() {
                                                         onChange={(e) => setRenamingPath(e.target.value)}
                                                         className={clsx(inputClassName, 'h-7 py-0 px-2 text-xs')}
                                                     />
-                                                    <Button variant="primary" className="h-7 w-7 p-0 shrink-0 text-xs" onClick={() => handleRenameFile(idx)}>✓</Button>
-                                                    <Button variant="secondary" className="h-7 w-7 p-0 shrink-0 text-xs" onClick={() => { setRenamingIndex(null); setRenamingPath(''); }}>✕</Button>
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-950 hover:bg-cyan-50 transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                        onClick={() => handleRenameFile(idx)}
+                                                    >
+                                                        ✓
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-100 hover:border-white/20 hover:bg-white/[0.11] transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                        onClick={() => { setRenamingIndex(null); setRenamingPath(''); }}
+                                                    >
+                                                        ✕
+                                                    </button>
                                                 </div>
                                             ) : (
                                                 <>
                                                     <span className="truncate font-mono">{file.path}</span>
-                                                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 transition-opacity">
+                                                    <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 shrink-0 transition-opacity">
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
@@ -938,22 +959,130 @@ export default function DeploymentDetailsPage() {
                             ) : (
                                 // Variables Table/Text Editor Section
                                 <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-                                    <div className="flex items-center justify-between border-b border-white/[0.05] pb-2">
-                                        <div className="flex flex-col">
-                                            <h4 className="text-sm font-bold text-white font-mono">{activeFile.path}</h4>
-                                            <span className="text-[10px] text-slate-500">
-                                                {Object.keys(activeFile.variables || {}).length} variables
-                                            </span>
+                                    <div className="flex flex-col gap-3 border-b border-white/[0.05] pb-3">
+                                        {/* Mobile file selector */}
+                                        <div className="flex md:hidden flex-col gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={activeFileIndex}
+                                                    onChange={(e) => setActiveFileIndex(Number(e.target.value))}
+                                                    className={clsx(inputClassName, 'flex-1 font-mono text-xs h-9 bg-slate-950 border-white/10')}
+                                                >
+                                                    {draftFiles.map((file, idx) => (
+                                                        <option key={file.path} value={idx}>
+                                                            {file.path} ({Object.keys(file.variables || {}).length} vars)
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <Button
+                                                    variant="secondary"
+                                                    className="h-9 px-3 text-xs shrink-0"
+                                                    onClick={() => setShowAddFile(!showAddFile)}
+                                                >
+                                                    <Plus size={14} /> Add File
+                                                </Button>
+                                            </div>
+                                            {showAddFile && (
+                                                <div className="space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                                                    <p className="text-[10px] font-bold text-cyan-300">File path (relative to repo root)</p>
+                                                    <input
+                                                        value={newFilePath}
+                                                        onChange={(e) => setNewFilePath(e.target.value)}
+                                                        placeholder="apps/server/.env"
+                                                        className={clsx(inputClassName, 'h-8 text-xs')}
+                                                    />
+                                                    <div className="flex justify-end gap-1.5">
+                                                        <Button variant="secondary" className="h-7 px-2 text-xs" onClick={() => { setShowAddFile(false); setNewFilePath(''); }}>Cancel</Button>
+                                                        <Button variant="primary" className="h-7 px-2 text-xs" onClick={handleAddFile}>Create</Button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="secondary"
-                                                className="h-8 px-3 text-xs"
-                                                onClick={() => setIsBulkEdit(!isBulkEdit)}
-                                            >
-                                                {isBulkEdit ? 'Table Editor' : 'Bulk Edit / Text'}
-                                            </Button>
+                                        {/* Active File Info and Actions */}
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className="flex flex-col min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        {renamingIndex === activeFileIndex ? (
+                                                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                                                <input
+                                                                    value={renamingPath}
+                                                                    onChange={(e) => setRenamingPath(e.target.value)}
+                                                                    className={clsx(inputClassName, 'h-7 py-0 px-2 text-xs w-40 sm:w-48 font-mono')}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-950 hover:bg-cyan-50 transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                                    onClick={() => handleRenameFile(activeFileIndex)}
+                                                                >
+                                                                    ✓
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-100 hover:border-white/20 hover:bg-white/[0.11] transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                                    onClick={() => { setRenamingIndex(null); setRenamingPath(''); }}
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <h4 className="text-sm font-bold text-white font-mono truncate max-w-[150px] sm:max-w-[280px]" title={activeFile.path}>
+                                                                    {activeFile.path}
+                                                                </h4>
+                                                                {activeFile.path !== '.env' && (
+                                                                    <div className="flex items-center gap-0.5 shrink-0">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setRenamingIndex(activeFileIndex);
+                                                                                setRenamingPath(activeFile.path);
+                                                                            }}
+                                                                            className="p-1 text-slate-400 hover:text-white transition-colors"
+                                                                            title="Rename file"
+                                                                        >
+                                                                            <Edit2 size={13} />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteFile(activeFileIndex);
+                                                                            }}
+                                                                            className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                                                                            title="Delete file"
+                                                                        >
+                                                                            <Trash2 size={13} />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[10px] text-slate-500">
+                                                        {Object.keys(activeFile.variables || {}).length} variables
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {/* History Toggle Button for Mobile */}
+                                                <Button
+                                                    variant="secondary"
+                                                    className="md:hidden h-8 px-2.5 text-xs"
+                                                    onClick={() => setHistoryOpen(true)}
+                                                >
+                                                    <History size={13} /> History
+                                                </Button>
+
+                                                <Button
+                                                    variant="secondary"
+                                                    className="h-8 px-2.5 sm:px-3 text-xs"
+                                                    onClick={() => setIsBulkEdit(!isBulkEdit)}
+                                                >
+                                                    {isBulkEdit ? 'Table Editor' : 'Bulk Edit / Text'}
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1009,7 +1138,7 @@ export default function DeploymentDetailsPage() {
                                             </div>
 
                                             {/* Variables List */}
-                                            <div className="flex-1 overflow-y-auto border border-white/[0.06] rounded-lg divide-y divide-white/[0.05] bg-white/[0.01] pr-1 terminal-scrollbar">
+                                            <div className="flex-1 overflow-y-auto border border-white/[0.06] rounded-lg divide-y divide-white/[0.05] bg-white/[0.01] pr-1 terminal-scrollbar max-h-[300px]">
                                                 {filteredVariables.length === 0 ? (
                                                     <div className="py-12 text-center text-xs text-slate-500 italic">
                                                         {searchQuery ? 'No matching variables found.' : 'No environment variables configured.'}
@@ -1018,16 +1147,23 @@ export default function DeploymentDetailsPage() {
                                                     filteredVariables.map(([key, val]) => {
                                                         const isKeyValid = validateKey(key);
                                                         return (
-                                                            <div key={key} className="flex flex-col sm:flex-row gap-3 p-3 items-start sm:items-center">
+                                                            <div
+                                                                key={key}
+                                                                className={clsx(
+                                                                    "grid grid-cols-1 sm:grid-cols-[1.5fr_2fr_auto] gap-2.5 sm:gap-3 p-3 items-start sm:items-center transition-colors hover:bg-white/[0.02]",
+                                                                    !isKeyValid && "bg-rose-500/[0.02]"
+                                                                )}
+                                                            >
                                                                 {/* Key Input */}
-                                                                <div className="flex-1 w-full space-y-1">
+                                                                <div className="w-full space-y-1">
+                                                                    <span className="block sm:hidden text-[9px] font-black uppercase tracking-wider text-slate-500">Key</span>
                                                                     <input
                                                                         defaultValue={key}
                                                                         onBlur={(e) => handleUpdateVarKey(key, e.target.value)}
                                                                         placeholder="VARIABLE_KEY"
                                                                         className={clsx(
                                                                             inputClassName,
-                                                                            'font-mono text-xs h-8',
+                                                                            'font-mono text-xs h-8 focus:ring-1 focus:ring-cyan-300/30',
                                                                             !isKeyValid && 'border-rose-500/50 bg-rose-500/5 focus:border-rose-500'
                                                                         )}
                                                                     />
@@ -1039,33 +1175,26 @@ export default function DeploymentDetailsPage() {
                                                                 </div>
 
                                                                 {/* Value Input */}
-                                                                <div className="flex-1 w-full">
+                                                                <div className="w-full space-y-1">
+                                                                    <span className="block sm:hidden text-[9px] font-black uppercase tracking-wider text-slate-500">Value</span>
                                                                     <PasswordInput
                                                                         value={val}
                                                                         onChange={(e) => handleUpdateVarValue(key, e.target.value)}
                                                                         placeholder="variable_value"
-                                                                        className={clsx(inputClassName, 'font-mono text-xs h-8 pr-12')}
+                                                                        className={clsx(inputClassName, 'font-mono text-xs h-8 pr-12 focus:ring-1 focus:ring-cyan-300/30')}
                                                                     />
                                                                 </div>
 
                                                                 {/* Actions */}
-                                                                <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                                                    <Button
-                                                                        variant="secondary"
-                                                                        className="h-8 w-8 p-0 text-xs"
-                                                                        onClick={() => handleDuplicateVar(key, val)}
-                                                                        title="Duplicate"
-                                                                    >
-                                                                        <Copy size={12} />
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant="secondary"
-                                                                        className="h-8 w-8 p-0 hover:text-rose-400 text-xs"
+                                                                <div className="flex items-center gap-1.5 shrink-0 sm:pt-0 pt-1 justify-end ml-auto sm:ml-0">
+                                                                    <button
+                                                                        type="button"
+                                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-100 transition-all hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-500/40 shrink-0"
                                                                         onClick={() => handleDeleteVar(key)}
                                                                         title="Delete"
                                                                     >
                                                                         <Trash2 size={12} />
-                                                                    </Button>
+                                                                    </button>
                                                                 </div>
                                                             </div>
                                                         );

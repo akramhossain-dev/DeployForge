@@ -151,7 +151,7 @@ function GithubDeployForm() {
             });
             router.push(`/deployments/${deployment.id}`);
         } catch (err) {
-            
+
         }
     }
 
@@ -395,7 +395,7 @@ function UploadDeployForm() {
             });
             router.push(`/deployments/${deployment.id}`);
         } catch (err) {
-            
+
         }
     }
 
@@ -832,7 +832,7 @@ function EnvironmentVariablesEditor({
                 <div className="border border-white/10 rounded-lg overflow-hidden bg-slate-950/80">
                     <div className="flex flex-col lg:flex-row min-h-[400px]">
                         {/* Sidebar: Files List */}
-                        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-4 border-b lg:border-b-0 lg:border-r border-white/[0.08] p-4 bg-white/[0.01]">
+                        <div className="hidden lg:flex w-full lg:w-64 shrink-0 flex-col gap-4 border-b lg:border-b-0 lg:border-r border-white/[0.08] p-4 bg-white/[0.01]">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-black uppercase tracking-wider text-slate-500">Env Files</span>
                                 <Button
@@ -884,13 +884,25 @@ function EnvironmentVariablesEditor({
                                                         onChange={(e) => setRenamingPath(e.target.value)}
                                                         className={clsx(inputClassName, 'h-7 py-0 px-2 text-xs')}
                                                     />
-                                                    <Button type="button" variant="primary" className="h-7 w-7 p-0 shrink-0 text-xs" onClick={() => handleRenameFile(idx)}>✓</Button>
-                                                    <Button type="button" variant="secondary" className="h-7 w-7 p-0 shrink-0 text-xs" onClick={() => { setRenamingIndex(null); setRenamingPath(''); }}>✕</Button>
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-950 hover:bg-cyan-50 transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                        onClick={() => handleRenameFile(idx)}
+                                                    >
+                                                        ✓
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-100 hover:border-white/20 hover:bg-white/[0.11] transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                        onClick={() => { setRenamingIndex(null); setRenamingPath(''); }}
+                                                    >
+                                                        ✕
+                                                    </button>
                                                 </div>
                                             ) : (
                                                 <>
                                                     <span className="truncate font-mono">{file.path}</span>
-                                                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 transition-opacity">
+                                                    <div className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 flex items-center gap-1 shrink-0 transition-opacity">
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
@@ -931,23 +943,125 @@ function EnvironmentVariablesEditor({
 
                         {/* Editor Panel */}
                         <div className="flex-1 flex flex-col gap-4 overflow-hidden p-4">
-                            <div className="flex items-center justify-between border-b border-white/[0.05] pb-2">
-                                <div className="flex flex-col">
-                                    <h4 className="text-sm font-bold text-white font-mono">{activeFile.path}</h4>
-                                    <span className="text-[10px] text-slate-500">
-                                        {Object.keys(activeFile.variables || {}).length} variables
-                                    </span>
+                            <div className="flex flex-col gap-3 border-b border-white/[0.05] pb-3">
+                                {/* Mobile file selector */}
+                                <div className="flex lg:hidden flex-col gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            value={activeFileIndex}
+                                            onChange={(e) => setActiveFileIndex(Number(e.target.value))}
+                                            className={clsx(inputClassName, 'flex-1 font-mono text-xs h-9 bg-slate-950 border-white/10')}
+                                        >
+                                            {files.map((file, idx) => (
+                                                <option key={file.path} value={idx}>
+                                                    {file.path} ({Object.keys(file.variables || {}).length} vars)
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="h-9 px-3 text-xs shrink-0"
+                                            onClick={() => setShowAddFile(!showAddFile)}
+                                        >
+                                            <Plus size={14} /> Add File
+                                        </Button>
+                                    </div>
+                                    {showAddFile && (
+                                        <div className="space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                                            <p className="text-[10px] font-bold text-cyan-300">File path (relative to repo root)</p>
+                                            <input
+                                                value={newFilePath}
+                                                onChange={(e) => setNewFilePath(e.target.value)}
+                                                placeholder="apps/server/.env"
+                                                className={clsx(inputClassName, 'h-8 text-xs')}
+                                            />
+                                            <div className="flex justify-end gap-1.5">
+                                                <Button type="button" variant="secondary" className="h-7 px-2 text-xs" onClick={() => { setShowAddFile(false); setNewFilePath(''); }}>Cancel</Button>
+                                                <Button type="button" variant="primary" className="h-7 px-2 text-xs" onClick={handleAddFile}>Create</Button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
-                                <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        className="h-8 px-3 text-xs"
-                                        onClick={() => setIsBulkEdit(!isBulkEdit)}
-                                    >
-                                        {isBulkEdit ? 'Table Editor' : 'Bulk Edit / Text'}
-                                    </Button>
+                                {/* Active File Info and Actions */}
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                {renamingIndex === activeFileIndex ? (
+                                                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                                        <input
+                                                            value={renamingPath}
+                                                            onChange={(e) => setRenamingPath(e.target.value)}
+                                                            className={clsx(inputClassName, 'h-7 py-0 px-2 text-xs w-40 sm:w-48 font-mono')}
+                                                        />
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-950 hover:bg-cyan-50 transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                                    onClick={() => handleRenameFile(activeFileIndex)}
+                                                                >
+                                                                    ✓
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-100 hover:border-white/20 hover:bg-white/[0.11] transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/40 text-xs font-black shrink-0"
+                                                                    onClick={() => { setRenamingIndex(null); setRenamingPath(''); }}
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <h4 className="text-sm font-bold text-white font-mono truncate max-w-[150px] sm:max-w-[280px]" title={activeFile.path}>
+                                                            {activeFile.path}
+                                                        </h4>
+                                                        {activeFile.path !== '.env' && (
+                                                            <div className="flex items-center gap-0.5 shrink-0">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setRenamingIndex(activeFileIndex);
+                                                                        setRenamingPath(activeFile.path);
+                                                                    }}
+                                                                    className="p-1 text-slate-400 hover:text-white transition-colors"
+                                                                    title="Rename file"
+                                                                >
+                                                                    <Edit2 size={13} />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleDeleteFile(activeFileIndex);
+                                                                    }}
+                                                                    className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                                                                    title="Delete file"
+                                                                >
+                                                                    <Trash2 size={13} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                            <span className="text-[10px] text-slate-500">
+                                                {Object.keys(activeFile.variables || {}).length} variables
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="h-8 px-2.5 sm:px-3 text-xs"
+                                            onClick={() => setIsBulkEdit(!isBulkEdit)}
+                                        >
+                                            {isBulkEdit ? 'Table Editor' : 'Bulk Edit / Text'}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1014,16 +1128,23 @@ function EnvironmentVariablesEditor({
                                             filteredVariables.map(([key, val]) => {
                                                 const isKeyValid = validateKey(key);
                                                 return (
-                                                    <div key={key} className="flex flex-col sm:flex-row gap-3 p-3 items-start sm:items-center">
+                                                    <div
+                                                        key={key}
+                                                        className={clsx(
+                                                            "grid grid-cols-1 sm:grid-cols-[1.5fr_2fr_auto] gap-2.5 sm:gap-3 p-3 items-start sm:items-center transition-colors hover:bg-white/[0.02]",
+                                                            !isKeyValid && "bg-rose-500/[0.02]"
+                                                        )}
+                                                    >
                                                         {/* Key Input */}
-                                                        <div className="flex-1 w-full space-y-1">
+                                                        <div className="w-full space-y-1">
+                                                            <span className="block sm:hidden text-[9px] font-black uppercase tracking-wider text-slate-500">Key</span>
                                                             <input
                                                                 defaultValue={key}
                                                                 onBlur={(e) => handleUpdateVarKey(key, e.target.value)}
                                                                 placeholder="VARIABLE_KEY"
                                                                 className={clsx(
                                                                     inputClassName,
-                                                                    'font-mono text-xs h-8',
+                                                                    'font-mono text-xs h-8 focus:ring-1 focus:ring-cyan-300/30',
                                                                     !isKeyValid && 'border-rose-500/50 bg-rose-500/5 focus:border-rose-500'
                                                                 )}
                                                             />
@@ -1035,35 +1156,26 @@ function EnvironmentVariablesEditor({
                                                         </div>
 
                                                         {/* Value Input */}
-                                                        <div className="flex-1 w-full">
+                                                        <div className="w-full space-y-1">
+                                                            <span className="block sm:hidden text-[9px] font-black uppercase tracking-wider text-slate-500">Value</span>
                                                             <PasswordInput
                                                                 value={val}
                                                                 onChange={(e) => handleUpdateVarValue(key, e.target.value)}
                                                                 placeholder="variable_value"
-                                                                className={clsx(inputClassName, 'font-mono text-xs h-8 pr-12')}
+                                                                className={clsx(inputClassName, 'font-mono text-xs h-8 pr-12 focus:ring-1 focus:ring-cyan-300/30')}
                                                             />
                                                         </div>
 
                                                         {/* Actions */}
-                                                        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                                            <Button
+                                                        <div className="flex items-center gap-1.5 shrink-0 sm:pt-0 pt-1 justify-end ml-auto sm:ml-0">
+                                                            <button
                                                                 type="button"
-                                                                variant="secondary"
-                                                                className="h-8 w-8 p-0 text-xs"
-                                                                onClick={() => handleDuplicateVar(key, val)}
-                                                                title="Duplicate"
-                                                            >
-                                                                <Copy size={12} />
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                variant="secondary"
-                                                                className="h-8 w-8 p-0 hover:text-rose-400 text-xs"
+                                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-100 transition-all hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-500/40 shrink-0"
                                                                 onClick={() => handleDeleteVar(key)}
                                                                 title="Delete"
                                                             >
                                                                 <Trash2 size={12} />
-                                                            </Button>
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 );
