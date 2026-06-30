@@ -541,6 +541,22 @@ export function useVpsLiveMetrics(vpsId?: string, enabled = true) {
     });
 }
 
+export function useVpsHealthHistory(vpsId?: string, range = '24h', from?: string, to?: string, enabled = true) {
+    return useQuery({
+        queryKey: ['vps', vpsId, 'health-history', range, from, to] as const,
+        queryFn: () => {
+            const queryParams = new URLSearchParams();
+            queryParams.set('range', range);
+            if (from) queryParams.set('from', from);
+            if (to) queryParams.set('to', to);
+            return api.get<any[]>(`/vps/${vpsId}/history?${queryParams.toString()}`).then((res: any) => res.data ?? res);
+        },
+        enabled: !!vpsId && enabled,
+        staleTime: 10000,
+        retry: false,
+    });
+}
+
 export function useAdminOverview() {
     return useQuery({
         queryKey: queryKeys.adminOverview,

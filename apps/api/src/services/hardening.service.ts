@@ -46,7 +46,7 @@ export class HardeningService {
 
         const auditCutoff = getPastDate(90);        
         const logCutoff = getPastDate(7);           
-        const metricsCutoff = getPastDate(7);       
+        const metricsCutoff = getPastDate(35);       
         const verifyTokenCutoff = getPastDate(14);  
 
         try {

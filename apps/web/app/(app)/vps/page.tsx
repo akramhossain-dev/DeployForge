@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Activity, Info, Plus, RefreshCw, Server } from 'lucide-react';
+import { Activity, BarChart2, Info, Plus, RefreshCw, Server } from 'lucide-react';
 import clsx from 'clsx';
 import { Button, PageHeader } from '@/components/ui';
 import {
@@ -15,14 +15,16 @@ import VpsListTab from './VpsListTab';
 import AddVpsTab from './AddVpsTab';
 import ServerInfoTab from './ServerInfoTab';
 import LiveMonitorTab from './LiveMonitorTab';
+import HistoryMonitorTab from './HistoryMonitorTab';
 
-type TabId = 'list' | 'add' | 'info' | 'monitor';
+type TabId = 'list' | 'add' | 'info' | 'monitor' | 'history';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'list', label: 'VPS List', icon: <Server size={15} /> },
     { id: 'add', label: 'Add VPS', icon: <Plus size={15} /> },
     { id: 'info', label: 'Server Info', icon: <Info size={15} /> },
     { id: 'monitor', label: 'Live Monitor', icon: <Activity size={15} /> },
+    { id: 'history', label: 'History Monitor', icon: <BarChart2 size={15} /> },
 ];
 
 export default function VpsPage() {
@@ -70,6 +72,7 @@ export default function VpsPage() {
         add: 'Connect a new VPS via SSH in 3 quick steps.',
         info: 'Deep-dive system information fetched live via SSH.',
         monitor: 'Real-time CPU, RAM, disk, and network metrics refreshed every 3 seconds.',
+        history: 'Historical resource utilization records with custom date filter and aggregation.',
     };
 
     return (
@@ -120,7 +123,7 @@ export default function VpsPage() {
             </div>
 
             {/* VPS selector strip for info/monitor tabs */}
-            {(activeTab === 'info' || activeTab === 'monitor') && (vps.data?.length ?? 0) > 0 && (
+            {(activeTab === 'info' || activeTab === 'monitor' || activeTab === 'history') && (vps.data?.length ?? 0) > 0 && (
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
                     <span className="shrink-0 text-[11px] font-bold uppercase text-slate-500">Server:</span>
                     {(vps.data || []).map((server) => (
@@ -172,6 +175,10 @@ export default function VpsPage() {
 
             {activeTab === 'monitor' && (
                 <LiveMonitorTab vps={selectedVps} />
+            )}
+
+            {activeTab === 'history' && (
+                <HistoryMonitorTab vps={selectedVps} />
             )}
         </div>
     );

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import prisma from '@deployforge/database';
 import { VPSConnectionFailure, VPSService } from '../services/vps.service';
+import { MonitoringService } from '../services/monitoring.service';
 import { sanitizeVps } from '../utils/sanitizers';
 import { AccountService } from '../services/account.service';
 
@@ -238,6 +239,37 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
             const { id } = vpsParamsSchema.parse(request.params);
             const metrics = await VPSService.getLiveMetrics(request.user!.id, id);
             return { success: true, data: metrics };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
+    });
+
+    fastify.get('/:id/history', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        try {
+            const { id } = vpsParamsSchema.parse(request.params);
+            const vps = await VPSService.get(request.user!.id, id);
+            if (!vps) {
+                return reply.status(404).send({
+                    success: false,
+                    error: {
+                        code: 'VPS_NOT_FOUND',
+                        message: 'VPS not found'
+                    }
+                });
+            }
+
+            const querySchema = z.object({
+                range: z.enum(['24h', '7d', '30d', 'custom']).default('24h'),
+                from: z.string().optional(),
+                to: z.string().optional(),
+            });
+
+            const { range, from, to } = querySchema.parse(request.query);
+            const history = await MonitoringService.getHealthHistory(id, range, from, to);
+            return { success: true, data: history };
         } catch (error) {
             return sendVpsError(reply, error);
         }

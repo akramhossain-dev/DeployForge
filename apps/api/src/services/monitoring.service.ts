@@ -58,6 +58,77 @@ export class MonitoringService {
         });
     }
 
+    static async getHealthHistory(vpsId: string, range: string, from?: string, to?: string) {
+        let startDate = new Date();
+        let endDate = new Date();
+
+        if (range === '24h') {
+            startDate.setHours(startDate.getHours() - 24);
+        } else if (range === '7d') {
+            startDate.setDate(startDate.getDate() - 7);
+        } else if (range === '30d') {
+            startDate.setDate(startDate.getDate() - 30);
+        } else if (range === 'custom' && from && to) {
+            startDate = new Date(from);
+            endDate = new Date(to);
+        } else {
+            // Default to 24h
+            startDate.setHours(startDate.getHours() - 24);
+        }
+
+        const records = await prisma.vPSHealth.findMany({
+            where: {
+                vpsId,
+                checkedAt: {
+                    gte: startDate,
+                    lte: endDate,
+                },
+            },
+            orderBy: { checkedAt: 'asc' },
+        });
+
+        return this.downsampleHealthRecords(records);
+    }
+
+    private static downsampleHealthRecords(records: any[]) {
+        const targetPoints = 300;
+        if (records.length <= targetPoints) {
+            return records.map(r => ({
+                cpuUsage: r.cpuUsage,
+                memoryUsage: r.memoryUsage,
+                diskUsage: r.diskUsage,
+                uptime: r.uptime,
+                timestamp: r.checkedAt.toISOString(),
+            }));
+        }
+
+        const bucketSize = Math.floor(records.length / targetPoints);
+        const result = [];
+
+        for (let i = 0; i < targetPoints; i++) {
+            const startIdx = i * bucketSize;
+            const endIdx = Math.min(startIdx + bucketSize, records.length);
+            const slice = records.slice(startIdx, endIdx);
+
+            if (slice.length === 0) continue;
+
+            const sumCpu = slice.reduce((acc, r) => acc + r.cpuUsage, 0);
+            const sumMem = slice.reduce((acc, r) => acc + r.memoryUsage, 0);
+            const sumDisk = slice.reduce((acc, r) => acc + r.diskUsage, 0);
+            const avgUptime = slice[slice.length - 1].uptime;
+
+            result.push({
+                cpuUsage: Math.round((sumCpu / slice.length) * 10) / 10,
+                memoryUsage: Math.round((sumMem / slice.length) * 10) / 10,
+                diskUsage: Math.round((sumDisk / slice.length) * 10) / 10,
+                uptime: avgUptime,
+                timestamp: slice[Math.floor(slice.length / 2)].checkedAt.toISOString(),
+            });
+        }
+
+        return result;
+    }
+
     private static decrypt(encryptedString: string) {
         const [iv, tag, content] = encryptedString.split(':');
         return encryptionService.decrypt({ iv, tag, content });
