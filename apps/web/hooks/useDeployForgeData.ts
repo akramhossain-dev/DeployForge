@@ -17,6 +17,7 @@ import type {
     AdminVps,
     Deployment,
     Domain,
+    ProjectAnalytics,
     DeploymentLog,
     GitHubProfile,
     PublicStats,
@@ -63,6 +64,7 @@ export const queryKeys = {
     githubProfile: ['github', 'profile'] as const,
     repositories: ['github', 'repositories'] as const,
     deployments: ['deployments'] as const,
+    deploymentAnalytics: ['deployments', 'analytics'] as const,
     deployment: (id: string) => ['deployments', id] as const,
     domains: ['domains'] as const,
     domainSubdomains: (deploymentId: string) => ['domains', 'subdomains', deploymentId] as const,
@@ -189,6 +191,15 @@ export function useDeployments(enabled = true) {
             const deployments = query.state.data || [];
             return deployments.some((deployment) => ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'DELETING'].includes(deployment.status)) ? 4000 : 20000;
         },
+    });
+}
+
+export function useDeploymentAnalytics(enabled = true) {
+    return useQuery({
+        queryKey: queryKeys.deploymentAnalytics,
+        queryFn: () => api.get<ProjectAnalytics[]>('/deployments/analytics'),
+        enabled,
+        refetchInterval: 15000,
     });
 }
 

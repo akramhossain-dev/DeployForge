@@ -35,6 +35,106 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         return apiSuccess(deployments.map(formatDeploymentResponse).filter(Boolean));
     });
 
+    fastify.get('/analytics', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    }, async (request) => {
+        const projects = await prisma.project.findMany({
+            where: { userId: request.user.id },
+            include: {
+                deployments: {
+                    select: {
+                        id: true,
+                        name: true,
+                        status: true,
+                        createdAt: true,
+                        updatedAt: true,
+                        commitHash: true,
+                        branch: true,
+                        deploymentLogs: {
+                            where: { type: 'build' },
+                            select: { createdAt: true },
+                            orderBy: { createdAt: 'asc' }
+                        },
+                        history: {
+                            where: { status: 'ROLLED_BACK' },
+                            select: { id: true }
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const analytics = projects.map(project => {
+            const deps = project.deployments;
+            const totalDeployments = deps.length;
+            const failedDeployments = deps.filter(d => d.status === 'FAILED').length;
+            const successRate = totalDeployments > 0 
+                ? Math.round(((totalDeployments - failedDeployments) / totalDeployments) * 100) 
+                : 0;
+
+            const completedDeps = deps.filter(d => 
+                !['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING'].includes(d.status)
+            );
+
+            const successfulDeps = completedDeps.filter(d => 
+                ['RUNNING', 'STOPPED', 'PAUSED', 'ROLLED_BACK'].includes(d.status)
+            );
+
+            const targetDeps = successfulDeps.length > 0 ? successfulDeps : completedDeps;
+            
+            let totalBuildTimeMs = 0;
+            let totalDeployTimeMs = 0;
+            let timeCounts = 0;
+
+            targetDeps.forEach(d => {
+                const totalDurationMs = new Date(d.updatedAt).getTime() - new Date(d.createdAt).getTime();
+                let buildTimeMs = 0;
+                if (d.deploymentLogs.length > 1) {
+                    const start = new Date(d.deploymentLogs[0].createdAt).getTime();
+                    const end = new Date(d.deploymentLogs[d.deploymentLogs.length - 1].createdAt).getTime();
+                    buildTimeMs = Math.max(0, end - start);
+                }
+                const deployTimeMs = Math.max(0, totalDurationMs - buildTimeMs);
+
+                totalBuildTimeMs += buildTimeMs;
+                totalDeployTimeMs += deployTimeMs;
+                timeCounts++;
+            });
+
+            const avgBuildTime = timeCounts > 0 ? Math.round((totalBuildTimeMs / timeCounts) / 1000) : 0;
+            const avgDeployTime = timeCounts > 0 ? Math.round((totalDeployTimeMs / timeCounts) / 1000) : 0;
+
+            const rollbackCount = deps.reduce((sum, d) => sum + d.history.length, 0);
+
+            const lastDeployment = deps.length > 0 ? {
+                id: deps[0].id,
+                name: deps[0].name,
+                status: deps[0].status,
+                commitHash: deps[0].commitHash,
+                branch: deps[0].branch,
+                createdAt: deps[0].createdAt
+            } : null;
+
+            return {
+                projectId: project.id,
+                projectName: project.name,
+                repositoryUrl: project.repositoryUrl,
+                branch: project.branch,
+                totalDeployments,
+                failedDeployments,
+                successRate,
+                avgBuildTime,
+                avgDeployTime,
+                rollbackCount,
+                lastDeployment
+            };
+        });
+
+        return apiSuccess(analytics);
+    });
+
     fastify.get('/:id', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {

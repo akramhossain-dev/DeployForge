@@ -396,3 +396,24 @@ export type AlertSettings = {
     createdAt: string;
     updatedAt: string;
 };
+
+export type ProjectAnalytics = {
+    projectId: string;
+    projectName: string;
+    repositoryUrl: string;
+    branch: string;
+    totalDeployments: number;
+    failedDeployments: number;
+    successRate: number;
+    avgBuildTime: number;
+    avgDeployTime: number;
+    rollbackCount: number;
+    lastDeployment: {
+        id: string;
+        name: string;
+        status: string;
+        commitHash: string | null;
+        branch: string | null;
+        createdAt: string;
+    } | null;
+};
