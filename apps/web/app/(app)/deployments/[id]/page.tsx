@@ -7,6 +7,7 @@ import {
     GitBranch, Github, Globe, Loader2, Pause, Play, RefreshCw, RotateCcw,
     Server, Square, TerminalSquare, Trash2, XCircle, Zap, PackagePlus,
     Search, ArrowUpDown, PlusCircle, History, Edit2, Plus, Eye, EyeOff,
+    Download, ChevronDown, ChevronRight, Maximize2, Minimize2, Wifi, WifiOff,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { AppModal, Button, ErrorState, PageHeader, Panel, SkeletonBlock, StatusBadge, formatDate, inputClassName, PasswordInput } from '@/components/ui';
@@ -114,21 +115,203 @@ function TimelineStep({ state, current, failedIndex }: { state: string; current?
     );
 }
 
-function LogLine({ log }: { log: DeploymentLog }) {
+type AnsiSegment = {
+    text: string;
+    bold?: boolean;
+    underline?: boolean;
+    colorClass?: string;
+    bgClass?: string;
+};
+
+function parseAnsiText(text: string): AnsiSegment[] {
+    const ansiRegex = /\x1B\[[0-9;]*m/g;
+    let match;
+    let lastIndex = 0;
+    const segments: AnsiSegment[] = [];
+
+    let isBold = false;
+    let isUnderline = false;
+    let currentColorClass = '';
+    let currentBgClass = '';
+
+    const getStylesFromCodes = (codesStr: string) => {
+        if (!codesStr || codesStr === '0') {
+            isBold = false;
+            isUnderline = false;
+            currentColorClass = '';
+            currentBgClass = '';
+            return;
+        }
+
+        const codes = codesStr.split(';').map(Number);
+        for (const code of codes) {
+            if (code === 0) {
+                isBold = false;
+                isUnderline = false;
+                currentColorClass = '';
+                currentBgClass = '';
+            } else if (code === 1) {
+                isBold = true;
+            } else if (code === 4) {
+                isUnderline = true;
+            } else if (code >= 30 && code <= 37) {
+                const colors = [
+                    'text-slate-900', // 30 Black
+                    'text-rose-400 font-semibold',  // 31 Red
+                    'text-emerald-400', // 32 Green
+                    'text-amber-400', // 33 Yellow
+                    'text-sky-400',   // 34 Blue
+                    'text-fuchsia-400', // 35 Magenta
+                    'text-cyan-400',  // 36 Cyan
+                    'text-slate-100'  // 37 White
+                ];
+                currentColorClass = colors[code - 30] || '';
+            } else if (code >= 90 && code <= 97) {
+                const brightColors = [
+                    'text-slate-600', // 90 Bright Black
+                    'text-rose-300 font-bold',  // 91 Bright Red
+                    'text-emerald-300 font-bold', // 92 Bright Green
+                    'text-amber-300 font-bold', // 93 Bright Yellow
+                    'text-sky-300 font-bold',   // 94 Bright Blue
+                    'text-fuchsia-300 font-bold', // 95 Bright Magenta
+                    'text-cyan-300 font-bold',  // 96 Bright Cyan
+                    'text-white font-bold'      // 97 Bright White
+                ];
+                currentColorClass = brightColors[code - 90] || '';
+            } else if (code >= 40 && code <= 47) {
+                const backgrounds = [
+                    'bg-slate-950', // 40
+                    'bg-rose-950/40', // 41
+                    'bg-emerald-950/40', // 42
+                    'bg-amber-950/40', // 43
+                    'bg-sky-950/40', // 44
+                    'bg-fuchsia-950/40', // 45
+                    'bg-cyan-950/40', // 46
+                    'bg-slate-800' // 47
+                ];
+                currentBgClass = backgrounds[code - 40] || '';
+            } else if (code === 39) {
+                currentColorClass = '';
+            } else if (code === 49) {
+                currentBgClass = '';
+            }
+        }
+    };
+
+    while ((match = ansiRegex.exec(text)) !== null) {
+        const textSegment = text.substring(lastIndex, match.index);
+        if (textSegment) {
+            segments.push({
+                text: textSegment,
+                bold: isBold,
+                underline: isUnderline,
+                colorClass: currentColorClass,
+                bgClass: currentBgClass
+            });
+        }
+        const rawCode = match[0].substring(2, match[0].length - 1);
+        getStylesFromCodes(rawCode);
+        lastIndex = ansiRegex.lastIndex;
+    }
+
+    const remainingText = text.substring(lastIndex);
+    if (remainingText) {
+        segments.push({
+            text: remainingText,
+            bold: isBold,
+            underline: isUnderline,
+            colorClass: currentColorClass,
+            bgClass: currentBgClass
+        });
+    }
+
+    return segments;
+}
+
+function AnsiText({ text, searchQuery }: { text: string; searchQuery: string }) {
+    const segments = useMemo(() => parseAnsiText(text), [text]);
+
+    if (!searchQuery) {
+        return (
+            <span className="break-all whitespace-pre-wrap">
+                {segments.map((seg, idx) => (
+                    <span
+                        key={idx}
+                        className={clsx(
+                            seg.bold && 'font-bold',
+                            seg.underline && 'underline',
+                            seg.colorClass,
+                            seg.bgClass
+                        )}
+                    >
+                        {seg.text}
+                    </span>
+                ))}
+            </span>
+        );
+    }
+
+    return (
+        <span className="break-all whitespace-pre-wrap">
+            {segments.map((seg, idx) => {
+                const classes = clsx(
+                    seg.bold && 'font-bold',
+                    seg.underline && 'underline',
+                    seg.colorClass,
+                    seg.bgClass
+                );
+
+                if (seg.text.toLowerCase().includes(searchQuery.toLowerCase())) {
+                    const queryRegex = new RegExp(`(${searchQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
+                    const parts = seg.text.split(queryRegex);
+
+                    return (
+                        <span key={idx} className={classes}>
+                            {parts.map((part, pIdx) =>
+                                part.toLowerCase() === searchQuery.toLowerCase() ? (
+                                    <mark key={pIdx} className="bg-yellow-500/35 text-yellow-200 px-0.5 rounded font-bold">
+                                        {part}
+                                    </mark>
+                                ) : (
+                                    part
+                                )
+                            )}
+                        </span>
+                    );
+                }
+
+                return (
+                    <span key={idx} className={classes}>
+                        {seg.text}
+                    </span>
+                );
+            })}
+        </span>
+    );
+}
+
+function LogLine({ log, searchQuery }: { log: DeploymentLog; searchQuery: string }) {
     const text = log.message || log.output || '';
-    const isError = log.level === 'error' || /failed|error/i.test(text);
+    const isError = log.level === 'error' || log.type === 'error' || /failed|error|exception/i.test(text);
     const isWarn = log.level === 'warn' || /warn/i.test(text);
     const isSuccess = /success|running/i.test(text);
+
     return (
-        <div className={clsx(
-            'flex gap-3 rounded px-2 py-0.5 font-mono text-xs leading-5',
-            isError && 'text-rose-300 bg-rose-500/5',
-            isWarn && !isError && 'text-amber-300',
-            isSuccess && !isError && !isWarn && 'text-emerald-300',
-            !isError && !isWarn && !isSuccess && 'text-slate-400'
-        )}>
-            <span className="shrink-0 text-slate-600">{formatDate(log.createdAt || log.timestamp)}</span>
-            <span className="break-all">{text}</span>
+        <div
+            className={clsx(
+                'flex gap-2.5 rounded px-2.5 py-1 font-mono text-xs leading-5 transition-colors duration-150',
+                isError ? 'bg-rose-500/10 border-l-2 border-rose-500/70 text-rose-200' :
+                isWarn ? 'bg-amber-500/5 border-l-2 border-amber-500/50 text-amber-200' :
+                isSuccess ? 'text-emerald-300' : 'text-slate-400',
+                'hover:bg-white/[0.03]'
+            )}
+        >
+            <span className="shrink-0 text-slate-600 select-none">{formatDate(log.createdAt || log.timestamp)}</span>
+            {isError && <AlertCircle size={12} className="text-rose-400 shrink-0 mt-1" />}
+            {isWarn && !isError && <AlertCircle size={12} className="text-amber-400 shrink-0 mt-1" />}
+            <span className="break-all flex-1">
+                <AnsiText text={text} searchQuery={searchQuery} />
+            </span>
         </div>
     );
 }
@@ -159,6 +342,9 @@ export default function DeploymentDetailsPage() {
     const initialLogs = useDeploymentLogs(id);
     const [logsPaused, setLogsPaused] = useState(false);
     const [autoScroll, setAutoScroll] = useState(true);
+    const [logFilter, setLogFilter] = useState<'all' | 'build' | 'runtime' | 'system' | 'error'>('all');
+    const [logsSearchQuery, setLogsSearchQuery] = useState('');
+    const [consoleCollapsed, setConsoleCollapsed] = useState(false);
     const stream = useDeploymentLogStream(id, !logsPaused);
     const liveStatus = useDeploymentStatusStream(id);
     const start = useStartDeployment();
@@ -478,6 +664,73 @@ export default function DeploymentDetailsPage() {
 
     const current = liveStatus ? { ...deployment.data, ...liveStatus } : deployment.data;
     const logs = useMemo(() => mergeLogs(initialLogs.data || [], stream.logs), [initialLogs.data, stream.logs]);
+
+    const filteredLogs = useMemo(() => {
+        let list = logs;
+        if (logFilter === 'build') {
+            list = list.filter((l) => l.type === 'build');
+        } else if (logFilter === 'runtime') {
+            list = list.filter((l) => l.type === 'runtime');
+        } else if (logFilter === 'system') {
+            list = list.filter((l) => l.type === 'system');
+        } else if (logFilter === 'error') {
+            list = list.filter((l) => l.level === 'error' || l.type === 'error' || /failed|error|exception/i.test(l.message || l.output || ''));
+        }
+
+        if (logsSearchQuery.trim()) {
+            const q = logsSearchQuery.toLowerCase();
+            list = list.filter((l) => {
+                const text = (l.message || l.output || '').toLowerCase();
+                return text.includes(q);
+            });
+        }
+        return list;
+    }, [logs, logFilter, logsSearchQuery]);
+
+    const handleCopyLogs = () => {
+        const text = filteredLogs
+            .map((l) => `[${formatDate(l.createdAt || l.timestamp)}] ${l.message || l.output || ''}`)
+            .join('\n');
+        navigator.clipboard.writeText(text);
+        useToastStore.getState().addToast({
+            title: 'Copied',
+            description: `Successfully copied ${filteredLogs.length} log lines to clipboard.`,
+            severity: 'success',
+        });
+    };
+
+    const handleDownloadLogs = () => {
+        const text = filteredLogs
+            .map((l) => `[${formatDate(l.createdAt || l.timestamp)}] [${(l.level || 'info').toUpperCase()}] [${l.type || 'runtime'}] ${l.message || l.output || ''}`)
+            .join('\n');
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `deployment-${id}-${logFilter}-logs.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        useToastStore.getState().addToast({
+            title: 'Downloaded',
+            description: `Started downloading logs for deployment ${id}.`,
+            severity: 'success',
+        });
+    };
+
+    const handleReconnectWs = () => {
+        setLogsPaused(true);
+        setTimeout(() => {
+            setLogsPaused(false);
+            useToastStore.getState().addToast({
+                title: 'Logs Reconnected',
+                description: 'Attempting to re-establish WebSocket log stream.',
+                severity: 'success',
+            });
+        }, 150);
+    };
+
     const sourceType = getSourceType(current);
     const isStatic = current?.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(current?.framework || '');
     const canRestart = current?.status === 'RUNNING' && (isStatic || Boolean(current.containerId));
@@ -510,7 +763,7 @@ export default function DeploymentDetailsPage() {
 
     useEffect(() => {
         if (autoScroll) consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight });
-    }, [logs, autoScroll]);
+    }, [filteredLogs, autoScroll]);
 
     async function confirmDelete() {
         await deleteDeployment.mutateAsync(id);
@@ -645,30 +898,149 @@ export default function DeploymentDetailsPage() {
                     {/* Logs + Sidebar */}
                     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
                         {/* Log console */}
-                        <Panel className="flex flex-col gap-0 p-0 overflow-hidden">
-                            <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] px-5 py-4">
-                                <div className="flex items-center gap-2">
-                                    <TerminalSquare size={16} className="text-cyan-200" />
-                                    <h2 className="font-black text-white">Live Logs</h2>
-                                    <span className={clsx('flex items-center gap-1 text-[11px] font-bold', stream.isConnected ? 'text-emerald-300' : 'text-slate-500')}>
-                                        <span className={clsx('h-1.5 w-1.5 rounded-full', stream.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600')} />
+                        <Panel className="flex flex-col gap-0 p-0 overflow-hidden border border-white/[0.08]">
+                            {/* Header */}
+                            <div className="flex flex-col gap-3 border-b border-white/[0.08] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-center gap-2.5">
+                                    <TerminalSquare size={18} className="text-cyan-300" />
+                                    <h2 className="font-black text-white text-sm tracking-wide">Deployment Logs</h2>
+                                    <span className={clsx(
+                                        'flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border',
+                                        stream.isConnected 
+                                            ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' 
+                                            : 'border-amber-500/20 bg-amber-500/5 text-amber-400'
+                                    )}>
+                                        <span className={clsx('h-1.5 w-1.5 rounded-full', stream.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400')} />
                                         {stream.isConnected ? 'Live' : 'Polling'}
                                     </span>
-                                    <span className="text-[11px] text-slate-600">{logs.length} lines</span>
+                                    {!stream.isConnected && (
+                                        <button 
+                                            onClick={handleReconnectWs} 
+                                            className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1 underline underline-offset-2 ml-1"
+                                            title="Retry live log WebSocket stream connection"
+                                        >
+                                            <RefreshCw size={10} className="animate-spin-slow" /> Reconnect
+                                        </button>
+                                    )}
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button variant="secondary" className="h-8 text-xs" onClick={() => setLogsPaused(v => !v)}>
+
+                                <div className="flex items-center gap-2.5">
+                                    {/* Search Input */}
+                                    <div className="relative w-full sm:w-48">
+                                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                                        <input
+                                            type="text"
+                                            value={logsSearchQuery}
+                                            onChange={(e) => setLogsSearchQuery(e.target.value)}
+                                            placeholder="Search in logs..."
+                                            className="h-8 w-full rounded-md border border-white/10 bg-slate-950/60 pl-8 pr-6 text-xs text-white outline-none placeholder:text-slate-600 transition-all focus:border-cyan-500/40 focus:bg-slate-950"
+                                        />
+                                        {logsSearchQuery && (
+                                            <button 
+                                                onClick={() => setLogsSearchQuery('')}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 hover:text-white"
+                                            >
+                                                ×
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Collapse Button */}
+                                    <button
+                                        onClick={() => setConsoleCollapsed(!consoleCollapsed)}
+                                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-slate-400 transition-colors hover:border-white/15 hover:text-white"
+                                        title={consoleCollapsed ? "Expand Terminal" : "Collapse Terminal"}
+                                    >
+                                        {consoleCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Toolbar */}
+                            <div className="flex flex-col gap-3 border-b border-white/[0.08] bg-white/[0.02] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                {/* Filters */}
+                                <div className="flex flex-wrap gap-1.5">
+                                    {(['all', 'build', 'runtime', 'system', 'error'] as const).map((filter) => {
+                                        const count = logs.filter(l => {
+                                            if (filter === 'all') return true;
+                                            if (filter === 'build') return l.type === 'build';
+                                            if (filter === 'runtime') return l.type === 'runtime';
+                                            if (filter === 'system') return l.type === 'system';
+                                            return l.level === 'error' || l.type === 'error' || /failed|error|exception/i.test(l.message || l.output || '');
+                                        }).length;
+
+                                        return (
+                                            <button
+                                                key={filter}
+                                                onClick={() => setLogFilter(filter)}
+                                                className={clsx(
+                                                    'rounded-md px-2.5 py-1 text-xs font-black uppercase transition-all',
+                                                    logFilter === filter
+                                                        ? 'bg-cyan-500/15 border border-cyan-500/25 text-cyan-300'
+                                                        : 'border border-white/5 bg-transparent text-slate-500 hover:border-white/10 hover:text-slate-300'
+                                                )}
+                                            >
+                                                {filter} <span className="ml-1 text-[10px] opacity-70">({count})</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="secondary"
+                                        className="h-8 px-2.5 text-xs flex items-center gap-1.5"
+                                        onClick={handleCopyLogs}
+                                        disabled={!filteredLogs.length}
+                                    >
+                                        <Copy size={13} /> Copy
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        className="h-8 px-2.5 text-xs flex items-center gap-1.5"
+                                        onClick={handleDownloadLogs}
+                                        disabled={!filteredLogs.length}
+                                    >
+                                        <Download size={13} /> Download
+                                    </Button>
+                                    <div className="h-4 w-[1px] bg-white/[0.08]" />
+                                    <Button
+                                        variant="secondary"
+                                        className={clsx('h-8 text-xs px-2.5 flex items-center gap-1.5', logsPaused && 'border-amber-500/20 bg-amber-500/5 text-amber-300')}
+                                        onClick={() => setLogsPaused(v => !v)}
+                                    >
                                         {logsPaused ? <><Play size={13} /> Resume</> : <><Pause size={13} /> Pause</>}
                                     </Button>
-                                    <Button variant="secondary" className="h-8 text-xs" onClick={() => setAutoScroll(v => !v)}>
-                                        {autoScroll ? 'Auto ↓ on' : 'Auto ↓ off'}
+                                    <Button
+                                        variant="secondary"
+                                        className={clsx('h-8 text-xs px-2.5', autoScroll && 'border-cyan-500/20 bg-cyan-500/5 text-cyan-300')}
+                                        onClick={() => setAutoScroll(v => !v)}
+                                    >
+                                        {autoScroll ? 'Auto ↓' : 'Manual Scroll'}
                                     </Button>
                                 </div>
                             </div>
-                            <div ref={consoleRef} className="terminal-scrollbar h-[500px] overflow-auto bg-slate-950/80 p-4">
-                                {logs.length
-                                    ? logs.map((log) => <LogLine key={log.id} log={log} />)
-                                    : <p className="font-mono text-xs text-slate-700">No log output recorded yet.</p>}
+
+                            {/* Terminal Logs Area */}
+                            <div 
+                                className={clsx(
+                                    'transition-all duration-300 ease-in-out bg-slate-950/80 overflow-hidden',
+                                    consoleCollapsed ? 'h-0' : 'h-[500px]'
+                                )}
+                            >
+                                <div ref={consoleRef} className="terminal-scrollbar h-full overflow-auto p-4 space-y-1">
+                                    {filteredLogs.length ? (
+                                        filteredLogs.map((log) => (
+                                            <LogLine key={log.id} log={log} searchQuery={logsSearchQuery} />
+                                        ))
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-500 font-mono text-xs gap-1 py-12">
+                                            <p>No log entries found.</p>
+                                            {logsSearchQuery && <p className="text-[10px] opacity-75">Try modifying your search query or switching filters.</p>}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </Panel>
 
