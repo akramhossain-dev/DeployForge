@@ -12,6 +12,7 @@ import { AccountService } from '../services/account.service';
 import { apiError, cookie } from '../utils/http';
 import { BackupService } from '../services/backup.service';
 import { VPSService } from '../services/vps.service';
+import { MonitoringService } from '../services/monitoring.service';
 
 const restoreBackupSchema = z.object({
     filename: z.string().min(1),
@@ -547,6 +548,22 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         if (!vps) return error(reply, 404, 'VPS not found', 'NOT_FOUND');
         const metrics = await VPSService.getLiveMetrics(vps.userId, id);
         return { success: true, data: metrics };
+    });
+
+    fastify.get('/vps/:id/history', { preHandler: [(fastify as any).requireModerator] }, async (request, reply) => {
+        const { id } = idParamsSchema.parse(request.params);
+        const vps = await prisma.vPS.findUnique({ where: { id } });
+        if (!vps) return error(reply, 404, 'VPS not found', 'NOT_FOUND');
+
+        const querySchema = z.object({
+            range: z.enum(['24h', '7d', '30d', 'custom']).default('24h'),
+            from: z.string().optional(),
+            to: z.string().optional(),
+        });
+
+        const { range, from, to } = querySchema.parse(request.query);
+        const history = await MonitoringService.getHealthHistory(id, range, from, to);
+        return { success: true, data: history };
     });
 
     fastify.post('/vps/:id/test-connection', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {

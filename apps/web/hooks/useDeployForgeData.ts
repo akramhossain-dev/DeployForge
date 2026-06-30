@@ -673,6 +673,22 @@ export function useAdminVpsServerInfo(vpsId?: string) {
     });
 }
 
+export function useAdminVpsHealthHistory(vpsId?: string, range = '24h', from?: string, to?: string, enabled = true) {
+    return useQuery({
+        queryKey: ['admin', 'vps', vpsId, 'health-history', range, from, to] as const,
+        queryFn: () => {
+            const queryParams = new URLSearchParams();
+            queryParams.set('range', range);
+            if (from) queryParams.set('from', from);
+            if (to) queryParams.set('to', to);
+            return api.get<any[]>(`/admin/vps/${vpsId}/history?${queryParams.toString()}`);
+        },
+        enabled: !!vpsId && enabled,
+        staleTime: 10000,
+        retry: false,
+    });
+}
+
 export function useAdminTestVpsConnection() {
     const queryClient = useQueryClient();
 

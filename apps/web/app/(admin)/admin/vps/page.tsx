@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
     Activity, Cpu, HardDrive, Info, Loader2,
     MemoryStick, RefreshCw, Server, Trash2, User, WifiOff,
-    CheckCircle2, XCircle, Clock
+    CheckCircle2, XCircle, Clock, BarChart2
 } from 'lucide-react';
 import clsx from 'clsx';
 import { ErrorState, PageHeader, SkeletonBlock, AppModal, Button } from '@/components/ui';
@@ -15,9 +15,11 @@ import {
     useAdminVpsLiveMetrics,
     useAdminVpsServerInfo,
     useAdminTestVpsConnection,
+    useAdminVpsHealthHistory,
 } from '@/hooks/useDeployForgeData';
 import LiveMonitorTab from '@/app/(app)/vps/LiveMonitorTab';
 import ServerInfoTab from '@/app/(app)/vps/ServerInfoTab';
+import HistoryMonitorTab from '@/app/(app)/vps/HistoryMonitorTab';
 
 // ── Radial progress ring ──────────────────────────────────────────────────────
 function MetricRing({ value, color }: { value: number; color: string }) {
@@ -69,6 +71,7 @@ export default function AdminVpsPage() {
 
     const [monitorVps, setMonitorVps] = useState<any | null>(null);
     const [infoVps,    setInfoVps]    = useState<any | null>(null);
+    const [historyVps, setHistoryVps] = useState<any | null>(null);
     const [testingId,  setTestingId]  = useState<string | null>(null);
 
     const [confirmModal, setConfirmModal] = useState<{
@@ -281,7 +284,7 @@ export default function AdminVpsPage() {
                                     </div>
 
                                     {/* ── Action grid ── */}
-                                    <div className="mt-3 grid grid-cols-4 gap-2">
+                                    <div className="mt-3 grid grid-cols-5 gap-2">
                                         <Button
                                             type="button"
                                             variant="secondary"
@@ -299,6 +302,15 @@ export default function AdminVpsPage() {
                                             title="Live Monitor"
                                         >
                                             <Activity size={14} />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="col-span-1 h-9 px-0 text-xs justify-center"
+                                            onClick={() => setHistoryVps(server)}
+                                            title="Monitoring History"
+                                        >
+                                            <BarChart2 size={14} />
                                         </Button>
                                         <Button
                                             type="button"
@@ -393,6 +405,21 @@ export default function AdminVpsPage() {
                     <ServerInfoTab
                         vps={infoVps}
                         useServerInfoHook={useAdminVpsServerInfo}
+                    />
+                )}
+            </AppModal>
+
+            {/* ── History Monitor modal ── */}
+            <AppModal
+                open={!!historyVps}
+                onClose={() => setHistoryVps(null)}
+                title={`Monitoring History — ${historyVps?.name ?? ''}`}
+                size="xl"
+            >
+                {historyVps && (
+                    <HistoryMonitorTab
+                        vps={historyVps}
+                        useHistoryMetricsHook={useAdminVpsHealthHistory}
                     />
                 )}
             </AppModal>

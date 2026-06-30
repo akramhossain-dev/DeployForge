@@ -8,11 +8,12 @@ import { useVpsHealthHistory } from '@/hooks/useDeployForgeData';
 
 interface HistoryMonitorTabProps {
     vps: any | null;
+    useHistoryMetricsHook?: (vpsId?: string, range?: string, from?: string, to?: string, enabled?: boolean) => any;
 }
 
 type RangeOption = '24h' | '7d' | '30d' | 'custom';
 
-export default function HistoryMonitorTab({ vps }: HistoryMonitorTabProps) {
+export default function HistoryMonitorTab({ vps, useHistoryMetricsHook }: HistoryMonitorTabProps) {
     const [range, setRange] = useState<RangeOption>('24h');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
@@ -38,7 +39,9 @@ export default function HistoryMonitorTab({ vps }: HistoryMonitorTabProps) {
         }
     }, [range]);
 
-    const { data, isLoading, isError, error, refetch } = useVpsHealthHistory(
+    const useHistoryHook = useHistoryMetricsHook || useVpsHealthHistory;
+
+    const { data, isLoading, isError, error, refetch } = useHistoryHook(
         vps?.id,
         queryParams.range,
         queryParams.from,
