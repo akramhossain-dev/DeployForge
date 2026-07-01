@@ -38,7 +38,7 @@ Responsible for user management, webhook event handling, build orchestration, st
 * **Fastify Server (`apps/api`):** Built with Fastify. Houses services for user authentication, SSH command orchestration, project configurations, and sandbox executions.
 * **BullMQ Task Processor:** Directs async server setups, framework detection, docker builds, and metrics polls. Offloads heavy operations from the main HTTP request loop.
 * **Redis Cache & Broker:** Serves as the message broker for BullMQ and stores ephemeral session caching.
-* **PostgreSQL & Prisma:** Core system metadata repository. Includes relational schemas for projects, deployments, domains, servers, user tokens, and security trails.
+* **PostgreSQL & Prisma:** Core system metadata repository. Includes relational schemas for projects, project memberships (RBAC), invitations, deployments, domains, servers, user tokens, and security trails. Allows role-based access checks at the query and middleware levels.
 
 ### 1.2 The Data Plane (User Virtual Private Servers)
 The remote hosting environment where user applications execute.

@@ -128,3 +128,16 @@ An integrated, web-based explorer designed to manage files on target VPS nodes d
 * **Integrated Search:** Instant path search for files and folders by name directly within the browser interface.
 * **Archive Tools:** Compress multiple items into a single `.zip` file or extract compressed archives.
 * **File Properties:** View detailed metadata including size, owner, group, permissions, and modification timestamps.
+
+---
+
+## 11. Team Collaboration & Project Sharing
+
+Collaborate with multiple developers, administrators, or viewers on shared projects:
+* **Role-Based Access Control (RBAC):** Projects support granular member roles:
+  - **OWNER / ADMIN:** Full control over project configurations, deleting, and team member operations.
+  - **DEVELOPER:** Can create/update deployments, trigger rollbacks, manage environment variables, and restart containers.
+  - **VIEWER:** Read-only access to deployments, logs, domains, and metrics.
+* **Team Console:** A dedicated management interface at `/team` to invite members, update roles, or revoke pending invitations.
+* **Incoming Invites Manager:** Invitees can view and accept or decline incoming invitations from their user dashboard.
+* **Project Boundary Isolation:** All active domains, deployment runs, sandboxes, and logs respect membership scopes. Only authorized members can interact with resources.

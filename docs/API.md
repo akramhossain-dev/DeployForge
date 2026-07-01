@@ -414,3 +414,54 @@ All admin endpoints require authentication as an `ADMIN` or `SUPER_ADMIN` role v
 ### `GET /public/stats`
 Publicly accessible platform statistics (total users, deployments, servers — for landing page display).
 * **Auth:** None
+
+---
+
+## 20. Projects & Collaboration API (`/projects`)
+
+All routes require authentication (`Auth: Required`) and validate user ownership or membership role.
+
+### `GET /projects`
+Retrieve all projects the authenticated user owns or is a collaborator/member of.
+* **Response:** Array of projects, including creator metadata, list of project members (with their user profiles and roles), and basic deployment status list.
+
+### `GET /projects/:projectId/members`
+Retrieve all active members and pending invitations for a specific project.
+* **Response:** `{ members: [...], invites: [...] }`
+
+### `POST /projects/:projectId/invites`
+Invite a new collaborator to the project.
+* **Role Check:** Only `OWNER` or `ADMIN` can invite.
+* **Body:** `{ email, role }` where role must be one of `OWNER`, `ADMIN`, `DEVELOPER`, `VIEWER`.
+* **Response:** `{ invite: { id, email, role, token, expiresAt, ... } }`
+
+### `DELETE /projects/:projectId/invites/:inviteId`
+Revoke a pending project invitation.
+* **Role Check:** Only `OWNER` or `ADMIN`.
+
+### `PATCH /projects/:projectId/members/:memberId`
+Update the role of an existing project member.
+* **Role Check:** Only `OWNER` or `ADMIN`. Project creator cannot be modified.
+* **Body:** `{ role }`
+
+### `DELETE /projects/:projectId/members/:memberId`
+Remove a member from the project.
+* **Role Check:** Users can remove themselves. `OWNER` or `ADMIN` can remove other members. Project creator cannot be removed.
+
+---
+
+## 21. Project Invitations API (`/invitations`)
+
+For users managing invitations sent to them.
+
+### `GET /invitations`
+Retrieve all active, non-expired project invitations sent to the currently authenticated user's email.
+* **Auth:** Required
+
+### `POST /invitations/:inviteId/accept`
+Accept a project invitation, adding the user as a project member with the invited role.
+* **Auth:** Required
+
+### `POST /invitations/:inviteId/decline`
+Decline and delete the project invitation.
+* **Auth:** Required

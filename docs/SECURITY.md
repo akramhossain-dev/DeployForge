@@ -39,12 +39,20 @@ The API validates all environment variables at startup using Zod (`apps/api/src/
 * **Immediate Revocation:** `authGuard` validates `sessionId` against active DB records on every request.
 * **Replay Protection:** Reused refresh tokens trigger full session revocation for that user.
 
-### 3.2 Admin Authentication (Separate System)
+### 3.2 Project Isolation & Role-Based Access Control (RBAC)
+DeployForge enforces project-scoped boundary controls where all primary entities (Deployments, Domains, Sandboxes, VPS) are bound to a parent `Project`.
+* **Membership Verification:** Every resource request is validated against the user's project member role inside `ProjectMember`.
+* **Role Permissions Boundary:**
+  * **OWNER / ADMIN:** Full administrative control. Can delete/rename projects, manage team members (invite, change roles, revoke), link new custom domains, attach/remove VPS nodes, manage deployment lifecycles, and edit environment variables.
+  * **DEVELOPER:** Write-access to deployments. Can create and restart deployments, rollback versions, edit environment variables, and view domains. Cannot manage members, delete projects, or configure domains.
+  * **VIEWER:** Read-only access. Can inspect deployment logs, metrics, domain links, and members. Restricted from triggering builds, restarts, rollbacks, modifying env files, or managing teams.
+
+### 3.3 Admin Authentication (Separate System)
 * **Isolated Model:** `AdminUser` and `AdminSession` are fully separate from regular `User` sessions.
 * **Brute-Force Lockout:** Configurable via `ADMIN_MAX_ATTEMPTS` (default `5`) and `ADMIN_LOCKOUT_TIME` (default `900` seconds).
 * **Separate Secret:** `ADMIN_JWT_SECRET` signs admin tokens — distinct from user `JWT_SECRET`.
 
-### 3.3 Security Audit Logs
+### 3.4 Security Audit Logs
 Critical actions are written to the `AuditLog` table:
 * **Scope:** `auth`, `sessions`, `password`, `github`, `account` categories.
 * **Metadata:** IP address, OS, browser, device parsed from user-agent.
