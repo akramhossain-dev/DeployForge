@@ -355,6 +355,8 @@ export async function buildApp() {
     await app.register(import('./routes/vps'), { prefix: '/vps' });
     await app.register(import('./routes/deploy'), { prefix: '/deploy' });
     await app.register(import('./routes/deployments'), { prefix: '/deployments' });
+    await app.register(import('./routes/projects'), { prefix: '/projects' });
+    await app.register(import('./routes/invitations'), { prefix: '/invitations' });
     await app.register(import('./routes/ws'), { prefix: '/ws' });
     await app.register(import('./routes/sandbox'), { prefix: '/sandbox' });
     await app.register(import('./routes/domain'), { prefix: '/domain' });

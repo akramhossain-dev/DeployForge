@@ -141,7 +141,21 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, _reply) => {
         const domains = await prisma.domain.findMany({
-            where: { deployment: { userId: request.user.id } },
+            where: {
+                deployment: {
+                    OR: [
+                        { userId: request.user.id },
+                        {
+                            project: {
+                                OR: [
+                                    { userId: request.user.id },
+                                    { members: { some: { userId: request.user.id } } }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
             include: { deployment: { select: { id: true, name: true, port: true, vpsId: true } } },
             orderBy: { createdAt: 'desc' },
         });
@@ -158,7 +172,19 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         const domains = await prisma.domain.findMany({
             where: {
                 deploymentId,
-                deployment: { userId: request.user.id },
+                deployment: {
+                    OR: [
+                        { userId: request.user.id },
+                        {
+                            project: {
+                                OR: [
+                                    { userId: request.user.id },
+                                    { members: { some: { userId: request.user.id } } }
+                                ]
+                            }
+                        }
+                    ]
+                },
                 status: { not: 'DELETED' },
             },
             orderBy: { createdAt: 'desc' },

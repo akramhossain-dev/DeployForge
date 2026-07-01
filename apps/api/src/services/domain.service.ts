@@ -63,7 +63,16 @@ export class DomainService {
             include: { vps: true, domains: true },
         });
         if (!deployment) throw domainError('domain_bind', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
-        if (deployment.userId !== userId) throw domainError('domain_bind', 'Unauthorized', 'UNAUTHORIZED');
+        
+        const isOwner = deployment.userId === userId;
+        const isMember = await prisma.projectMember.findFirst({
+            where: {
+                projectId: deployment.projectId,
+                userId,
+                role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] }
+            }
+        });
+        if (!isOwner && !isMember) throw domainError('domain_bind', 'Unauthorized', 'UNAUTHORIZED');
         if (!deployment.port) throw domainError('domain_bind', 'Deployment does not have an assigned port', 'DOMAIN_BIND_FAILED');
 
         const existing = await prisma.domain.findFirst({
@@ -162,7 +171,22 @@ export class DomainService {
 
     static async removeDomain(userId: string, domainId: string) {
         const domain = await prisma.domain.findFirst({
-            where: { id: domainId, deployment: { userId } },
+            where: {
+                id: domainId,
+                OR: [
+                    { deployment: { userId } },
+                    {
+                        deployment: {
+                            project: {
+                                OR: [
+                                    { userId },
+                                    { members: { some: { userId, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            },
             include: { vps: true },
         });
         if (!domain) throw Object.assign(new Error('Domain not found'), { statusCode: 404 });
@@ -212,7 +236,22 @@ export class DomainService {
 
     static async issueSSL(userId: string, domainId: string) {
         const domain = await prisma.domain.findFirst({
-            where: { id: domainId, deployment: { userId } },
+            where: {
+                id: domainId,
+                OR: [
+                    { deployment: { userId } },
+                    {
+                        deployment: {
+                            project: {
+                                OR: [
+                                    { userId },
+                                    { members: { some: { userId, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            },
             include: { vps: true },
         });
 
@@ -267,7 +306,22 @@ export class DomainService {
 
     static async setAutoHttps(userId: string, domainId: string, enabled: boolean) {
         const domain = await prisma.domain.findFirst({
-            where: { id: domainId, deployment: { userId } },
+            where: {
+                id: domainId,
+                OR: [
+                    { deployment: { userId } },
+                    {
+                        deployment: {
+                            project: {
+                                OR: [
+                                    { userId },
+                                    { members: { some: { userId, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            },
             include: { vps: true },
         });
         if (!domain) throw Object.assign(new Error('Domain not found'), { statusCode: 404 });

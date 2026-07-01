@@ -51,7 +51,15 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         try {
             const { projectId, repositoryId, vpsId, branch, autoDeploy, domainName, env, mode } = githubDeploySchema.parse(request.body);
             const project = projectId
-                ? await prisma.project.findFirst({ where: { id: projectId, userId: request.user.id } })
+                ? await prisma.project.findFirst({
+                    where: {
+                        id: projectId,
+                        OR: [
+                            { userId: request.user.id },
+                            { members: { some: { userId: request.user.id, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                        ]
+                    }
+                  })
                 : await projectFromRepository(request.user.id, repositoryId, branch);
 
             if (!project) {
@@ -135,16 +143,37 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 });
             }
 
+            const targetName = projectName.replace(/[^A-Za-z0-9._ -]/g, '').trim() || 'Uploaded project';
             const project = projectId
-                ? await prisma.project.findFirst({ where: { id: projectId, userId: request.user.id } })
-                : await prisma.project.create({
-                    data: {
-                        userId: request.user.id,
-                        name: projectName.replace(/[^A-Za-z0-9._ -]/g, '').trim() || 'Uploaded project',
-                        repositoryUrl: `upload://${safeName}`,
-                        branch: 'upload',
-                    },
-                });
+                ? await prisma.project.findFirst({
+                    where: {
+                        id: projectId,
+                        OR: [
+                            { userId: request.user.id },
+                            { members: { some: { userId: request.user.id, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                        ]
+                    }
+                  })
+                : await (async () => {
+                    const existing = await prisma.project.findFirst({
+                        where: {
+                            userId: request.user.id,
+                            name: targetName,
+                            repositoryUrl: { startsWith: 'upload://' }
+                        }
+                    });
+                    if (existing) {
+                        return existing;
+                    }
+                    return prisma.project.create({
+                        data: {
+                            userId: request.user.id,
+                            name: targetName,
+                            repositoryUrl: `upload://${safeName}`,
+                            branch: 'upload',
+                        },
+                    });
+                })();
 
             if (!project) {
                 return reply.status(404).send({
@@ -179,7 +208,19 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const deployments = await prisma.deployment.findMany({
-            where: { userId: request.user.id },
+            where: {
+                OR: [
+                    { userId: request.user.id },
+                    {
+                        project: {
+                            OR: [
+                                { userId: request.user.id },
+                                { members: { some: { userId: request.user.id } } }
+                            ]
+                        }
+                    }
+                ]
+            },
             include: {
                 project: true,
                 vps: {
@@ -200,7 +241,22 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         const { id } = idParamsSchema.parse(request.params);
         const logs = await prisma.deploymentLog.findMany({
-            where: { deploymentId: id, deployment: { userId: request.user.id } },
+            where: {
+                deploymentId: id,
+                deployment: {
+                    OR: [
+                        { userId: request.user.id },
+                        {
+                            project: {
+                                OR: [
+                                    { userId: request.user.id },
+                                    { members: { some: { userId: request.user.id } } }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
             orderBy: { createdAt: 'asc' },
         });
         return { success: true, data: logs };

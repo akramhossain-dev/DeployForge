@@ -41,7 +41,20 @@ export async function verifyDeploymentSocketAccess(deploymentId: string, token: 
     if (!session) return null;
 
     const deployment = await prisma.deployment.findFirst({
-        where: { id: deploymentId, userId: session.userId },
+        where: {
+            id: deploymentId,
+            OR: [
+                { userId: session.userId },
+                {
+                    project: {
+                        OR: [
+                            { userId: session.userId },
+                            { members: { some: { userId: session.userId } } }
+                        ]
+                    }
+                }
+            ]
+        },
         select: { id: true },
     });
 

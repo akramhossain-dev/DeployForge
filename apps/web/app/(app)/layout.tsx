@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     Bell, FolderOpen, Github, Globe, LayoutDashboard,
-    LogOut, Menu, Rocket, Server, Settings, Terminal, X,
+    LogOut, Menu, Rocket, Server, Settings, Terminal, X, Users,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useMe } from '@/hooks/useDeployForgeData';
@@ -23,6 +23,7 @@ const NAV_GROUPS = [
             { name: 'Overview',    icon: LayoutDashboard, href: '/dashboard' },
             { name: 'Deployments', icon: Rocket,          href: '/deployments' },
             { name: 'Repositories',icon: Github,           href: '/repositories' },
+            { name: 'Team',        icon: Users,            href: '/team' },
         ],
     },
     {

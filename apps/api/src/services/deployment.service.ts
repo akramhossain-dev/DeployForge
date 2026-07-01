@@ -77,14 +77,37 @@ export class DeploymentService {
     }
 
     static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: any; mode?: string } = {}) {
-        const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
-        const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
-        if (!project || !vps) throw new DeploymentError('pending', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
+        const project = await prisma.project.findFirst({
+            where: {
+                id: projectId,
+                OR: [
+                    { userId },
+                    { members: { some: { userId, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                ]
+            }
+        });
+        if (!project) throw new DeploymentError('pending', 'Project not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
+
+        const vps = await prisma.vPS.findFirst({
+            where: {
+                id: vpsId,
+                OR: [
+                    { userId },
+                    { userId: project.userId }
+                ]
+            }
+        });
+        if (!vps) throw new DeploymentError('pending', 'VPS not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
+
         const mode = metadata.mode === 'sandbox' ? 'sandbox' : 'production';
         const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, metadata.domainName);
         const encryptedEnv = EnvironmentService.encryptEnv(metadata.env);
 
-        const githubAccount = await prisma.gitHubAccount.findUnique({ where: { userId } });
+        const githubAccount = await prisma.gitHubAccount.findFirst({
+            where: {
+                userId: { in: [userId, project.userId] }
+            }
+        });
         if (!githubAccount) throw new DeploymentError('pending', 'GitHub account not connected', 'GITHUB_NOT_CONNECTED');
 
         const accessToken = EnvironmentService.decrypt(githubAccount.accessToken);
@@ -110,7 +133,7 @@ export class DeploymentService {
         });
 
         if (mode === 'production' && !metadata.skipWebhookRegistration) {
-            await GitHubDeploymentService.ensureRepositoryWebhook(userId, project.repositoryUrl, deployment.id);
+            await GitHubDeploymentService.ensureRepositoryWebhook(githubAccount.userId, project.repositoryUrl, deployment.id);
         }
 
         await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from GitHub for ${project.repositoryUrl} on branch ${branch}` : `Deployment queued from GitHub for ${project.repositoryUrl} on branch ${branch}`, 'system');
@@ -136,9 +159,27 @@ export class DeploymentService {
     }
 
     static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: any; mode?: string }) {
-        const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
-        const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId } });
-        if (!project || !vps) throw new DeploymentError('uploading', 'Project or VPS not found', 'PROJECT_OR_VPS_NOT_FOUND');
+        const project = await prisma.project.findFirst({
+            where: {
+                id: projectId,
+                OR: [
+                    { userId },
+                    { members: { some: { userId, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                ]
+            }
+        });
+        if (!project) throw new DeploymentError('uploading', 'Project not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
+
+        const vps = await prisma.vPS.findFirst({
+            where: {
+                id: vpsId,
+                OR: [
+                    { userId },
+                    { userId: project.userId }
+                ]
+            }
+        });
+        if (!vps) throw new DeploymentError('uploading', 'VPS not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
         const mode = upload.mode === 'sandbox' ? 'sandbox' : 'production';
         const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, upload.domainName);
         const encryptedEnv = EnvironmentService.encryptEnv(upload.env);
@@ -624,12 +665,37 @@ export class DeploymentService {
         throw new DeploymentError('port_alloc', 'No available ports in range 3000-9000', 'NO_AVAILABLE_PORT');
     }
 
-    static async stopDeployment(userId: string, deploymentId: string) {
+    private static async verifyDeploymentAndRole(userId: string, deploymentId: string, allowedRoles: ('OWNER' | 'ADMIN' | 'DEVELOPER' | 'VIEWER')[]): Promise<any> {
         const deployment = await prisma.deployment.findFirst({
-            where: { id: deploymentId, userId },
-            include: { vps: true, project: true },
+            where: { id: deploymentId },
+            include: {
+                vps: true,
+                domains: true,
+                project: {
+                    include: {
+                        members: {
+                            where: { userId }
+                        }
+                    }
+                },
+                history: { orderBy: { createdAt: 'desc' } }
+            }
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+
+        const isDirectOwner = deployment.userId === userId || deployment.project.userId === userId;
+        if (isDirectOwner) return deployment;
+
+        const member = deployment.project.members[0];
+        if (!member || !allowedRoles.includes(member.role as any)) {
+            throw new DeploymentError('forbidden', 'Access denied: insufficient project role permissions', 'FORBIDDEN');
+        }
+
+        return deployment;
+    }
+
+    static async stopDeployment(userId: string, deploymentId: string) {
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
         if (deployment.mode === 'sandbox') {
             return this.deleteDeployment(userId, deploymentId);
         }
@@ -657,11 +723,7 @@ export class DeploymentService {
     }
 
     static async pauseDeployment(userId: string, deploymentId: string) {
-        const deployment = await prisma.deployment.findFirst({
-            where: { id: deploymentId, userId },
-            include: { vps: true, project: true },
-        });
-        if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
         this.assertLifecycleTransition(deployment.status as any, 'PAUSED');
 
         const ssh = new SSHService();
@@ -690,11 +752,16 @@ export class DeploymentService {
     }
 
     static async deleteDeployment(userId: string, deploymentId: string) {
-        const deployment = await prisma.deployment.findFirst({
-            where: { id: deploymentId, userId },
-            include: { vps: true, domains: true, history: true, project: true },
-        });
-        if (!deployment) throw new DeploymentError('delete', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
+        if (deployment.mode !== 'sandbox') {
+            const isDirectOwner = deployment.userId === userId || deployment.project.userId === userId;
+            const member = deployment.project.members[0];
+            const role = member?.role;
+            if (!isDirectOwner && role !== 'OWNER' && role !== 'ADMIN') {
+                throw new DeploymentError('forbidden', 'Access denied: only owner and admin can delete deployments', 'FORBIDDEN');
+            }
+        }
+
         if (deployment.status === 'DELETED') return { success: true, deleted: true };
         if (deployment.status === 'DELETING') return { success: true, deleting: true };
         this.assertLifecycleTransition(deployment.status as any, 'DELETING');
@@ -749,11 +816,7 @@ export class DeploymentService {
     }
 
     static async resumeDeployment(userId: string, deploymentId: string) {
-        const deployment = await prisma.deployment.findFirst({
-            where: { id: deploymentId, userId },
-            include: { vps: true, domains: true, project: true, history: { orderBy: { createdAt: 'desc' }, take: 1 } },
-        });
-        if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
         this.assertLifecycleTransition(deployment.status as any, 'RUNNING');
 
         const ssh = new SSHService();
@@ -817,11 +880,7 @@ export class DeploymentService {
     }
 
     static async restartDeployment(userId: string, deploymentId: string) {
-        const deployment = await prisma.deployment.findFirst({
-            where: { id: deploymentId, userId },
-            include: { vps: true, project: true },
-        });
-        if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
         if (!this.isStaticDeployment(deployment) && !deployment.containerId) {
             throw new DeploymentError('deploying', 'No active container found. Deployment was never started successfully.', 'NO_CONTAINER');
         }
@@ -872,7 +931,20 @@ export class DeploymentService {
 
     static async getStatus(userId: string, deploymentId: string) {
         const deployment = await prisma.deployment.findFirst({
-            where: { id: deploymentId, userId },
+            where: {
+                id: deploymentId,
+                OR: [
+                    { userId },
+                    {
+                        project: {
+                            OR: [
+                                { userId },
+                                { members: { some: { userId } } }
+                            ]
+                        }
+                    }
+                ]
+            },
             include: {
                 project: true,
                 vps: true,

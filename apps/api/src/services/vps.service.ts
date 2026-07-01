@@ -157,7 +157,23 @@ export class VPSService {
 
     static async list(userId: string) {
         const rows = await prisma.vPS.findMany({
-            where: { userId },
+            where: {
+                OR: [
+                    { userId },
+                    {
+                        deployments: {
+                            some: {
+                                project: {
+                                    OR: [
+                                        { userId },
+                                        { members: { some: { userId } } }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
             include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } },
             orderBy: { createdAt: 'desc' },
         });
@@ -167,7 +183,24 @@ export class VPSService {
 
     static async get(userId: string, id: string) {
         const vps = await prisma.vPS.findFirst({
-            where: { id, userId },
+            where: {
+                id,
+                OR: [
+                    { userId },
+                    {
+                        deployments: {
+                            some: {
+                                project: {
+                                    OR: [
+                                        { userId },
+                                        { members: { some: { userId } } }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
             include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } },
         });
         return vps ? this.sanitize(vps) : null;

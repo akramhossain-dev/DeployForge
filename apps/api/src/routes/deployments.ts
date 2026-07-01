@@ -22,7 +22,19 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
         const deployments = await prisma.deployment.findMany({
-            where: { userId: request.user.id },
+            where: {
+                OR: [
+                    { userId: request.user.id },
+                    {
+                        project: {
+                            OR: [
+                                { userId: request.user.id },
+                                { members: { some: { userId: request.user.id } } }
+                            ]
+                        }
+                    }
+                ]
+            },
             include: {
                 project: true,
                 vps: { include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } } },
@@ -39,7 +51,21 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
         const projects = await prisma.project.findMany({
-            where: { userId: request.user.id },
+            where: {
+                AND: [
+                    {
+                        OR: [
+                            { userId: request.user.id },
+                            { members: { some: { userId: request.user.id } } }
+                        ]
+                    },
+                    {
+                        deployments: {
+                            some: {}
+                        }
+                    }
+                ]
+            },
             include: {
                 deployments: {
                     select: {
@@ -151,7 +177,20 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         const deployment = await prisma.deployment.findFirst({
-            where: { id, userId: request.user.id }
+            where: {
+                id,
+                OR: [
+                    { userId: request.user.id },
+                    {
+                        project: {
+                            OR: [
+                                { userId: request.user.id },
+                                { members: { some: { userId: request.user.id } } }
+                            ]
+                        }
+                    }
+                ]
+            }
         });
         if (!deployment) {
             return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
@@ -165,7 +204,20 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         const deployment = await prisma.deployment.findFirst({
-            where: { id, userId: request.user.id }
+            where: {
+                id,
+                OR: [
+                    { userId: request.user.id },
+                    {
+                        project: {
+                            OR: [
+                                { userId: request.user.id },
+                                { members: { some: { userId: request.user.id, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                            ]
+                        }
+                    }
+                ]
+            }
         });
         if (!deployment) {
             return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
@@ -193,7 +245,20 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         const deployment = await prisma.deployment.findFirst({
-            where: { id, userId: request.user.id }
+            where: {
+                id,
+                OR: [
+                    { userId: request.user.id },
+                    {
+                        project: {
+                            OR: [
+                                { userId: request.user.id },
+                                { members: { some: { userId: request.user.id } } }
+                            ]
+                        }
+                    }
+                ]
+            }
         });
         if (!deployment) {
             return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
@@ -225,7 +290,20 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
         const deployment = await prisma.deployment.findFirst({
-            where: { id, userId: request.user.id },
+            where: {
+                id,
+                OR: [
+                    { userId: request.user.id },
+                    {
+                        project: {
+                            OR: [
+                                { userId: request.user.id },
+                                { members: { some: { userId: request.user.id, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
+                            ]
+                        }
+                    }
+                ]
+            },
             include: { project: true }
         });
         if (!deployment) {

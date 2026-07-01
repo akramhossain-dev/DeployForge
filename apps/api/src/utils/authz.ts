@@ -2,11 +2,30 @@ import prisma from '@deployforge/database';
 import { AccountService } from '../services/account.service';
 import { FastifyRequest } from 'fastify';
 
-export async function verifyDeploymentOwnership(userId: string, deploymentId: string, request?: FastifyRequest) {
+export async function verifyDeploymentOwnership(userId: string, deploymentId: string, request?: FastifyRequest, allowedRoles?: string[]) {
     const deployment = await prisma.deployment.findFirst({
         where: {
             id: deploymentId,
-            userId: userId
+            OR: [
+                { userId: userId },
+                {
+                    project: {
+                        OR: [
+                            { userId: userId },
+                            { members: { some: { userId: userId, ...(allowedRoles ? { role: { in: allowedRoles as any } } : {}) } } }
+                        ]
+                    }
+                }
+            ]
+        },
+        include: {
+            project: {
+                include: {
+                    members: {
+                        where: { userId }
+                    }
+                }
+            }
         }
     });
 
@@ -48,7 +67,21 @@ export async function verifyVpsOwnership(userId: string, vpsId: string, request?
     const vps = await prisma.vPS.findFirst({
         where: {
             id: vpsId,
-            userId: userId
+            OR: [
+                { userId: userId },
+                {
+                    deployments: {
+                        some: {
+                            project: {
+                                OR: [
+                                    { userId: userId },
+                                    { members: { some: { userId: userId } } }
+                                ]
+                            }
+                        }
+                    }
+                }
+            ]
         }
     });
 
@@ -91,7 +124,17 @@ export async function verifyDomainOwnership(userId: string, domainId: string, re
         where: {
             id: domainId,
             deployment: {
-                userId: userId
+                OR: [
+                    { userId: userId },
+                    {
+                        project: {
+                            OR: [
+                                { userId: userId },
+                                { members: { some: { userId: userId } } }
+                            ]
+                        }
+                    }
+                ]
             }
         },
         include: {
@@ -133,8 +176,6 @@ export async function verifyDomainOwnership(userId: string, domainId: string, re
 
     await verifyDeploymentOwnership(userId, domain.deploymentId, request);
 
-    await verifyVpsOwnership(userId, domain.vpsId, request);
-
     return domain;
 }
 
@@ -143,7 +184,17 @@ export async function verifySandboxOwnership(userId: string, deploymentId: strin
         where: {
             deploymentId: deploymentId,
             deployment: {
-                userId: userId
+                OR: [
+                    { userId: userId },
+                    {
+                        project: {
+                            OR: [
+                                { userId: userId },
+                                { members: { some: { userId: userId } } }
+                            ]
+                        }
+                    }
+                ]
             }
         },
         include: {

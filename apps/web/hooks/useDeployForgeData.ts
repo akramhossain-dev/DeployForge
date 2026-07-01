@@ -83,6 +83,9 @@ export const queryKeys = {
     adminSettings: ['admin', 'settings'] as const,
     deploymentEnv: (id: string) => ['deployments', id, 'env'] as const,
     deploymentEnvHistory: (id: string) => ['deployments', id, 'env', 'history'] as const,
+    projects: ['projects'] as const,
+    projectMembers: (projectId: string) => ['projects', projectId, 'members'] as const,
+    invitations: ['invitations'] as const,
 };
 
 function withQuery(path: string, params?: Record<string, string>) {
@@ -777,5 +780,110 @@ export function useRedeploy() {
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(newDeployment.id) });
         },
         onError: (err) => handleMutationError('Redeploy Failed', err),
+    });
+}
+
+export function useProjects() {
+    return useQuery({
+        queryKey: queryKeys.projects,
+        queryFn: () => api.get<any[]>('/projects'),
+        retry: false,
+    });
+}
+
+export function useProjectMembers(projectId?: string) {
+    return useQuery({
+        queryKey: queryKeys.projectMembers(projectId || 'none'),
+        queryFn: () => api.get<{ members: any[]; invites: any[] }>(`/projects/${projectId}/members`),
+        enabled: !!projectId,
+        retry: false,
+    });
+}
+
+export function useInvitations() {
+    return useQuery({
+        queryKey: queryKeys.invitations,
+        queryFn: () => api.get<any[]>('/invitations'),
+        retry: false,
+    });
+}
+
+export function useInviteCollaborator() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ projectId, email, role }: { projectId: string; email: string; role: string }) =>
+            api.post<any>(`/projects/${projectId}/invites`, { email, role }),
+        onSuccess: (_, { projectId }) => {
+            handleMutationSuccess('Invitation Sent', 'Collaborator was successfully invited to the project.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+        },
+        onError: (err) => handleMutationError('Invite Failed', err),
+    });
+}
+
+export function useRevokeInvitation() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ projectId, inviteId }: { projectId: string; inviteId: string }) =>
+            api.delete<any>(`/projects/${projectId}/invites/${inviteId}`),
+        onSuccess: (_, { projectId }) => {
+            handleMutationSuccess('Invitation Revoked', 'The invitation was successfully revoked.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+        },
+        onError: (err) => handleMutationError('Revoke Failed', err),
+    });
+}
+
+export function useUpdateMemberRole() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ projectId, memberId, role }: { projectId: string; memberId: string; role: string }) =>
+            api.patch<any>(`/projects/${projectId}/members/${memberId}`, { role }),
+        onSuccess: (_, { projectId }) => {
+            handleMutationSuccess('Role Updated', 'Collaborator role updated successfully.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+        },
+        onError: (err) => handleMutationError('Update Failed', err),
+    });
+}
+
+export function useRemoveMember() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ projectId, memberId }: { projectId: string; memberId: string }) =>
+            api.delete<any>(`/projects/${projectId}/members/${memberId}`),
+        onSuccess: (_, { projectId }) => {
+            handleMutationSuccess('Member Removed', 'Collaborator was successfully removed from the project.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+        },
+        onError: (err) => handleMutationError('Removal Failed', err),
+    });
+}
+
+export function useAcceptInvitation() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (inviteId: string) =>
+            api.post<any>(`/invitations/${inviteId}/accept`),
+        onSuccess: () => {
+            handleMutationSuccess('Invitation Accepted', 'You have successfully joined the project.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.invitations });
+            queryClient.invalidateQueries({ queryKey: queryKeys.projects });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+        },
+        onError: (err) => handleMutationError('Accept Failed', err),
+    });
+}
+
+export function useDeclineInvitation() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (inviteId: string) =>
+            api.post<any>(`/invitations/${inviteId}/decline`),
+        onSuccess: () => {
+            handleMutationSuccess('Invitation Declined', 'The invitation was successfully declined.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.invitations });
+        },
+        onError: (err) => handleMutationError('Decline Failed', err),
     });
 }
