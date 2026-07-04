@@ -48,18 +48,18 @@ export default function FileManagerPage({ params }: PageProps) {
     return (
         <div className="flex h-full flex-col gap-0 overflow-hidden">
             {}
-            <div className="flex shrink-0 items-center gap-3 border-b border-white/10 bg-slate-900/60 px-4 py-2">
+            <div className="flex shrink-0 items-center flex-wrap gap-2 border-b border-white/10 bg-slate-900/60 px-4 py-2">
                 <Link href="/file-manager" className="flex items-center gap-1.5 font-mono text-[11px] text-slate-600 hover:text-cyan-300 transition-colors">
                     <ArrowLeft size={11} />
-                    servers
+                    <span>servers</span>
                 </Link>
                 <span className="text-slate-800 font-mono text-xs">/</span>
-                <div className="flex items-center gap-2">
-                    <div className="flex h-5 w-5 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/10">
+                <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-5 w-5 items-center justify-center rounded border border-cyan-300/20 bg-cyan-300/10 shrink-0">
                         <Server size={10} className="text-cyan-300" />
                     </div>
-                    <span className="text-xs font-bold text-white">{vps.name}</span>
-                    <span className="font-mono text-[10px] text-slate-600">{vps.username}@{vps.ipAddress}</span>
+                    <span className="text-xs font-bold text-white truncate max-w-[150px] sm:max-w-none">{vps.name}</span>
+                    <span className="font-mono text-[10px] text-slate-600 truncate hidden sm:inline">{vps.username}@{vps.ipAddress}</span>
                 </div>
             </div>
 

@@ -22,7 +22,10 @@ export default async function projectRoutes(fastify: FastifyInstance) {
                 OR: [
                     { userId: request.user.id },
                     { members: { some: { userId: request.user.id } } }
-                ]
+                ],
+                deployments: {
+                    some: {}
+                }
             },
             include: {
                 user: { select: { id: true, name: true, email: true } },

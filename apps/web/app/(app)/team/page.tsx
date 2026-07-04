@@ -16,13 +16,15 @@ import {
     SkeletonBlock, StatusBadge, formatDate, inputClassName 
 } from '@/components/ui';
 
+const EMPTY_ARRAY: any[] = [];
+
 export default function TeamPage() {
     const { user: currentUser } = useAuthStore();
     const projectsQuery = useProjects();
     const invitationsQuery = useInvitations();
 
-    const projects = projectsQuery.data || [];
-    const receivedInvitations = invitationsQuery.data || [];
+    const projects = useMemo(() => projectsQuery.data || EMPTY_ARRAY, [projectsQuery.data]);
+    const receivedInvitations = invitationsQuery.data || EMPTY_ARRAY;
 
     const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 

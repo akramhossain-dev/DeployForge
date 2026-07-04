@@ -311,80 +311,81 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
     return (
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-2xl">
             {}
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-white/10 bg-slate-900/80 px-3 py-2">
-                {}
-                <div className="flex items-center gap-1 rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5">
-                    <button onClick={navigateUp} disabled={currentPath === '/'} title="Up" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200 disabled:opacity-25 disabled:cursor-not-allowed">
-                        <ArrowUp size={14} />
-                    </button>
-                    <button onClick={() => navigate('/')} title="Root" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200">
-                        <ArrowLeft size={14} />
-                    </button>
-                </div>
-
-                {}
-                <div className="flex flex-1 min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 font-mono">
-                    <Breadcrumb path={currentPath} onNavigate={navigate} />
-                </div>
-
-                {}
-                <div className="flex items-center gap-1">
-                    <button onClick={() => setShowSearch((v) => !v)} title="Search" className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${showSearch ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-300' : 'border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200'}`}>
-                        <Search size={13} />
-                    </button>
-                    <button onClick={() => setNewItemType('file')} title="New File" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 transition-colors hover:text-cyan-300">
-                        <FilePlus size={13} />
-                    </button>
-                    <button onClick={() => setNewItemType('directory')} title="New Folder" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 transition-colors hover:text-cyan-300">
-                        <FolderPlus size={13} />
-                    </button>
-                    <button onClick={() => setShowUpload(true)} className="flex h-7 items-center gap-1.5 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-2.5 text-[11px] font-bold text-cyan-300 transition-all hover:bg-cyan-300/15">
-                        <Upload size={12} /> Upload
-                    </button>
-                </div>
-
-                {}
-                {selected.size > 0 && (
-                    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-0.5">
-                        <button onClick={() => setClipboard({ paths: Array.from(selected), operation: 'copy' })} title="Copy" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors"><Copy size={13} /></button>
-                        <button onClick={() => setClipboard({ paths: Array.from(selected), operation: 'cut' })} title="Cut" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-amber-300 transition-colors"><Scissors size={13} /></button>
-                        <button onClick={() => confirmDelete(Array.from(selected))} title="Delete" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:text-rose-400 transition-colors"><Trash2 size={13} /></button>
-                        <button onClick={() => {
-                            setCompressInput({ paths: Array.from(selected) });
-                            setCompressName(selected.size === 1 ? `${basename(Array.from(selected)[0])}.zip` : 'archive.zip');
-                        }} title="Compress to ZIP" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors">
-                            <FileArchive size={13} />
+            <div className="flex shrink-0 flex-col md:flex-row md:items-center gap-2 border-b border-white/10 bg-slate-900/80 px-3 py-2">
+                {/* Navigation and Breadcrumbs Group */}
+                <div className="flex flex-1 items-center gap-1.5 min-w-0 w-full">
+                    <div className="flex items-center gap-1 rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5 shrink-0">
+                        <button onClick={navigateUp} disabled={currentPath === '/'} title="Up" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200 disabled:opacity-25 disabled:cursor-not-allowed">
+                            <ArrowUp size={14} />
                         </button>
-                        <button onClick={() => {
-                            Array.from(selected).forEach((path) => {
-                                const entry = entries.find(e => e.path === path);
-                                if (entry) {
-                                    if (entry.type === 'directory') {
-                                        downloadZip(vpsId, entry.path);
-                                    } else {
-                                        downloadFile(vpsId, entry.path);
-                                    }
-                                }
-                            });
-                        }} title="Download Selected" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors">
-                            <Download size={13} />
+                        <button onClick={() => navigate('/')} title="Root" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200">
+                            <ArrowLeft size={14} />
                         </button>
                     </div>
-                )}
-                {clipboard && (
-                    <button onClick={handlePaste} title={`Paste (${clipboard.operation})`} className="flex h-7 items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/15 transition-all">
-                        <Clipboard size={12} /> Paste
-                    </button>
-                )}
 
-                {}
-                <div className="flex items-center gap-1 ml-auto">
-                    <button onClick={() => refetch()} title="Refresh" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200 transition-colors">
-                        <RefreshCw size={12} className={isFetching ? 'animate-spin text-cyan-300' : ''} />
-                    </button>
-                    <div className="flex rounded-lg border border-white/10 overflow-hidden">
-                        <button onClick={() => setView('list')} title="List" className={`flex h-7 w-7 items-center justify-center transition-colors ${view === 'list' ? 'bg-cyan-300/15 text-cyan-300' : 'bg-white/[0.04] text-slate-600 hover:text-slate-300'}`}><List size={13} /></button>
-                        <button onClick={() => setView('grid')} title="Grid" className={`flex h-7 w-7 items-center justify-center transition-colors ${view === 'grid' ? 'bg-cyan-300/15 text-cyan-300' : 'bg-white/[0.04] text-slate-600 hover:text-slate-300'}`}><LayoutGrid size={13} /></button>
+                    <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 font-mono">
+                        <Breadcrumb path={currentPath} onNavigate={navigate} />
+                    </div>
+                </div>
+
+                {/* Actions and Views Group */}
+                <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 w-full md:w-auto shrink-0">
+                    <div className="flex flex-wrap items-center gap-1">
+                        <button onClick={() => setShowSearch((v) => !v)} title="Search" className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${showSearch ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-300' : 'border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200'}`}>
+                            <Search size={13} />
+                        </button>
+                        <button onClick={() => setNewItemType('file')} title="New File" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 transition-colors hover:text-cyan-300">
+                            <FilePlus size={13} />
+                        </button>
+                        <button onClick={() => setNewItemType('directory')} title="New Folder" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 transition-colors hover:text-cyan-300">
+                            <FolderPlus size={13} />
+                        </button>
+                        <button onClick={() => setShowUpload(true)} className="flex h-7 items-center gap-1.5 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-2.5 text-[11px] font-bold text-cyan-300 transition-all hover:bg-cyan-300/15">
+                            <Upload size={12} /> Upload
+                        </button>
+
+                        {selected.size > 0 && (
+                            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-0.5">
+                                <button onClick={() => setClipboard({ paths: Array.from(selected), operation: 'copy' })} title="Copy" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors"><Copy size={13} /></button>
+                                <button onClick={() => setClipboard({ paths: Array.from(selected), operation: 'cut' })} title="Cut" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-amber-300 transition-colors"><Scissors size={13} /></button>
+                                <button onClick={() => confirmDelete(Array.from(selected))} title="Delete" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:text-rose-400 transition-colors"><Trash2 size={13} /></button>
+                                <button onClick={() => {
+                                    setCompressInput({ paths: Array.from(selected) });
+                                    setCompressName(selected.size === 1 ? `${basename(Array.from(selected)[0])}.zip` : 'archive.zip');
+                                }} title="Compress to ZIP" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors">
+                                    <FileArchive size={13} />
+                                </button>
+                                <button onClick={() => {
+                                    Array.from(selected).forEach((path) => {
+                                        const entry = entries.find(e => e.path === path);
+                                        if (entry) {
+                                            if (entry.type === 'directory') {
+                                                downloadZip(vpsId, entry.path);
+                                            } else {
+                                                downloadFile(vpsId, entry.path);
+                                            }
+                                        }
+                                    });
+                                }} title="Download Selected" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-cyan-300 transition-colors">
+                                    <Download size={13} />
+                                </button>
+                            </div>
+                        )}
+                        {clipboard && (
+                            <button onClick={handlePaste} title={`Paste (${clipboard.operation})`} className="flex h-7 items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/15 transition-all">
+                                <Clipboard size={12} /> Paste
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-1 ml-auto md:ml-0">
+                        <button onClick={() => refetch()} title="Refresh" className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200 transition-colors">
+                            <RefreshCw size={12} className={isFetching ? 'animate-spin text-cyan-300' : ''} />
+                        </button>
+                        <div className="flex rounded-lg border border-white/10 overflow-hidden">
+                            <button onClick={() => setView('list')} title="List" className={`flex h-7 w-7 items-center justify-center transition-colors ${view === 'list' ? 'bg-cyan-300/15 text-cyan-300' : 'bg-white/[0.04] text-slate-600 hover:text-slate-300'}`}><List size={13} /></button>
+                            <button onClick={() => setView('grid')} title="Grid" className={`flex h-7 w-7 items-center justify-center transition-colors ${view === 'grid' ? 'bg-cyan-300/15 text-cyan-300' : 'bg-white/[0.04] text-slate-600 hover:text-slate-300'}`}><LayoutGrid size={13} /></button>
+                        </div>
                     </div>
                 </div>
             </div>

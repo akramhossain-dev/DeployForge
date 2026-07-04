@@ -328,6 +328,7 @@ export function useCreateGithubDeployment() {
         onSuccess: (deployment) => {
             handleMutationSuccess('Deployment Triggered', 'GitHub deployment has been successfully queued.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.projects });
             queryClient.setQueryData(queryKeys.deployment(deployment.id), deployment);
         },
         onError: (err) => handleMutationError('Deployment Trigger Failed', err),
@@ -354,6 +355,7 @@ export function useCreateUploadDeployment() {
         onSuccess: (deployment) => {
             handleMutationSuccess('Upload Completed', 'Deployment archive uploaded successfully.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.projects });
             queryClient.setQueryData(queryKeys.deployment(deployment.id), deployment);
         },
         onError: (err) => handleMutationError('Upload Deployment Failed', err),
@@ -367,6 +369,7 @@ export function useDeleteDeployment() {
         onSuccess: (_data, id) => {
             handleMutationSuccess('Deployment Deleted', 'Successfully stopped and removed the deployment.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.projects });
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
             queryClient.invalidateQueries({ queryKey: queryKeys.domains });
         },
@@ -787,6 +790,7 @@ export function useProjects() {
     return useQuery({
         queryKey: queryKeys.projects,
         queryFn: () => api.get<any[]>('/projects'),
+        select: (data) => data.filter(project => project.deployments && project.deployments.length > 0),
         retry: false,
     });
 }

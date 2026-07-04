@@ -43,7 +43,12 @@ export function FileList({
 
     const handleClick = (e: React.MouseEvent, entry: FileEntry) => {
         e.stopPropagation();
-        onSelect(entry.path, e.ctrlKey || e.metaKey, e.shiftKey);
+        const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+        if (isMobile) {
+            onOpen(entry);
+        } else {
+            onSelect(entry.path, e.ctrlKey || e.metaKey, e.shiftKey);
+        }
     };
 
     if (view === 'grid') {
@@ -73,6 +78,19 @@ export function FileList({
                                     : 'hover:bg-white/[0.05]'
                             }`}
                         >
+                            {/* Checkbox for selection in grid view */}
+                            <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                onClick={(e) => { e.stopPropagation(); onSelect(entry.path, true, false); }}
+                                className={`absolute top-1.5 left-1.5 h-3.5 w-3.5 rounded border cursor-pointer transition-all ${
+                                    isSelected
+                                        ? 'border-cyan-400 bg-cyan-400 accent-cyan-400 opacity-100'
+                                        : 'border-white/20 bg-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                                }`}
+                            />
+
                             {openingFile === entry.path ? (
                                 <div className="flex h-[28px] w-[28px] items-center justify-center shrink-0">
                                     <Loader2 size={20} className="animate-spin text-cyan-400" />
@@ -83,11 +101,6 @@ export function FileList({
                             <span className="w-full break-words text-[10px] font-medium leading-tight text-slate-400 line-clamp-2 group-hover:text-slate-200 transition-colors">
                                 {entry.name}
                             </span>
-                            {isSelected && (
-                                <div className="absolute top-1.5 right-1.5 h-3.5 w-3.5 rounded-full bg-cyan-400 flex items-center justify-center">
-                                    <svg viewBox="0 0 10 8" className="h-2 w-2 fill-slate-950"><path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                </div>
-                            )}
                         </div>
                     );
                 })}
@@ -153,8 +166,8 @@ export function FileList({
                                     onClick={(e) => { e.stopPropagation(); onSelect(entry.path, true, false); }}
                                     className={`h-3.5 w-3.5 rounded border cursor-pointer transition-all ${
                                         isSelected
-                                            ? 'border-cyan-400 bg-cyan-400 accent-cyan-400'
-                                            : 'border-white/20 bg-transparent opacity-0 group-hover:opacity-100'
+                                            ? 'border-cyan-400 bg-cyan-400 accent-cyan-400 opacity-100'
+                                            : 'border-white/20 bg-transparent opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
                                     }`}
                                 />
                             </div>
@@ -199,10 +212,18 @@ export function FileList({
 
                             {}
                             <div className="w-6 shrink-0 flex items-center justify-end relative h-5">
-                                <span className="text-[9px] text-slate-800 select-none font-mono group-hover:opacity-0 transition-opacity duration-150">
+                                <span className={`text-[9px] select-none font-mono transition-opacity duration-150 ${
+                                    isSelected 
+                                        ? 'opacity-0' 
+                                        : 'text-slate-800 group-hover:opacity-0'
+                                }`}>
                                     {String(idx + 1).padStart(2, '0')}
                                 </span>
-                                <div className="absolute inset-0 flex items-center justify-end opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150">
+                                <div className={`absolute inset-0 flex items-center justify-end transition-opacity duration-150 ${
+                                    isSelected
+                                        ? 'opacity-100 pointer-events-auto'
+                                        : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto sm:opacity-0'
+                                }`}>
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
