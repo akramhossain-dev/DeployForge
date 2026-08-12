@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
     Users, UserPlus, Mail, Shield, Trash2, Check, X, Clock, 
-    ArrowRight, ChevronDown, UserCheck, AlertCircle 
+    ChevronDown, AlertCircle, Loader2 
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { 
@@ -11,12 +11,28 @@ import {
     useInviteCollaborator, useRevokeInvitation, useUpdateMemberRole, 
     useRemoveMember, useAcceptInvitation, useDeclineInvitation 
 } from '@/hooks/useDeployForgeData';
-import { 
-    PageHeader, Panel, Button, EmptyState, ErrorState, 
-    SkeletonBlock, StatusBadge, formatDate, inputClassName 
-} from '@/components/ui';
+import { formatDate } from '@/components/ui';
+import clsx from 'clsx';
 
 const EMPTY_ARRAY: any[] = [];
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
+
+function StatusTag({ status }: { status?: string }) {
+    const s = String(status || 'VIEWER').toUpperCase();
+    const style = s === 'OWNER'
+        ? 'border-white bg-white text-black font-bold'
+        : s === 'ADMIN'
+        ? 'border-[#1F1F1F] bg-[#000000] text-emerald-400 font-semibold'
+        : s === 'DEVELOPER'
+        ? 'border-[#1F1F1F] bg-[#000000] text-cyan-400 font-semibold'
+        : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]';
+
+    return (
+        <span className={clsx('inline-flex items-center rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider', style)}>
+            {s}
+        </span>
+    );
+}
 
 export default function TeamPage() {
     const { user: currentUser } = useAuthStore();
@@ -28,7 +44,6 @@ export default function TeamPage() {
 
     const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
-    // Set initial selected project once loaded
     React.useEffect(() => {
         if (projects.length > 0 && !selectedProjectId) {
             setSelectedProjectId(projects[0].id);
@@ -42,17 +57,15 @@ export default function TeamPage() {
     const membersQuery = useProjectMembers(selectedProjectId);
     const { members = [], invites = [] } = membersQuery.data || {};
 
-    // Determine current user's role in the selected project
     const currentUserRole = useMemo(() => {
         if (!selectedProject || !currentUser) return 'VIEWER';
         if (selectedProject.userId === currentUser.id) return 'OWNER';
-        const memberRecord = members.find(m => m.userId === currentUser.id);
+        const memberRecord = members.find((m: any) => m.userId === currentUser.id);
         return memberRecord?.role || 'VIEWER';
     }, [selectedProject, currentUser, members]);
 
     const canManage = ['OWNER', 'ADMIN'].includes(currentUserRole);
 
-    // Mutations
     const inviteMutation = useInviteCollaborator();
     const revokeMutation = useRevokeInvitation();
     const updateRoleMutation = useUpdateMemberRole();
@@ -60,7 +73,6 @@ export default function TeamPage() {
     const acceptMutation = useAcceptInvitation();
     const declineMutation = useDeclineInvitation();
 
-    // Invite Form State
     const [inviteEmail, setInviteEmail] = useState('');
     const [inviteRole, setInviteRole] = useState<'ADMIN' | 'DEVELOPER' | 'VIEWER'>('DEVELOPER');
 
@@ -97,258 +109,217 @@ export default function TeamPage() {
 
     if (isLoading) {
         return (
-            <div className="space-y-6">
-                <PageHeader title="Team Collaboration" description="Manage project members, roles, and collaborate." />
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    <SkeletonBlock className="h-48 lg:col-span-2" />
-                    <SkeletonBlock className="h-48" />
-                </div>
+            <div className="flex h-64 items-center justify-center font-mono text-xs text-[#666666]">
+                <Loader2 size={16} className="animate-spin mr-2" /> Loading team members & invitations...
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            <PageHeader 
-                title="Team Collaboration" 
-                description="Manage access control, invite collaborators, and view project invitations." 
-            />
+        <div className="space-y-6 font-mono text-xs">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        Team Collaboration
+                    </h1>
+                    <p className="mt-1 text-xs text-[#A1A1A1]">
+                        Manage access controls, invite project collaborators, and review pending invitations.
+                    </p>
+                </div>
+            </div>
 
-            {/* Received Invitations Section */}
+            {/* Received Invitations */}
             {receivedInvitations.length > 0 && (
-                <Panel className="border-cyan-500/30 bg-cyan-950/15">
-                    <div className="flex items-center gap-2.5 mb-4">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-                            <Clock size={16} />
-                        </div>
-                        <h2 className="text-lg font-black text-white">Pending Invitations ({receivedInvitations.length})</h2>
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
+                    <div className="flex items-center gap-2 text-white font-bold">
+                        <Clock size={14} />
+                        <span>Pending Received Invitations ({receivedInvitations.length})</span>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {receivedInvitations.map((invite) => (
-                            <div key={invite.id} className="rounded-xl border border-white/[0.07] bg-slate-950/45 p-4 flex flex-col justify-between gap-3">
+                        {receivedInvitations.map((invite: any) => (
+                            <div key={invite.id} className="rounded border border-[#1F1F1F] bg-[#000000] p-4 flex flex-col justify-between gap-3">
                                 <div>
-                                    <p className="text-sm font-black text-slate-100">{invite.project?.name}</p>
-                                    <p className="text-xs text-slate-400 mt-1">Invited by: {invite.project?.user?.email || 'Owner'}</p>
-                                    <div className="mt-2.5">
-                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-black uppercase text-cyan-300 ring-1 ring-cyan-400/20">
-                                            <Shield size={10} />
-                                            {invite.role}
-                                        </span>
+                                    <p className="font-bold text-white text-sm">{invite.project?.name}</p>
+                                    <p className="text-[11px] text-[#A1A1A1] mt-1">Invited by: {invite.project?.user?.email || 'Owner'}</p>
+                                    <div className="mt-2">
+                                        <StatusTag status={invite.role} />
                                     </div>
                                 </div>
-                                <div className="flex gap-2 mt-1">
-                                    <Button 
-                                        variant="primary" 
-                                        className="h-8 flex-1 text-xs" 
-                                        loading={acceptMutation.isPending}
+                                <div className="flex gap-2 pt-2 border-t border-[#1F1F1F]">
+                                    <button
                                         onClick={() => acceptMutation.mutate(invite.id)}
+                                        disabled={acceptMutation.isPending}
+                                        className="flex h-7 flex-1 items-center justify-center gap-1 rounded border border-[#1F1F1F] bg-white font-semibold text-black hover:bg-[#E5E5E5] text-xs"
                                     >
-                                        <Check size={14} /> Accept
-                                    </Button>
-                                    <Button 
-                                        variant="secondary" 
-                                        className="h-8 flex-1 text-xs border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 text-rose-400" 
-                                        loading={declineMutation.isPending}
+                                        <Check size={12} /> Accept
+                                    </button>
+                                    <button
                                         onClick={() => declineMutation.mutate(invite.id)}
+                                        disabled={declineMutation.isPending}
+                                        className="flex h-7 flex-1 items-center justify-center gap-1 rounded border border-rose-900/40 bg-rose-950/20 text-rose-300 hover:bg-rose-900/30 text-xs"
                                     >
-                                        <X size={14} /> Decline
-                                    </Button>
+                                        <X size={12} /> Decline
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
-                </Panel>
+                </div>
             )}
 
             {projects.length === 0 ? (
-                <EmptyState 
-                    title="No projects found" 
-                    description="You must have a deployment project before you can manage team members."
-                />
+                <div className="rounded-md border border-dashed border-[#1F1F1F] bg-[#0A0A0A] p-10 text-center text-[#666666]">
+                    <Users size={24} className="mx-auto mb-2 text-[#666666]" />
+                    <p className="text-white font-semibold">No Projects Found</p>
+                    <p className="mt-1 text-xs">Create a project deployment first before adding team collaborators.</p>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    {/* Left: Members & Invites List */}
+                    {/* Left 2 Cols: Member & Invites List */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Selector panel */}
-                        <Panel className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-400">
-                                    <Users size={18} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Active Project</p>
-                                    <h3 className="text-sm font-black text-white">{selectedProject?.name}</h3>
-                                </div>
+                        {/* Active Project Selector */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
+                            <div className="flex items-center gap-2 text-white">
+                                <Users size={14} />
+                                <span className="font-bold">Active Project:</span>
+                                <span className="text-white font-bold">{selectedProject?.name}</span>
                             </div>
-                            <div className="relative min-w-[200px]">
-                                <select 
-                                    value={selectedProjectId}
-                                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                                    className={`${inputClassName} appearance-none pr-10`}
-                                >
-                                    {projects.map((p) => (
-                                        <option key={p.id} value={p.id} className="bg-slate-900 text-white">
-                                            {p.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                            </div>
-                        </Panel>
+                            <select
+                                value={selectedProjectId}
+                                onChange={(e) => setSelectedProjectId(e.target.value)}
+                                className={clsx(INPUT_STYLE, 'sm:w-56')}
+                            >
+                                {projects.map((p: any) => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
 
                         {/* Members Panel */}
-                        <Panel>
-                            <div className="flex items-center justify-between gap-3 mb-5">
-                                <div className="flex items-center gap-2">
-                                    <Users size={16} className="text-cyan-300" />
-                                    <h2 className="font-black text-white">Project Members</h2>
-                                </div>
-                                <span className="rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-black uppercase text-slate-400">
-                                    Role: {currentUserRole}
-                                </span>
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
+                            <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
+                                <span className="font-bold text-white text-sm">Project Members</span>
+                                <span className="text-[#666666]">Your Role: {currentUserRole}</span>
                             </div>
 
-                            {membersQuery.isLoading ? (
-                                <div className="space-y-2">
-                                    <SkeletonBlock className="h-12" />
-                                    <SkeletonBlock className="h-12" />
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm" style={{ minWidth: 600 }}>
-                                        <thead className="text-xs uppercase text-slate-500 border-b border-white/10">
-                                            <tr>
-                                                <th className="px-3 py-3 font-black">Member</th>
-                                                <th className="px-3 py-3 font-black">Role</th>
-                                                <th className="px-3 py-3 font-black text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/10">
-                                            {/* Owner row */}
-                                            <tr className="align-middle transition-colors hover:bg-white/[0.01]">
-                                                <td className="px-3 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-xs font-black text-white">
-                                                            {selectedProject?.user?.name?.[0] || selectedProject?.user?.email?.[0]?.toUpperCase() || 'O'}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                    <thead className="text-[10px] uppercase text-[#666666] border-b border-[#1F1F1F]">
+                                        <tr>
+                                            <th className="pb-2 font-semibold">Member</th>
+                                            <th className="pb-2 font-semibold">Role</th>
+                                            <th className="pb-2 font-semibold text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[#1F1F1F]">
+                                        {/* Owner row */}
+                                        <tr className="align-middle">
+                                            <td className="py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-6 w-6 rounded-full bg-[#111111] border border-[#1F1F1F] flex items-center justify-center font-bold text-white text-[10px]">
+                                                        {selectedProject?.user?.email?.[0]?.toUpperCase() || 'O'}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-white">{selectedProject?.user?.name || 'Owner'}</p>
+                                                        <p className="text-[10px] text-[#666666]">{selectedProject?.user?.email}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="py-3">
+                                                <StatusTag status="OWNER" />
+                                            </td>
+                                            <td className="py-3 text-right text-[10px] text-[#666666]">
+                                                Project Creator
+                                            </td>
+                                        </tr>
+
+                                        {/* Members list */}
+                                        {members.filter((m: any) => m.userId !== selectedProject?.userId).map((member: any) => (
+                                            <tr key={member.id} className="align-middle">
+                                                <td className="py-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-6 w-6 rounded-full bg-[#111111] border border-[#1F1F1F] flex items-center justify-center font-bold text-white text-[10px]">
+                                                            {member.user?.email?.[0]?.toUpperCase() || 'M'}
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-black text-white">{selectedProject?.user?.name || 'Owner'}</p>
-                                                            <p className="text-[10px] text-slate-500">{selectedProject?.user?.email}</p>
+                                                            <p className="font-bold text-white">
+                                                                {member.user?.name || 'Member'}
+                                                                {member.userId === currentUser?.id && <span className="ml-1 text-[9px] text-cyan-400">(You)</span>}
+                                                            </p>
+                                                            <p className="text-[10px] text-[#666666]">{member.user?.email}</p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-4">
-                                                    <StatusBadge status="OWNER" />
+                                                <td className="py-3">
+                                                    {canManage && member.userId !== currentUser?.id ? (
+                                                        <select
+                                                            value={member.role}
+                                                            onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                                                            className="rounded border border-[#1F1F1F] bg-[#000000] px-2 py-1 text-xs text-white outline-none"
+                                                            disabled={updateRoleMutation.isPending}
+                                                        >
+                                                            <option value="ADMIN">ADMIN</option>
+                                                            <option value="DEVELOPER">DEVELOPER</option>
+                                                            <option value="VIEWER">VIEWER</option>
+                                                        </select>
+                                                    ) : (
+                                                        <StatusTag status={member.role} />
+                                                    )}
                                                 </td>
-                                                <td className="px-3 py-4 text-right">
-                                                    <span className="text-[10px] font-bold text-slate-600">Project Creator</span>
+                                                <td className="py-3 text-right">
+                                                    {canManage && member.userId !== currentUser?.id ? (
+                                                        <button
+                                                            onClick={() => handleRemoveMember(member.id)}
+                                                            disabled={removeMemberMutation.isPending}
+                                                            className="h-7 w-7 inline-flex items-center justify-center rounded border border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30"
+                                                            title="Remove Member"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-[#666666]">—</span>
+                                                    )}
                                                 </td>
                                             </tr>
-                                            {/* Members list */}
-                                            {members.filter(m => m.userId !== selectedProject?.userId).map((member) => (
-                                                <tr key={member.id} className="align-middle transition-colors hover:bg-white/[0.01]">
-                                                    <td className="px-3 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-xs font-black text-white">
-                                                                {member.user?.name?.[0] || member.user?.email?.[0]?.toUpperCase() || 'U'}
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs font-black text-white">
-                                                                    {member.user?.name || 'Member'}
-                                                                    {member.userId === currentUser?.id && <span className="ml-1.5 text-[9px] font-bold text-cyan-300 bg-cyan-400/10 px-1 py-0.5 rounded">You</span>}
-                                                                </p>
-                                                                <p className="text-[10px] text-slate-500">{member.user?.email}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-3 py-4">
-                                                        {canManage && member.userId !== currentUser?.id ? (
-                                                            <div className="relative inline-block text-left">
-                                                                <select
-                                                                    value={member.role}
-                                                                    onChange={(e) => handleRoleChange(member.id, e.target.value)}
-                                                                    className="bg-slate-900 text-xs font-black text-white border border-white/10 rounded px-2 py-1 outline-none focus:border-cyan-300"
-                                                                    disabled={updateRoleMutation.isPending}
-                                                                >
-                                                                    <option value="ADMIN">ADMIN</option>
-                                                                    <option value="DEVELOPER">DEVELOPER</option>
-                                                                    <option value="VIEWER">VIEWER</option>
-                                                                </select>
-                                                            </div>
-                                                        ) : (
-                                                            <StatusBadge status={member.role} />
-                                                        )}
-                                                    </td>
-                                                    <td className="px-3 py-4 text-right">
-                                                        {canManage && member.userId !== currentUser?.id ? (
-                                                            <Button
-                                                                variant="danger"
-                                                                className="h-8 w-8 p-0"
-                                                                loading={removeMemberMutation.isPending}
-                                                                onClick={() => handleRemoveMember(member.id)}
-                                                                title="Remove Member"
-                                                            >
-                                                                <Trash2 size={13} />
-                                                            </Button>
-                                                        ) : (
-                                                            <span className="text-[10px] text-slate-600">—</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </Panel>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
 
                         {/* Invites list */}
                         {invites.length > 0 && (
-                            <Panel>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Clock size={16} className="text-cyan-300" />
-                                    <h2 className="font-black text-white">Pending Invites</h2>
-                                </div>
+                            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
+                                <span className="font-bold text-white text-sm">Pending Outgoing Invites</span>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm" style={{ minWidth: 600 }}>
-                                        <thead className="text-xs uppercase text-slate-500 border-b border-white/10">
+                                    <table className="w-full text-left text-xs">
+                                        <thead className="text-[10px] uppercase text-[#666666] border-b border-[#1F1F1F]">
                                             <tr>
-                                                <th className="px-3 py-3 font-black">Email</th>
-                                                <th className="px-3 py-3 font-black">Role</th>
-                                                <th className="px-3 py-3 font-black">Sent At</th>
-                                                <th className="px-3 py-3 font-black text-right">Actions</th>
+                                                <th className="pb-2 font-semibold">Email</th>
+                                                <th className="pb-2 font-semibold">Role</th>
+                                                <th className="pb-2 font-semibold">Sent At</th>
+                                                <th className="pb-2 font-semibold text-right">Action</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-white/10">
-                                            {invites.map((invite) => (
-                                                <tr key={invite.id} className="align-middle transition-colors hover:bg-white/[0.01]">
-                                                    <td className="px-3 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <Mail size={14} className="text-slate-500" />
-                                                            <span className="text-xs font-bold text-white">{invite.email}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-3 py-4">
-                                                        <span className="inline-flex rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-black uppercase text-cyan-300 ring-1 ring-cyan-400/20">
-                                                            {invite.role}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-4 text-xs text-slate-500">
-                                                        {formatDate(invite.createdAt)}
-                                                    </td>
-                                                    <td className="px-3 py-4 text-right">
+                                        <tbody className="divide-y divide-[#1F1F1F]">
+                                            {invites.map((invite: any) => (
+                                                <tr key={invite.id} className="align-middle">
+                                                    <td className="py-3 text-white font-bold">{invite.email}</td>
+                                                    <td className="py-3"><StatusTag status={invite.role} /></td>
+                                                    <td className="py-3 text-[#666666]">{formatDate(invite.createdAt)}</td>
+                                                    <td className="py-3 text-right">
                                                         {canManage ? (
-                                                            <Button
-                                                                variant="danger"
-                                                                className="h-8 w-8 p-0"
-                                                                loading={revokeMutation.isPending}
+                                                            <button
                                                                 onClick={() => handleRevokeInvite(invite.id)}
-                                                                title="Revoke Invitation"
+                                                                disabled={revokeMutation.isPending}
+                                                                className="h-7 w-7 inline-flex items-center justify-center rounded border border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30"
+                                                                title="Revoke Invite"
                                                             >
-                                                                <X size={13} />
-                                                            </Button>
+                                                                <X size={12} />
+                                                            </button>
                                                         ) : (
-                                                            <span className="text-[10px] text-slate-600">—</span>
+                                                            <span className="text-[#666666]">—</span>
                                                         )}
                                                     </td>
                                                 </tr>
@@ -356,108 +327,83 @@ export default function TeamPage() {
                                         </tbody>
                                     </table>
                                 </div>
-                            </Panel>
+                            </div>
                         )}
                     </div>
 
-                    {/* Right: Invite Form / Role Guide */}
+                    {/* Right 1 Col: Invite Form & Role Guide */}
                     <div className="space-y-6">
-                        {/* Invite Form */}
                         {canManage ? (
-                            <Panel>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <UserPlus size={16} className="text-cyan-300" />
-                                    <h2 className="font-black text-white">Invite Collaborator</h2>
+                            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
+                                <div className="flex items-center gap-2 text-white font-bold">
+                                    <UserPlus size={14} />
+                                    <span>Invite Collaborator</span>
                                 </div>
-                                <form onSubmit={handleInvite} className="space-y-4">
+                                <form onSubmit={handleInvite} className="space-y-3">
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Email Address</label>
+                                        <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">Email Address</label>
                                         <input
                                             type="email"
                                             placeholder="collaborator@example.com"
                                             value={inviteEmail}
                                             onChange={(e) => setInviteEmail(e.target.value)}
-                                            className={inputClassName}
+                                            className={INPUT_STYLE}
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Role Permission</label>
-                                        <div className="relative">
-                                            <select
-                                                value={inviteRole}
-                                                onChange={(e) => setInviteRole(e.target.value as any)}
-                                                className={`${inputClassName} appearance-none pr-10`}
-                                            >
-                                                <option value="DEVELOPER">DEVELOPER (Deploy & Modify)</option>
-                                                <option value="ADMIN">ADMIN (Full Member Control)</option>
-                                                <option value="VIEWER">VIEWER (Read-Only access)</option>
-                                            </select>
-                                            <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                                        </div>
+                                        <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">Role Permission</label>
+                                        <select
+                                            value={inviteRole}
+                                            onChange={(e) => setInviteRole(e.target.value as any)}
+                                            className={INPUT_STYLE}
+                                        >
+                                            <option value="DEVELOPER">DEVELOPER (Deploy & Modify)</option>
+                                            <option value="ADMIN">ADMIN (Full Member Control)</option>
+                                            <option value="VIEWER">VIEWER (Read-Only access)</option>
+                                        </select>
                                     </div>
-                                    <Button
+                                    <button
                                         type="submit"
-                                        variant="primary"
-                                        className="w-full mt-2"
-                                        loading={inviteMutation.isPending}
+                                        disabled={inviteMutation.isPending}
+                                        className="w-full flex h-8 items-center justify-center gap-1 rounded border border-[#1F1F1F] bg-white font-semibold text-black hover:bg-[#E5E5E5] disabled:opacity-50"
                                     >
-                                        Send Invitation
-                                    </Button>
+                                        {inviteMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                                        <span>Send Invitation</span>
+                                    </button>
                                 </form>
-                            </Panel>
+                            </div>
                         ) : (
-                            <Panel className="border-rose-400/20 bg-rose-500/5">
-                                <div className="flex gap-3">
-                                    <AlertCircle className="text-rose-400 shrink-0 mt-0.5" size={18} />
-                                    <div>
-                                        <h3 className="text-sm font-black text-rose-300">Access Restricted</h3>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            You must be a project OWNER or ADMIN to invite new members or manage roles. Your current role is <strong>{currentUserRole}</strong>.
-                                        </p>
-                                    </div>
-                                </div>
-                            </Panel>
+                            <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-4 text-rose-300">
+                                <p className="font-bold">Access Restricted</p>
+                                <p className="text-xs text-[#A1A1A1] mt-1">
+                                    Project OWNER or ADMIN role required to invite members. Current role: <strong>{currentUserRole}</strong>.
+                                </p>
+                            </div>
                         )}
 
-                        {/* Roles Guide */}
-                        <Panel>
-                            <h3 className="text-sm font-black text-white mb-3">Roles & Permissions</h3>
-                            <div className="space-y-3.5 text-xs">
-                                <div className="flex gap-2">
-                                    <div className="mt-0.5">
-                                        <StatusBadge status="OWNER" />
-                                    </div>
-                                    <p className="text-slate-400 leading-relaxed">
-                                        Full management access. Can delete the project, manage members, roles, environment overrides, and trigger deployments.
-                                    </p>
+                        {/* Role Permissions Reference */}
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-3">
+                            <span className="font-bold text-white text-xs">Role Permissions</span>
+                            <div className="space-y-2 text-[11px] text-[#A1A1A1]">
+                                <div>
+                                    <span className="font-bold text-white block">OWNER</span>
+                                    <span>Full project control, delete project, manage members.</span>
                                 </div>
-                                <div className="flex gap-2">
-                                    <div className="mt-0.5">
-                                        <StatusBadge status="ADMIN" />
-                                    </div>
-                                    <p className="text-slate-400 leading-relaxed">
-                                        Can manage members/invitations, configure environments, trigger redeployments, and view configurations.
-                                    </p>
+                                <div>
+                                    <span className="font-bold text-white block">ADMIN</span>
+                                    <span>Manage team members, update environment variables, trigger redeploys.</span>
                                 </div>
-                                <div className="flex gap-2">
-                                    <div className="mt-0.5">
-                                        <StatusBadge status="DEVELOPER" />
-                                    </div>
-                                    <p className="text-slate-400 leading-relaxed">
-                                        Can configure environment variables, trigger redeployments, and view project logs. Cannot manage team members.
-                                    </p>
+                                <div>
+                                    <span className="font-bold text-white block">DEVELOPER</span>
+                                    <span>Trigger deployments and edit environment variables.</span>
                                 </div>
-                                <div className="flex gap-2">
-                                    <div className="mt-0.5">
-                                        <StatusBadge status="VIEWER" />
-                                    </div>
-                                    <p className="text-slate-400 leading-relaxed">
-                                        Read-only access to deployments, logs, and public variables. Cannot trigger deployments or edit settings.
-                                    </p>
+                                <div>
+                                    <span className="font-bold text-[#666666] block">VIEWER</span>
+                                    <span>Read-only access to deployment logs and metadata.</span>
                                 </div>
                             </div>
-                        </Panel>
+                        </div>
                     </div>
                 </div>
             )}

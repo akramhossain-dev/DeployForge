@@ -1,52 +1,34 @@
 'use client';
 
-import { CheckCircle2, Chrome, Github, MailCheck, Save, Settings, ShieldAlert, ShieldCheck, Unlink, XCircle } from 'lucide-react';
+import { CheckCircle2, Chrome, Github, MailCheck, Save, Settings, ShieldAlert, ShieldCheck, Unlink, XCircle, Loader2 } from 'lucide-react';
 import { ReactNode, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, inputClassName } from '@/components/ui';
 import { useAuthSession, useDisconnectGitHub, useGitHubProfile, queryKeys } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 
-function SectionHeader({ icon, title, description }: { icon: React.ReactNode; title: string; description?: string }) {
-    return (
-        <div className="mb-5 flex items-center gap-3 border-b border-white/[0.07] pb-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/8 text-cyan-200 shrink-0">{icon}</div>
-            <div>
-                <h2 className="font-black text-white">{title}</h2>
-                {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
-            </div>
-        </div>
-    );
-}
-
-function FieldLabel({ children, readOnly }: { children: React.ReactNode; readOnly?: boolean }) {
-    return (
-        <span className={clsx('block text-[11px] font-black uppercase tracking-wider mb-1.5', readOnly ? 'text-slate-600' : 'text-slate-400')}>
-            {children}{readOnly && <span className="ml-1.5 rounded bg-white/[0.05] px-1.5 py-0.5 text-[9px] normal-case tracking-normal text-slate-600">read-only</span>}
-        </span>
-    );
-}
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 function ProviderCard({ icon, label, connected, detail }: { icon: ReactNode; label: string; connected: boolean; detail: string }) {
     return (
-        <div className={clsx('relative rounded-xl border p-4 transition-all', connected ? 'border-emerald-400/20 bg-emerald-400/[0.04]' : 'border-white/[0.07] bg-white/[0.02]')}>
-            {connected && <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-xl bg-gradient-to-r from-emerald-400/50 to-transparent" />}
-            <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="flex items-center gap-2.5">
-                    <span className={clsx('flex h-8 w-8 items-center justify-center rounded-lg border text-sm',
-                        connected ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-white/[0.07] bg-white/[0.04] text-slate-500')}>
-                        {icon}
-                    </span>
-                    <span className="font-black text-white text-sm">{label}</span>
+        <div className="rounded border border-[#1F1F1F] bg-[#000000] p-4 flex items-center justify-between font-mono text-xs">
+            <div className="flex items-center gap-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded bg-[#111111] text-white">
+                    {icon}
                 </div>
-                {connected
-                    ? <CheckCircle2 className="text-emerald-300 shrink-0" size={16} />
-                    : <XCircle className="text-slate-600 shrink-0" size={16} />}
+                <div>
+                    <p className="font-bold text-white">{label}</p>
+                    <p className="text-[11px] text-[#A1A1A1]">{connected ? detail : 'Not connected'}</p>
+                </div>
             </div>
-            <p className="truncate text-[11px] text-slate-500">{connected ? detail : 'Not connected'}</p>
+            <span className={clsx(
+                'inline-flex items-center rounded border px-2 py-0.5 text-[10px] uppercase font-bold',
+                connected ? 'border-[#1F1F1F] bg-[#0A0A0A] text-emerald-400' : 'border-[#1F1F1F] bg-[#111111] text-[#666666]'
+            )}>
+                {connected ? 'Connected' : 'Unlinked'}
+            </span>
         </div>
     );
 }
@@ -59,27 +41,17 @@ export default function SettingsPage() {
     const queryClient = useQueryClient();
     const addToast = useToastStore(s => s.addToast);
 
-    const [connectError, setConnectError]           = useState<string | null>(null);
-    const [isConnecting, setIsConnecting]           = useState(false);
-    const [isSendingVerification, setIsSending]     = useState(false);
-    const [name, setName]       = useState('');
+    const [connectError, setConnectError] = useState<string | null>(null);
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [isSendingVerification, setIsSending] = useState(false);
+    const [name, setName] = useState('');
     const [username, setUsername] = useState('');
-    const [email, setEmail]     = useState('');
+    const [email, setEmail] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
-    const githubStatus     = searchParams.get('github');
-    const repoStatus       = searchParams.get('repos');
-    const errorType        = searchParams.get('error_type');
-    const errorMessageParam = searchParams.get('message');
+    const githubStatus = searchParams.get('github');
 
     useEffect(() => { if (auth.user) { setName(auth.user.name || ''); setUsername(auth.user.username || ''); setEmail(auth.user.email || ''); } }, [auth.user]);
-    useEffect(() => {
-        if (githubStatus === 'connected') {
-            queryClient.invalidateQueries({ queryKey: queryKeys.githubProfile });
-            queryClient.invalidateQueries({ queryKey: queryKeys.repositories });
-            queryClient.invalidateQueries({ queryKey: queryKeys.me });
-        }
-    }, [githubStatus, queryClient]);
 
     async function connectGitHub() {
         setConnectError(null); setIsConnecting(true);
@@ -97,129 +69,103 @@ export default function SettingsPage() {
         finally { setIsSaving(false); }
     }
 
-    async function handleSendVerification() {
-        setIsSending(true);
-        try { await api.post('/auth/send-verification'); addToast({ title: 'Sent', description: 'Verification email sent.', severity: 'success' }); }
-        catch (err: any) { addToast({ title: 'Error', description: err.message || 'Failed to send verification email', severity: 'error' }); }
-        finally { setIsSending(false); }
-    }
-
-    // Build a readable GitHub error message
-    const githubErrorMap: Record<string, [string, string]> = {
-        invalid_client:       ['Invalid OAuth Client (invalid_client)', 'GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET is invalid.'],
-        bad_verification_code:['Invalid Verification Code', 'The code from GitHub has expired. Try connecting again.'],
-        callback_mismatch:    ['Callback URL Mismatch', 'GITHUB_CALLBACK_URL does not match the registered URL in GitHub Developer settings.'],
-        missing_state:        ['Missing State Parameter', 'The security state parameter is missing from the OAuth callback.'],
-        session_error:        ['Session Verification Failed', errorMessageParam || 'Please log in again.'],
-        database_error:       ['Database Error', errorMessageParam || 'Check backend logs.'],
-        github_api_error:     ['GitHub API Error', errorMessageParam || 'Error communicating with GitHub API.'],
-    };
-    const [errorTitle, errorMessage] = (errorType && githubErrorMap[errorType]) || ['GitHub OAuth Failed', errorMessageParam || 'The OAuth callback could not complete.'];
-
     return (
-        <div className="space-y-6">
-            <PageHeader title="Settings" description="Manage your profile, connected accounts, and authentication providers." />
-
-            {/* Email verification banner */}
-            {auth.user && !auth.user.isVerified && (
-                <div className="flex flex-col gap-4 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex items-start gap-3">
-                        <ShieldAlert className="mt-0.5 shrink-0 text-amber-400" size={18} />
-                        <div>
-                            <p className="text-sm font-black text-white">Verify your email address</p>
-                            <p className="mt-0.5 text-xs text-slate-400">Secure your account and enable email notifications.</p>
-                        </div>
-                    </div>
-                    <Button variant="secondary" className="shrink-0 border-amber-400/20 bg-amber-400/8 text-amber-200 hover:bg-amber-400/15 text-xs"
-                        onClick={handleSendVerification} loading={isSendingVerification}>
-                        Send Verification Email
-                    </Button>
+        <div className="space-y-6 font-mono text-xs">
+            {/* General Profile Section */}
+            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                <div className="border-b border-[#1F1F1F] pb-3">
+                    <h2 className="font-bold text-white text-sm">General Profile</h2>
+                    <p className="mt-0.5 text-xs text-[#A1A1A1]">Update account display name and view account details.</p>
                 </div>
-            )}
 
-            {/* Profile */}
-            <Panel>
-                <SectionHeader icon={<Settings size={16} />} title="Profile" description="Your display name and account credentials." />
                 <form onSubmit={handleSaveProfile} className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <label>
-                            <FieldLabel>Full Name</FieldLabel>
-                            <input type="text" value={name} onChange={e => setName(e.target.value)}
-                                placeholder="Full Name" className={inputClassName} />
-                        </label>
-                        <label>
-                            <FieldLabel readOnly>Username</FieldLabel>
-                            <input type="text" value={username} readOnly disabled
-                                className={clsx(inputClassName, 'cursor-not-allowed opacity-40')} />
-                        </label>
+                        <div>
+                            <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">Full Name</label>
+                            <input type="text" value={name} onChange={e => setName(e.target.value)} className={INPUT_STYLE} />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">Username</label>
+                            <input type="text" value={username} readOnly disabled className={clsx(INPUT_STYLE, 'cursor-not-allowed opacity-50')} />
+                        </div>
                     </div>
-                    <label>
-                        <FieldLabel readOnly>Email Address</FieldLabel>
-                        <input type="email" value={email} readOnly disabled
-                            className={clsx(inputClassName, 'cursor-not-allowed opacity-40')} />
-                    </label>
-                    <div className="flex items-center justify-between border-t border-white/[0.07] pt-4">
-                        <p className="text-xs text-slate-500">Username and email can only be changed by an admin.</p>
-                        <Button type="submit" loading={isSaving}><Save size={15} /> Save Changes</Button>
+
+                    <div>
+                        <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">Email Address</label>
+                        <input type="email" value={email} readOnly disabled className={clsx(INPUT_STYLE, 'cursor-not-allowed opacity-50')} />
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#1F1F1F] pt-4">
+                        <p className="text-[11px] text-[#666666]">Username & Email are read-only.</p>
+                        <button
+                            type="submit"
+                            disabled={isSaving}
+                            className="flex h-9 items-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-5 font-semibold text-black hover:bg-[#E5E5E5] disabled:opacity-50"
+                        >
+                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            <span>Save Changes</span>
+                        </button>
                     </div>
                 </form>
-            </Panel>
+            </div>
 
             {/* Connected Providers */}
-            <Panel>
-                <SectionHeader icon={<ShieldCheck size={16} />} title="Connected Providers" description="Authentication methods linked to your account." />
+            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                <div className="border-b border-[#1F1F1F] pb-3">
+                    <h2 className="font-bold text-white text-sm">Connected Providers</h2>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-3">
-                    <ProviderCard icon={<Chrome size={16} />} label="Google"
+                    <ProviderCard icon={<Chrome size={14} />} label="Google"
                         connected={Boolean(auth.user?.connectedProviders?.google || auth.user?.googleId)}
                         detail={auth.user?.googleEmail || auth.user?.email || 'Not connected'} />
-                    <ProviderCard icon={<Github size={16} />} label="GitHub"
+                    <ProviderCard icon={<Github size={14} />} label="GitHub"
                         connected={Boolean(auth.user?.connectedProviders?.github || auth.user?.githubId || profile.data)}
                         detail={auth.user?.githubUsername ? `@${auth.user.githubUsername}` : profile.data?.username ? `@${profile.data.username}` : 'Not connected'} />
-                    <ProviderCard icon={<MailCheck size={16} />} label="Email / Password"
+                    <ProviderCard icon={<MailCheck size={14} />} label="Email Credentials"
                         connected={Boolean(auth.user?.connectedProviders?.local)}
                         detail={auth.user?.email || 'Not connected'} />
                 </div>
-            </Panel>
+            </div>
 
-            {/* GitHub Connection */}
-            <Panel>
-                <SectionHeader icon={<Github size={16} />} title="GitHub Connection" description="Connect GitHub to sync repositories and install deployment webhooks." />
-                {profile.isLoading ? <SkeletonBlock className="h-20" /> :
-                 profile.isError || !profile.data ? (
-                    <EmptyState title="GitHub disconnected" description="Connect GitHub to sync repositories and install deployment webhooks."
-                        action={<Button onClick={connectGitHub} loading={isConnecting}><Github size={15} /> Connect GitHub</Button>} />
+            {/* GitHub Connection Manager */}
+            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                <div className="border-b border-[#1F1F1F] pb-3 flex items-center justify-between">
+                    <div>
+                        <h2 className="font-bold text-white text-sm">GitHub Connection</h2>
+                        <p className="mt-0.5 text-xs text-[#A1A1A1]">OAuth integration for repository sync and release triggers.</p>
+                    </div>
+                    {profile.data && (
+                        <div className="flex items-center gap-2">
+                            <button onClick={connectGitHub} disabled={isConnecting} className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]">
+                                Reconnect
+                            </button>
+                            <button onClick={() => disconnect.mutate()} disabled={disconnect.isPending} className="h-8 px-3 rounded border border-rose-900/40 bg-rose-950/20 text-rose-300 hover:bg-rose-900/30">
+                                Disconnect
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {!profile.data ? (
+                    <div className="py-4 text-center space-y-3">
+                        <p className="text-[#A1A1A1]">GitHub account is not connected.</p>
+                        <button onClick={connectGitHub} disabled={isConnecting} className="inline-flex h-8 items-center gap-1.5 rounded border border-[#1F1F1F] bg-white px-4 font-semibold text-black hover:bg-[#E5E5E5]">
+                            <Github size={13} /> Connect GitHub
+                        </button>
+                    </div>
                 ) : (
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                    <div className="rounded border border-[#1F1F1F] bg-[#000000] p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            {profile.data.avatarUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={profile.data.avatarUrl} alt="" className="h-10 w-10 rounded-full border border-white/10" />
-                            ) : (
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-violet-400/20 bg-violet-400/10 text-violet-300"><Github size={18} /></div>
-                            )}
+                            <Github size={16} className="text-white" />
                             <div>
-                                <p className="font-black text-white">@{profile.data.username}</p>
-                                <p className="text-xs text-slate-500">{profile.data.email || 'No public email'}</p>
+                                <p className="font-bold text-white">@{profile.data.username}</p>
+                                <p className="text-[11px] text-[#A1A1A1]">{profile.data.email || 'Connected'}</p>
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Button variant="secondary" onClick={connectGitHub} loading={isConnecting}><Github size={15} /> Reconnect</Button>
-                            <Button variant="danger" onClick={() => disconnect.mutate()} loading={disconnect.isPending}><Unlink size={15} /> Disconnect</Button>
-                        </div>
+                        <span className="text-emerald-400 font-bold">Connected</span>
                     </div>
                 )}
-
-                {/* Status notifications */}
-                {githubStatus === 'connected' && (
-                    <div className="mt-4 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] px-4 py-3 text-sm text-emerald-100">
-                        ✓ GitHub connected{repoStatus === 'sync_failed' ? `, but repository sync failed: ${errorMessageParam || 'Retry from the Repositories page.'}` : ' successfully.'}
-                    </div>
-                )}
-                {githubStatus === 'error' && <div className="mt-4"><ErrorState title={errorTitle} message={errorMessage} onRetry={connectGitHub} /></div>}
-                {connectError && <div className="mt-4"><ErrorState title="GitHub connect failed" message={connectError} /></div>}
-                {profile.isError && <div className="mt-4"><ErrorState title="Connection check failed" message={(profile.error as Error)?.message} onRetry={() => profile.refetch()} /></div>}
-                {disconnect.isError && <div className="mt-4"><ErrorState title="Disconnect failed" message={(disconnect.error as Error)?.message} onRetry={() => disconnect.mutate()} /></div>}
-            </Panel>
+            </div>
         </div>
     );
 }

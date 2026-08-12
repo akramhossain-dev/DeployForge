@@ -5,9 +5,8 @@ import {
     Bell, Check, CheckCheck, Trash2, Search, Filter, X,
     AlertTriangle, AlertCircle, Info, CheckCircle, Server,
     Cpu, HardDrive, MemoryStick, Wifi, WifiOff, Rocket,
-    Shield, Database, ChevronLeft, ChevronRight,
+    Shield, Database, ChevronLeft, ChevronRight, Loader2
 } from 'lucide-react';
-import { Button, Panel, PageHeader, AppModal } from '@/components/ui';
 import {
     useNotifications,
     useMarkAsRead,
@@ -17,70 +16,37 @@ import {
     useNotificationStream,
 } from '@/hooks/useNotifications';
 import type { AlertLevel, AlertType, AppNotification } from '@/lib/api/types';
+import { formatDate } from '@/components/ui';
+import clsx from 'clsx';
 
 const ALERT_TYPE_OPTIONS: { value: AlertType | ''; label: string }[] = [
-    { value: '', label: 'All Types' },
+    { value: '', label: 'All Alert Types' },
     { value: 'CPU_HIGH', label: 'High CPU' },
     { value: 'RAM_HIGH', label: 'High RAM' },
     { value: 'DISK_HIGH', label: 'High Disk' },
-    { value: 'SWAP_HIGH', label: 'High Swap' },
     { value: 'SERVER_OFFLINE', label: 'Server Offline' },
     { value: 'SERVER_RECONNECTED', label: 'Server Online' },
-    { value: 'HIGH_LOAD', label: 'High Load' },
     { value: 'DEPLOYMENT_FAILED', label: 'Deploy Failed' },
     { value: 'DEPLOYMENT_COMPLETED', label: 'Deploy Completed' },
-    { value: 'SSL_EXPIRING', label: 'SSL Expiring' },
-    { value: 'BACKUP_FAILED', label: 'Backup Failed' },
-    { value: 'BACKUP_COMPLETED', label: 'Backup Completed' },
 ];
 
-function getLevelIcon(level: AlertLevel) {
-    switch (level) {
-        case 'CRITICAL': return <AlertCircle size={16} className="text-rose-400" />;
-        case 'WARNING': return <AlertTriangle size={16} className="text-amber-400" />;
-        case 'SUCCESS': return <CheckCircle size={16} className="text-emerald-400" />;
-        default: return <Info size={16} className="text-cyan-400" />;
-    }
-}
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
-function getLevelBadge(level: AlertLevel) {
-    const styles: Record<AlertLevel, string> = {
-        CRITICAL: 'bg-rose-500/15 text-rose-400 border-rose-500/20',
-        WARNING: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-        SUCCESS: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-        INFO: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
-    };
-    return styles[level] || styles.INFO;
-}
+function LevelBadge({ level }: { level: AlertLevel }) {
+    const s = String(level).toUpperCase();
+    const style = s === 'CRITICAL'
+        ? 'border-rose-900/40 bg-rose-950/20 text-rose-400 font-bold'
+        : s === 'WARNING'
+        ? 'border-amber-900/40 bg-amber-950/20 text-amber-400 font-bold'
+        : s === 'SUCCESS'
+        ? 'border-emerald-900/40 bg-emerald-950/20 text-emerald-400 font-bold'
+        : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]';
 
-function getTypeIcon(type: AlertType) {
-    switch (type) {
-        case 'CPU_HIGH': return <Cpu size={14} />;
-        case 'RAM_HIGH': return <MemoryStick size={14} />;
-        case 'DISK_HIGH': return <HardDrive size={14} />;
-        case 'SWAP_HIGH': return <HardDrive size={14} />;
-        case 'SERVER_OFFLINE': return <WifiOff size={14} />;
-        case 'SERVER_RECONNECTED': return <Wifi size={14} />;
-        case 'HIGH_LOAD': return <Server size={14} />;
-        case 'DEPLOYMENT_FAILED':
-        case 'DEPLOYMENT_COMPLETED': return <Rocket size={14} />;
-        case 'SSL_EXPIRING': return <Shield size={14} />;
-        case 'BACKUP_FAILED':
-        case 'BACKUP_COMPLETED': return <Database size={14} />;
-        default: return <Bell size={14} />;
-    }
-}
-
-function timeAgo(dateStr: string): string {
-    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 30) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString();
+    return (
+        <span className={clsx('inline-flex items-center rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider', style)}>
+            {s}
+        </span>
+    );
 }
 
 export default function NotificationsPage() {
@@ -89,7 +55,6 @@ export default function NotificationsPage() {
     const [page, setPage] = useState(1);
     const [showClearAllModal, setShowClearAllModal] = useState(false);
 
-    // Build query params
     const queryParams = useMemo(() => {
         const params: Record<string, string> = { page: String(page), limit: '20' };
         if (filters.type) params.type = filters.type;
@@ -104,260 +69,184 @@ export default function NotificationsPage() {
     const deleteNotification = useDeleteNotification();
     const deleteAll = useDeleteAllNotifications();
 
-    // Real-time stream
     useNotificationStream(true);
 
     const notifications = data?.notifications || [];
     const pagination = data?.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 };
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Notification Center"
-                description="Monitor alerts and system notifications from all your connected servers."
-            />
+        <div className="space-y-6 font-mono text-xs">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        Notification Center
+                    </h1>
+                    <p className="mt-1 text-xs text-[#A1A1A1]">
+                        Monitor system alerts, deployment execution events, and operational audit records.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => markAllAsRead.mutate()}
+                        disabled={markAllAsRead.isPending}
+                        className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-[#111111] px-3 font-semibold text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                    >
+                        <CheckCheck size={13} />
+                        <span>Mark All Read</span>
+                    </button>
+                    <button
+                        onClick={() => setShowClearAllModal(true)}
+                        className="flex h-8 items-center gap-1.5 rounded-md border border-rose-900/40 bg-rose-950/20 px-3 font-semibold text-rose-300 hover:bg-rose-900/30"
+                    >
+                        <Trash2 size={13} />
+                        <span>Clear All</span>
+                    </button>
+                </div>
+            </div>
 
             {/* Filters Bar */}
-            <Panel>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-2">
-                        {/* Search */}
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                            <input
-                                type="text"
-                                placeholder="Search notifications..."
-                                value={search}
-                                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                                className="h-9 w-56 rounded-lg border border-white/10 bg-slate-950/60 pl-9 pr-3 text-xs text-white placeholder-slate-500 outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20"
-                            />
-                            {search && (
-                                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
-                                    <X size={12} />
-                                </button>
-                            )}
-                        </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                    type="text"
+                    placeholder="Search notifications by title or message..."
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                    className={clsx(INPUT_STYLE, 'flex-1')}
+                />
+                <select
+                    value={filters.type || ''}
+                    onChange={(e) => { setFilters(f => ({ ...f, type: e.target.value })); setPage(1); }}
+                    className={clsx(INPUT_STYLE, 'sm:w-44')}
+                >
+                    {ALERT_TYPE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+                <select
+                    value={filters.isRead || ''}
+                    onChange={(e) => { setFilters(f => ({ ...f, isRead: e.target.value })); setPage(1); }}
+                    className={clsx(INPUT_STYLE, 'sm:w-36')}
+                >
+                    <option value="">All Status</option>
+                    <option value="false">Unread</option>
+                    <option value="true">Read</option>
+                </select>
+            </div>
 
-                        {/* Type Filter */}
-                        <div className="relative">
-                            <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                            <select
-                                value={filters.type || ''}
-                                onChange={(e) => { setFilters(f => ({ ...f, type: e.target.value })); setPage(1); }}
-                                className="h-9 appearance-none rounded-lg border border-white/10 bg-slate-950/60 pl-9 pr-8 text-xs text-white outline-none focus:border-cyan-500/40"
-                            >
-                                {ALERT_TYPE_OPTIONS.map(opt => (
-                                    <option key={opt.value} value={opt.value} className="bg-slate-900">{opt.label}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Read Status Filter */}
-                        <select
-                            value={filters.isRead || ''}
-                            onChange={(e) => { setFilters(f => ({ ...f, isRead: e.target.value })); setPage(1); }}
-                            className="h-9 appearance-none rounded-lg border border-white/10 bg-slate-950/60 px-3 text-xs text-white outline-none focus:border-cyan-500/40"
-                        >
-                            <option value="" className="bg-slate-900">All Status</option>
-                            <option value="false" className="bg-slate-900">Unread</option>
-                            <option value="true" className="bg-slate-900">Read</option>
-                        </select>
-                    </div>
-
-                    {/* Bulk Actions */}
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="secondary"
-                            className="h-9 text-xs"
-                            onClick={() => markAllAsRead.mutate()}
-                            loading={markAllAsRead.isPending}
-                        >
-                            <CheckCheck size={14} /> Mark All Read
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            className="h-9 text-xs text-rose-400 hover:text-rose-300"
-                            onClick={() => setShowClearAllModal(true)}
-                        >
-                            <Trash2 size={14} /> Clear All
-                        </Button>
-                    </div>
-                </div>
-            </Panel>
-
-            {/* Notifications List */}
+            {/* Notifications Feed */}
             {isLoading ? (
-                <Panel>
-                    <div className="flex h-40 items-center justify-center">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
-                    </div>
-                </Panel>
+                <div className="flex h-40 items-center justify-center font-mono text-xs text-[#666666]">
+                    <Loader2 size={16} className="animate-spin mr-2" /> Loading notification feed...
+                </div>
             ) : notifications.length === 0 ? (
-                <Panel>
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-800/50 border border-white/5">
-                            <Bell size={28} className="text-slate-600" />
-                        </div>
-                        <p className="text-sm font-bold text-slate-400">No notifications</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                            {search || filters.type || filters.isRead
-                                ? 'No notifications match your filters.'
-                                : 'When alerts are triggered, they will appear here.'}
-                        </p>
-                    </div>
-                </Panel>
+                <div className="rounded-md border border-dashed border-[#1F1F1F] bg-[#0A0A0A] p-10 text-center text-[#666666]">
+                    <Bell size={24} className="mx-auto mb-2 text-[#666666]" />
+                    <p className="text-white font-semibold">No Notifications Found</p>
+                    <p className="mt-1 text-xs">
+                        {search || filters.type || filters.isRead ? 'No alerts match your filter selection.' : 'System alerts and events will appear here.'}
+                    </p>
+                </div>
             ) : (
                 <div className="space-y-2">
                     {notifications.map((n) => (
-                        <NotificationRow
+                        <div
                             key={n.id}
-                            notification={n}
-                            onMarkRead={() => markAsRead.mutate(n.id)}
-                            onDelete={() => deleteNotification.mutate(n.id)}
-                        />
+                            className={clsx(
+                                'rounded-md border p-4 flex items-start justify-between gap-4 transition-colors',
+                                n.isRead ? 'border-[#1F1F1F] bg-[#0A0A0A] opacity-60' : 'border-[#1F1F1F] bg-[#000000]'
+                            )}
+                        >
+                            <div className="space-y-1.5 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <LevelBadge level={n.level} />
+                                    <span className="inline-flex items-center rounded border border-[#1F1F1F] bg-[#111111] px-1.5 py-0.5 text-[10px] text-[#A1A1A1]">
+                                        {n.type.replace(/_/g, ' ')}
+                                    </span>
+                                    {n.serverName && (
+                                        <span className="text-[10px] text-[#666666]">
+                                            Node: {n.serverName}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="font-bold text-white text-xs">{n.title}</p>
+                                <p className="text-[#A1A1A1] text-xs leading-relaxed">{n.message}</p>
+                                <p className="text-[10px] text-[#666666]">{formatDate(n.createdAt)}</p>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                                {!n.isRead && (
+                                    <button
+                                        onClick={() => markAsRead.mutate(n.id)}
+                                        className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white"
+                                        title="Mark Read"
+                                    >
+                                        <Check size={12} />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => deleteNotification.mutate(n.id)}
+                                    className="h-7 w-7 flex items-center justify-center rounded border border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30"
+                                    title="Delete"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                            </div>
+                        </div>
                     ))}
                 </div>
             )}
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-950/20 px-4 py-3">
-                    <p className="text-xs text-slate-500">
-                        Showing {((pagination.page - 1) * pagination.limit) + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
-                    </p>
+                <div className="flex items-center justify-between border-t border-[#1F1F1F] pt-4 text-xs text-[#A1A1A1]">
+                    <span>Page {page} of {pagination.totalPages} ({pagination.total} total)</span>
                     <div className="flex items-center gap-1">
                         <button
                             disabled={page <= 1}
                             onClick={() => setPage(p => Math.max(1, p - 1))}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 disabled:opacity-30"
+                            className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#0A0A0A] text-white disabled:opacity-30"
                         >
-                            <ChevronLeft size={14} />
+                            <ChevronLeft size={13} />
                         </button>
-                        <span className="px-3 text-xs font-bold text-slate-300">{page}</span>
                         <button
                             disabled={page >= pagination.totalPages}
                             onClick={() => setPage(p => p + 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 disabled:opacity-30"
+                            className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#0A0A0A] text-white disabled:opacity-30"
                         >
-                            <ChevronRight size={14} />
+                            <ChevronRight size={13} />
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Clear All Confirmation Modal */}
-            <AppModal
-                title="Clear All Notifications"
-                open={showClearAllModal}
-                onClose={() => setShowClearAllModal(false)}
-                size="sm"
-            >
-                <div className="space-y-4">
-                    <div className="flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-rose-200">
-                        <AlertCircle className="mt-0.5 shrink-0 text-rose-400" size={20} />
-                        <p className="text-xs leading-relaxed">
-                            Are you sure you want to delete all notifications? This action is permanent and cannot be undone.
-                        </p>
-                    </div>
-                    <div className="flex items-center justify-end gap-2">
-                        <Button
-                            variant="secondary"
-                            className="h-9 text-xs"
-                            onClick={() => setShowClearAllModal(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="danger"
-                            className="h-9 text-xs"
-                            onClick={() => {
-                                deleteAll.mutate(undefined, {
-                                    onSuccess: () => {
-                                        setShowClearAllModal(false);
-                                    }
-                                });
-                            }}
-                            loading={deleteAll.isPending}
-                        >
-                            <Trash2 size={14} /> Clear All
-                        </Button>
+            {/* Clear Modal */}
+            {showClearAllModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono text-xs">
+                    <div className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                        <div className="border-b border-[#1F1F1F] pb-3">
+                            <h3 className="text-sm font-bold text-white">Clear All Notifications</h3>
+                            <p className="mt-1 text-[#666666]">This action permanently purges all alert history records.</p>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button onClick={() => setShowClearAllModal(false)} className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    deleteAll.mutate(undefined, {
+                                        onSuccess: () => setShowClearAllModal(false)
+                                    });
+                                }}
+                                disabled={deleteAll.isPending}
+                                className="flex h-8 items-center gap-1 rounded border border-rose-900/40 bg-rose-950/40 px-3 font-semibold text-rose-300 hover:bg-rose-900/60"
+                            >
+                                {deleteAll.isPending ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Confirm Purge
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </AppModal>
-        </div>
-    );
-}
-
-function NotificationRow({
-    notification: n,
-    onMarkRead,
-    onDelete,
-}: {
-    notification: AppNotification;
-    onMarkRead: () => void;
-    onDelete: () => void;
-}) {
-    return (
-        <div
-            className={`group relative flex items-start gap-3 rounded-lg border p-4 transition-all ${
-                n.isRead
-                    ? 'border-white/5 bg-slate-950/20 opacity-70'
-                    : 'border-white/10 bg-slate-950/40 hover:border-white/15'
-            }`}
-        >
-            {/* Unread indicator */}
-            {!n.isRead && (
-                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
             )}
-
-            {/* Level icon */}
-            <div className="mt-0.5 shrink-0">{getLevelIcon(n.level)}</div>
-
-            {/* Content */}
-            <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase ${getLevelBadge(n.level)}`}>
-                        {n.level}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-md border border-white/5 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
-                        {getTypeIcon(n.type)}
-                        {n.type.replace(/_/g, ' ')}
-                    </span>
-                    {n.serverName && (
-                        <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                            <Server size={10} /> {n.serverName}
-                        </span>
-                    )}
-                </div>
-                <p className="mt-1.5 text-sm font-bold text-white">{n.title}</p>
-                <p className="mt-0.5 text-xs text-slate-400 leading-relaxed">{n.message}</p>
-                <div className="mt-2 flex items-center gap-3">
-                    <span className="text-[10px] text-slate-600">{timeAgo(n.createdAt)}</span>
-                    {n.resourceValue != null && (
-                        <span className="text-[10px] font-mono text-slate-500">{n.resourceValue}%</span>
-                    )}
-                </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                {!n.isRead && (
-                    <button
-                        onClick={onMarkRead}
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-slate-400 hover:bg-white/[0.08] hover:text-cyan-400 transition-colors"
-                        title="Mark as read"
-                    >
-                        <Check size={12} />
-                    </button>
-                )}
-                <button
-                    onClick={onDelete}
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
-                    title="Delete"
-                >
-                    <Trash2 size={12} />
-                </button>
-            </div>
         </div>
     );
 }

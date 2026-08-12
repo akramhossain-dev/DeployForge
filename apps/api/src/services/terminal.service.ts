@@ -191,12 +191,24 @@ export class TerminalService {
         return Buffer.from(String(data));
     }
 
-    private static handleControlMessage(session: SSHSession, data: unknown) {
-        if (typeof data !== 'string') return false;
+    private static handleControlMessage(session: SSHSession, data: unknown): boolean {
+        let text: string | null = null;
+
+        if (typeof data === 'string') {
+            text = data;
+        } else if (Buffer.isBuffer(data)) {
+            text = data.toString('utf-8');
+        } else if (data instanceof ArrayBuffer) {
+            text = Buffer.from(data).toString('utf-8');
+        } else if (ArrayBuffer.isView(data)) {
+            text = Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString('utf-8');
+        }
+
+        if (!text || !text.startsWith('{')) return false;
 
         let message: TerminalControlMessage;
         try {
-            message = JSON.parse(data) as TerminalControlMessage;
+            message = JSON.parse(text) as TerminalControlMessage;
         } catch {
             return false;
         }

@@ -2,20 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Calendar, Github, Key, KeyRound, Mail, Save, Shield, User } from 'lucide-react';
+import { Calendar, Github, Key, KeyRound, Mail, Save, Shield, User, Loader2 } from 'lucide-react';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
-import { Button, PageHeader, Panel, SkeletonBlock, inputClassName } from '@/components/ui';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
+import clsx from 'clsx';
 
-function ReadonlyField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
+
+function ReadonlyField({ label, value }: { label: string; value: string }) {
     return (
         <div>
-            <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600">{label} <span className="ml-1 rounded bg-white/[0.04] px-1.5 py-0.5 text-[9px] normal-case tracking-normal text-slate-600">read-only</span></p>
-            <div className="flex h-10 items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 text-sm text-slate-500">
-                <span className="text-slate-600 shrink-0">{icon}</span>
-                <span className="truncate">{value}</span>
-            </div>
+            <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">{label}</label>
+            <input type="text" value={value} readOnly disabled className={clsx(INPUT_STYLE, 'cursor-not-allowed opacity-50')} />
         </div>
     );
 }
@@ -29,12 +28,12 @@ function getInitials(name: string, username: string) {
 }
 
 export default function ProfilePage() {
-    const auth     = useAuthSession();
+    const auth = useAuthSession();
     const addToast = useToastStore(s => s.addToast);
 
-    const [name,    setName]    = useState('');
+    const [name, setName] = useState('');
     const [username, setUsername] = useState('');
-    const [email,   setEmail]   = useState('');
+    const [email, setEmail] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
@@ -47,12 +46,8 @@ export default function ProfilePage() {
 
     if (auth.isLoading) {
         return (
-            <div className="space-y-6">
-                <SkeletonBlock className="h-12 max-w-sm" />
-                <div className="grid gap-6 lg:grid-cols-3">
-                    <SkeletonBlock className="h-60" />
-                    <SkeletonBlock className="h-60 lg:col-span-2" />
-                </div>
+            <div className="flex h-64 items-center justify-center font-mono text-xs text-[#666666]">
+                <Loader2 size={16} className="animate-spin mr-2" /> Loading user profile...
             </div>
         );
     }
@@ -70,111 +65,95 @@ export default function ProfilePage() {
         } finally { setIsSaving(false); }
     };
 
-    const gitHubAvatar   = auth.user?.githubAvatar;
+    const gitHubAvatar = auth.user?.githubAvatar;
     const gitHubUsername = auth.user?.githubUsername;
-    const initials       = getInitials(name, username);
+    const initials = getInitials(name, username);
 
     return (
-        <div className="space-y-6">
-            <PageHeader title="My Profile" description="View and manage your public display name and account identity." />
+        <div className="space-y-6 font-mono text-xs">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        User Profile
+                    </h1>
+                    <p className="mt-1 text-xs text-[#A1A1A1]">
+                        Manage user identity display name, linked GitHub account, and authentication preferences.
+                    </p>
+                </div>
+            </div>
 
             <div className="grid gap-6 lg:grid-cols-3">
-                {/* ── Avatar card ── */}
-                <Panel className="relative overflow-hidden flex flex-col items-center py-8 text-center">
-                    <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-300/30 to-transparent" />
-
-                    {/* Avatar */}
-                    <div className="h-24 w-24 overflow-hidden rounded-2xl border-2 border-white/[0.1] bg-slate-900 flex items-center justify-center shadow-xl">
+                {/* Left: Avatar Card */}
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 flex flex-col items-center text-center space-y-4">
+                    <div className="h-20 w-20 overflow-hidden rounded-full border border-[#1F1F1F] bg-[#000000] flex items-center justify-center">
                         {gitHubAvatar ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={gitHubAvatar} alt="GitHub Avatar" className="h-full w-full object-cover" />
                         ) : (
-                            <span className="text-3xl font-black text-slate-300">{initials}</span>
+                            <span className="text-2xl font-bold text-white">{initials}</span>
                         )}
                     </div>
 
-                    {/* Name + handle */}
-                    <p className="mt-4 font-black text-white text-lg">{name || 'Your Name'}</p>
-                    {username && <p className="text-[11px] text-slate-500">@{username}</p>}
-
-                    {/* GitHub badge */}
-                    <div className="mt-3">
-                        {gitHubAvatar ? (
-                            <span className="flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-2.5 py-1 text-[10px] font-black text-emerald-300">
-                                <Github size={10} /> GitHub avatar active
-                            </span>
-                        ) : (
-                            <span className="text-[10px] text-slate-600">Connect GitHub to use your avatar</span>
-                        )}
+                    <div>
+                        <p className="font-bold text-white text-base">{name || 'User'}</p>
+                        {username && <p className="text-xs text-[#A1A1A1]">@{username}</p>}
                     </div>
 
-                    {/* Actions */}
-                    <div className="mt-6 w-full space-y-2 border-t border-white/[0.06] pt-5">
+                    <div className="w-full pt-4 border-t border-[#1F1F1F] space-y-2">
                         <Link href="/settings/security" className="block">
-                            <Button variant="secondary" className="w-full h-9 text-xs">
+                            <button className="w-full h-8 flex items-center justify-center gap-1.5 rounded border border-[#1F1F1F] bg-[#111111] font-semibold text-white hover:bg-[#1A1A1A]">
                                 <KeyRound size={13} /> Change Password
-                            </Button>
+                            </button>
                         </Link>
                         <Link href="/settings" className="block">
-                            <Button variant="secondary" className="w-full h-9 text-xs">
+                            <button className="w-full h-8 flex items-center justify-center gap-1.5 rounded border border-[#1F1F1F] bg-[#111111] font-semibold text-white hover:bg-[#1A1A1A]">
                                 <Shield size={13} /> Connected Accounts
-                            </Button>
+                            </button>
                         </Link>
                     </div>
-                </Panel>
+                </div>
 
-                {/* ── Info form ── */}
-                <Panel className="lg:col-span-2">
-                    <div className="mb-5 flex items-center gap-3 border-b border-white/[0.06] pb-4">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/8 text-cyan-200">
-                            <User size={15} />
-                        </div>
-                        <div>
-                            <h2 className="font-black text-white">Profile Information</h2>
-                            <p className="text-[10px] text-slate-500 mt-0.5">Username and email can only be changed by an admin.</p>
-                        </div>
+                {/* Right: Editable Info Form */}
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4 lg:col-span-2">
+                    <div className="border-b border-[#1F1F1F] pb-3">
+                        <h2 className="font-bold text-white text-sm">Account Information</h2>
                     </div>
 
                     <form onSubmit={handleSave} className="space-y-4">
-                        {/* Editable: name */}
-                        <label>
-                            <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">Full Name</p>
+                        <div>
+                            <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">Display Name</label>
                             <input
-                                type="text" value={name} onChange={e => setName(e.target.value)}
-                                autoComplete="name" placeholder="Your display name"
-                                className={inputClassName}
+                                type="text"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                placeholder="Your full display name"
+                                className={INPUT_STYLE}
                             />
-                        </label>
+                        </div>
 
-                        {/* Read-only grid */}
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <ReadonlyField icon={<span className="text-xs">@</span>} label="Username" value={username || '—'} />
-                            <ReadonlyField icon={<Mail size={13} />} label="Email Address" value={email || '—'} />
+                            <ReadonlyField label="Username" value={username || '—'} />
+                            <ReadonlyField label="Email Address" value={email || '—'} />
                         </div>
+
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <ReadonlyField icon={<Github size={13} />} label="GitHub Account" value={gitHubUsername ? `@${gitHubUsername}` : 'Not connected'} />
-                            <ReadonlyField icon={<Key size={13} />}    label="Avatar Source"  value={gitHubAvatar ? 'GitHub Avatar' : 'Initials (no GitHub)'} />
+                            <ReadonlyField label="GitHub Account" value={gitHubUsername ? `@${gitHubUsername}` : 'Not connected'} />
+                            <ReadonlyField label="Account Role" value={auth.user?.role || 'USER'} />
                         </div>
 
-                        {/* Meta timestamps */}
-                        <div className="flex flex-wrap gap-5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[11px] text-slate-600">
-                            <span className="flex items-center gap-1.5">
-                                <Calendar size={11} />
-                                Joined: {auth.user?.createdAt ? new Date(auth.user.createdAt).toLocaleDateString() : '—'}
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <Key size={11} />
-                                Last login: {auth.user?.lastLoginAt ? new Date(auth.user.lastLoginAt).toLocaleString() : '—'}
-                            </span>
-                        </div>
-
-                        <div className="flex justify-end border-t border-white/[0.06] pt-4">
-                            <Button type="submit" loading={isSaving}>
-                                <Save size={14} /> Save Changes
-                            </Button>
+                        <div className="flex justify-end border-t border-[#1F1F1F] pt-4">
+                            <button
+                                type="submit"
+                                disabled={isSaving}
+                                className="flex h-9 items-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-5 font-semibold text-black hover:bg-[#E5E5E5] disabled:opacity-50"
+                            >
+                                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                <span>Save Changes</span>
+                            </button>
                         </div>
                     </form>
-                </Panel>
+                </div>
             </div>
         </div>
     );
