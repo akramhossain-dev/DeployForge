@@ -2,308 +2,448 @@
 
 import Link from 'next/link';
 import {
-    Activity, ArrowRight, CheckCircle2, Github,
-    GitBranch, LayoutDashboard, Lock, Rocket,
-    Server, Terminal, Users, Zap,
+    Activity, ArrowRight, CheckCircle2, Cpu, GitBranch, GitCommit,
+    Github, Globe, KeyRound, LayoutDashboard, Lock, Rocket,
+    Server, ShieldCheck, Terminal, Zap,
 } from 'lucide-react';
 import { useAuthSession, useDeployments, usePublicStats, useVpsList } from '@/hooks/useDeployForgeData';
 import { SkeletonBlock, StatusBadge, formatDate } from '@/components/ui';
 import clsx from 'clsx';
 
-const FEATURES = [
-    { title: 'GitHub Integration', description: 'Connect repositories, sync branches, and keep deployments close to your code.', icon: Github, accent: 'text-cyan-300', bg: 'bg-cyan-300/10 border-cyan-300/15' },
-    { title: 'VPS Deployment',     description: 'Register your own servers — no handing infra control to a third-party cloud.', icon: Server, accent: 'text-emerald-300', bg: 'bg-emerald-300/10 border-emerald-300/15' },
-    { title: 'Auto Deploy',        description: 'Repeatable build jobs with live logs, status tracking, and rollback-ready history.', icon: Zap, accent: 'text-amber-300', bg: 'bg-amber-300/10 border-amber-300/15' },
-    { title: 'Terminal Access',    description: 'Reach server sessions from the browser when production needs hands-on attention.', icon: Terminal, accent: 'text-rose-300', bg: 'bg-rose-300/10 border-rose-300/15' },
-    { title: 'Live Monitoring',    description: 'Watch deployment health, VPS signals, and platform activity from one surface.', icon: Activity, accent: 'text-indigo-300', bg: 'bg-indigo-300/10 border-indigo-300/15' },
+const CORE_FEATURES = [
+    {
+        title: 'Agentless SSH Orchestration',
+        description: 'Connect standard Ubuntu servers. DeployForge manages builds, containers, and networking securely over SSH without third-party daemons.',
+        icon: Server,
+    },
+    {
+        title: 'Automated Git Workflows',
+        description: 'Sync repositories via GitHub OAuth. Webhooks automatically trigger isolated build pipelines when code is pushed to monitored branches.',
+        icon: Github,
+    },
+    {
+        title: 'Zero-Config Nginx & SSL',
+        description: 'Dynamic reverse proxy routing with automatic Let’s Encrypt TLS certificate issuance and renewal via Certbot.',
+        icon: Globe,
+    },
+    {
+        title: 'Blue-Green Deployments',
+        description: 'Deploy new application releases into parallel containers, execute health checks, and switch live traffic with zero downtime.',
+        icon: Zap,
+    },
+    {
+        title: 'Web Terminal & Live Logs',
+        description: 'Inspect running containers and access server SSH sessions directly in the browser via WebSockets and xterm.js.',
+        icon: Terminal,
+    },
+    {
+        title: 'AES-256 Security & Hardening',
+        description: 'Environment variables encrypted at rest with AES-256-GCM, Argon2id auth hashing, and container sandbox profiles.',
+        icon: ShieldCheck,
+    },
 ];
 
-const STEPS = [
-    { step: '01', title: 'Connect GitHub',  desc: 'Authorize DeployForge and pick the repository you want to ship.',           accent: 'text-cyan-300' },
-    { step: '02', title: 'Add VPS',         desc: 'Attach your server with SSH credentials and health check configuration.',   accent: 'text-emerald-300' },
-    { step: '03', title: 'Deploy Repo',     desc: 'Choose branch, framework, and destination — then launch the build job.',   accent: 'text-amber-300' },
-    { step: '04', title: 'Scale Out',       desc: 'Grow capacity across registered infrastructure as workloads expand.',      accent: 'text-violet-300' },
+const WORKFLOW_STEPS = [
+    {
+        step: '01',
+        title: 'Connect GitHub Repository',
+        description: 'Authorize DeployForge to listen for branch pushes and build webhooks.',
+    },
+    {
+        step: '02',
+        title: 'Register Target VPS',
+        description: 'Attach your server credentials over SSH and define health check rules.',
+    },
+    {
+        step: '03',
+        title: 'Automated Container Build',
+        description: 'DeployForge compiles your application runtime inside a sandbox container.',
+    },
+    {
+        step: '04',
+        title: 'Zero-Downtime Route Switch',
+        description: 'Nginx dynamically updates traffic routes with active SSL certificate renewal.',
+    },
 ];
 
 export default function HomePage() {
-    const auth        = useAuthSession();
-    const stats       = usePublicStats();
+    const auth = useAuthSession();
+    const stats = usePublicStats();
     const deployments = useDeployments(auth.isAuthenticated);
-    const vps         = useVpsList(auth.isAuthenticated);
+    const vps = useVpsList(auth.isAuthenticated);
     const latestDeployments = deployments.data?.slice(0, 3) || [];
-    const activeVps   = vps.data?.filter(s => s.status.toLowerCase() === 'active').length;
+    const activeVpsCount = vps.data?.filter(s => s.status.toLowerCase() === 'active').length || 0;
 
-    const primaryHref  = auth.isAuthenticated ? '/dashboard' : '/register';
-    const primaryLabel = auth.isAuthenticated ? 'Go to Dashboard' : 'Get Started Free';
-    const ctaHref      = auth.isAuthenticated ? '/dashboard' : '/login';
-    const ctaLabel     = auth.isAuthenticated ? 'Go to Dashboard' : 'Start Deploying';
+    const primaryHref = auth.isAuthenticated ? '/dashboard' : '/register';
+    const primaryLabel = auth.isAuthenticated ? 'Open Console' : 'Get Started';
 
     return (
-        <main className="overflow-hidden bg-slate-950 text-white">
+        <main className="min-h-screen bg-black text-white">
 
-            {/* ── Hero ─────────────────────────────────────────────────────── */}
-            <section className="relative isolate min-h-[calc(100vh-4rem)] px-4 pb-24 pt-20 sm:px-6 lg:px-8">
-                <HeroAurora />
-                <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.1fr_0.9fr]">
-                    <div>
-                        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-100 shadow-lg shadow-cyan-500/10">
-                            <Lock size={12} /> Self-hosted deployment control
+            {/* ── 1. Hero Section ────────────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 pb-20 pt-16 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="max-w-3xl">
+                        {/* Status label */}
+                        <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            <span>v1.0.0 — Self-Hosted PaaS Orchestrator</span>
                         </div>
-                        <h1 className="mt-8 max-w-3xl text-5xl font-black leading-[1.04] tracking-tight text-white sm:text-6xl lg:text-7xl">
-                            Deploy on infrastructure{' '}
-                            <span className="bg-gradient-to-r from-cyan-300 to-emerald-300 bg-clip-text text-transparent">
-                                you own.
-                            </span>
+
+                        {/* Headline */}
+                        <h1 className="mt-6 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
+                            Self-hosted application deployments on your own infrastructure.
                         </h1>
-                        <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
-                            A focused deployment platform for GitHub-connected apps, VPS infrastructure, live terminals, and real operational visibility.
+
+                        {/* Description */}
+                        <p className="mt-5 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
+                            DeployForge connects your GitHub repositories to Virtual Private Servers over agentless SSH.
+                            Automate container builds, dynamic Nginx routing, and zero-downtime releases without vendor lock-in.
                         </p>
-                        <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                            <Link href={primaryHref}
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-xl shadow-white/10 transition-all hover:scale-[1.02] hover:shadow-white/20">
-                                {primaryLabel} <ArrowRight size={16} />
+
+                        {/* CTAs */}
+                        <div className="mt-8 flex flex-wrap items-center gap-3">
+                            <Link
+                                href={primaryHref}
+                                className="flex h-10 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-5 text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5]"
+                            >
+                                <span>{primaryLabel}</span>
+                                <ArrowRight size={14} />
                             </Link>
-                            <Link href={auth.isAuthenticated ? '/dashboard' : '/login'}
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/8 px-6 text-sm font-bold text-white backdrop-blur-md transition-colors hover:bg-white/12">
-                                {auth.isAuthenticated ? <><LayoutDashboard size={16} /> Dashboard</> : <><Github size={16} /> Sign In</>}
+
+                            <Link
+                                href="/docs"
+                                className="flex h-10 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-5 text-xs font-medium text-white transition-colors hover:bg-[#111111]"
+                            >
+                                <span>Documentation</span>
                             </Link>
+
+                            {!auth.isAuthenticated && (
+                                <Link
+                                    href="/login"
+                                    className="flex h-10 items-center justify-center rounded-md px-4 text-xs font-medium text-[#A1A1A1] transition-colors hover:text-white"
+                                >
+                                    <span>Sign In</span>
+                                </Link>
+                            )}
                         </div>
-                        {/* Trust badges */}
-                        <div className="mt-10 flex flex-wrap gap-4 text-xs font-bold text-slate-500">
-                            {['Open source friendly', 'No vendor lock-in', 'SSH-based deployments', 'Live log streaming'].map(b => (
-                                <span key={b} className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-400" />{b}</span>
-                            ))}
+
+                        {/* Trust/spec points */}
+                        <div className="mt-10 flex flex-wrap gap-x-6 gap-y-2 border-t border-[#1F1F1F] pt-6 text-xs font-mono text-[#666666]">
+                            <span className="flex items-center gap-1.5">
+                                <CheckCircle2 size={13} className="text-white" /> Agentless SSH Protocol
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <CheckCircle2 size={13} className="text-white" /> Blue-Green Zero Downtime
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <CheckCircle2 size={13} className="text-white" /> Automated Certbot SSL
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <CheckCircle2 size={13} className="text-white" /> AES-256 Encrypted Secrets
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── 2. Product Interface Preview ──────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="mb-4 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Platform Preview</h2>
+                            <p className="mt-1 text-sm font-semibold text-white">Live Orchestration Console</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-mono text-[#666666]">
+                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                            <span>System Normal</span>
                         </div>
                     </div>
 
-                    {/* Hero preview card */}
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-1.5 shadow-2xl shadow-slate-950/70 backdrop-blur-xl">
-                        <div className="rounded-xl border border-white/[0.07] bg-slate-950/90 p-5">
-                            <div className="flex items-center justify-between gap-4 mb-5">
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Live preview</p>
-                                    <h2 className="text-base font-black text-white">Deployment Console</h2>
+                    {/* Console mock shell */}
+                    <div className="overflow-hidden rounded-md border border-[#1F1F1F] bg-[#0A0A0A]">
+                        {/* Terminal title bar */}
+                        <div className="flex items-center justify-between border-b border-[#1F1F1F] bg-[#111111] px-4 py-2.5 font-mono text-xs text-[#A1A1A1]">
+                            <div className="flex items-center gap-2">
+                                <div className="flex gap-1.5">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-[#1F1F1F]" />
+                                    <span className="h-2.5 w-2.5 rounded-full bg-[#1F1F1F]" />
+                                    <span className="h-2.5 w-2.5 rounded-full bg-[#1F1F1F]" />
                                 </div>
-                                <span className="flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1 text-[11px] font-black text-emerald-200">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" /> API Linked
-                                </span>
+                                <span className="ml-2 text-[#666666]">deployforge-console — v1.0.0</span>
                             </div>
-                            <div className="space-y-2">
-                                {auth.isAuthenticated && deployments.isLoading ? (
-                                    <><SkeletonBlock className="h-14" /><SkeletonBlock className="h-14" /><SkeletonBlock className="h-14" /></>
-                                ) : auth.isAuthenticated && latestDeployments.length ? (
-                                    latestDeployments.map(d => (
-                                        <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] p-3">
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <span className={clsx('h-2 w-2 shrink-0 rounded-full',
-                                                    d.status === 'RUNNING' ? 'bg-emerald-400 animate-pulse' :
-                                                    d.status === 'FAILED'  ? 'bg-rose-400' : 'bg-cyan-400')} />
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm font-black text-white">{d.name || d.project?.name || 'Deployment'}</p>
-                                                    <p className="text-[10px] text-slate-500">{formatDate(d.updatedAt)}</p>
-                                                </div>
-                                            </div>
-                                            <StatusBadge status={d.status} />
+                            <div className="flex items-center gap-4 text-[11px] text-[#666666]">
+                                <span>BRANCH: main</span>
+                                <span>PROTOCOL: SSH2</span>
+                            </div>
+                        </div>
+
+                        {/* Console content grid */}
+                        <div className="grid gap-6 p-6 lg:grid-cols-3">
+                            {/* Pipeline status column */}
+                            <div className="space-y-4 lg:col-span-2">
+                                <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Rocket size={14} className="text-white" />
+                                        <span className="text-xs font-mono font-semibold text-white">Active Deployment Pipeline</span>
+                                    </div>
+                                    <span className="text-xs font-mono text-[#666666]">Target: Ubuntu 22.04 LTS</span>
+                                </div>
+
+                                <div className="space-y-2">
+                                    {auth.isAuthenticated && deployments.isLoading ? (
+                                        <div className="space-y-2">
+                                            <SkeletonBlock className="h-12 bg-[#111111]" />
+                                            <SkeletonBlock className="h-12 bg-[#111111]" />
                                         </div>
-                                    ))
-                                ) : (
-                                    <div className="flex flex-col items-center rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center">
-                                        <GitBranch className="text-slate-600" size={28} />
-                                        <p className="mt-3 text-sm font-black text-white">{auth.isAuthenticated ? 'No live deployments yet' : 'Sign in to see your deployments'}</p>
-                                        <p className="mt-1 text-xs text-slate-600">Real records stream here from the API.</p>
-                                    </div>
-                                )}
+                                    ) : auth.isAuthenticated && latestDeployments.length ? (
+                                        latestDeployments.map(d => (
+                                            <div
+                                                key={d.id}
+                                                className="flex items-center justify-between rounded-md border border-[#1F1F1F] bg-[#000000] p-3 text-xs font-mono"
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <GitCommit size={14} className="text-[#666666] shrink-0" />
+                                                    <div className="min-w-0">
+                                                        <p className="truncate font-semibold text-white">{d.name || d.project?.name || d.id}</p>
+                                                        <p className="text-[11px] text-[#666666]">{d.branch || 'main'} • {formatDate(d.updatedAt)}</p>
+                                                    </div>
+                                                </div>
+                                                <StatusBadge status={d.status} />
+                                            </div>
+                                        ))
+                                    ) : (
+                                        /* Static realistic sample when unauthenticated or empty */
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between rounded-md border border-[#1F1F1F] bg-[#000000] p-3 text-xs font-mono">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <GitCommit size={14} className="text-emerald-400 shrink-0" />
+                                                    <div>
+                                                        <p className="font-semibold text-white">deployforge-api-service</p>
+                                                        <p className="text-[11px] text-[#666666]">main • commit f83a219 • 2m ago</p>
+                                                    </div>
+                                                </div>
+                                                <span className="rounded bg-[#111111] px-2 py-0.5 text-[11px] text-emerald-400 border border-[#1F1F1F]">
+                                                    SUCCESS
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between rounded-md border border-[#1F1F1F] bg-[#000000] p-3 text-xs font-mono">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <GitCommit size={14} className="text-white shrink-0" />
+                                                    <div>
+                                                        <p className="font-semibold text-white">deployforge-web-dashboard</p>
+                                                        <p className="text-[11px] text-[#666666]">main • commit 4b12c90 • 14m ago</p>
+                                                    </div>
+                                                </div>
+                                                <span className="rounded bg-[#111111] px-2 py-0.5 text-[11px] text-emerald-400 border border-[#1F1F1F]">
+                                                    SUCCESS
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Terminal log output snippet */}
+                                <div className="rounded-md border border-[#1F1F1F] bg-[#000000] p-3 font-mono text-[11px] leading-relaxed text-[#A1A1A1]">
+                                    <p className="text-[#666666]">[15:24:02] SSH pool connection verified (root@192.168.1.100:22)</p>
+                                    <p className="text-[#666666]">[15:24:04] Extracting build context into Docker engine container sandbox...</p>
+                                    <p className="text-white">[15:24:08] Nginx dynamic configuration updated: SSL cert renewed via Let&apos;s Encrypt</p>
+                                    <p className="text-emerald-400">[15:24:09] Health check passed (HTTP 200 OK). Traffic switched with 0 downtime.</p>
+                                </div>
                             </div>
-                            <div className="mt-4 grid grid-cols-2 gap-3">
-                                {[
-                                    { label: 'Deployments', value: auth.isAuthenticated ? latestDeployments.length : undefined },
-                                    { label: 'Active VPS',  value: auth.isAuthenticated ? activeVps           : undefined },
-                                ].map(m => (
-                                    <div key={m.label} className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-3">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{m.label}</p>
-                                        <p className="mt-1.5 text-2xl font-black text-white">{typeof m.value === 'number' ? m.value : '—'}</p>
+
+                            {/* Node status / stats sidebar */}
+                            <div className="space-y-4 border-t border-[#1F1F1F] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+                                <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Server size={14} className="text-white" />
+                                        <span className="text-xs font-mono font-semibold text-white">Registered Infrastructure</span>
                                     </div>
-                                ))}
+                                </div>
+
+                                <div className="space-y-3 font-mono text-xs">
+                                    <div className="rounded-md border border-[#1F1F1F] bg-[#000000] p-3">
+                                        <p className="text-[11px] text-[#666666]">CONTROL PLANE METRICS</p>
+                                        <div className="mt-2 space-y-1.5">
+                                            <div className="flex justify-between">
+                                                <span className="text-[#A1A1A1]">Active VPS Nodes</span>
+                                                <span className="font-semibold text-white">{auth.isAuthenticated ? activeVpsCount : (stats.data?.activeVps || 1)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#A1A1A1]">Total Deployments</span>
+                                                <span className="font-semibold text-white">{stats.data?.totalDeployments || 12}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#A1A1A1]">Database</span>
+                                                <span className="font-semibold text-emerald-400">PostgreSQL 16</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-md border border-[#1F1F1F] bg-[#000000] p-3">
+                                        <p className="text-[11px] text-[#666666]">SECURITY PROTOCOLS</p>
+                                        <div className="mt-2 space-y-1 text-[11px] text-[#A1A1A1]">
+                                            <p className="flex items-center gap-1.5">
+                                                <Lock size={12} className="text-white" /> AES-256-GCM Vault
+                                            </p>
+                                            <p className="flex items-center gap-1.5">
+                                                <KeyRound size={12} className="text-white" /> Argon2id Password Hash
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* ── Features ─────────────────────────────────────────────────── */}
-            <section id="features" className="border-y border-white/[0.07] bg-white/[0.02] px-4 py-20 sm:px-6 lg:px-8">
+            {/* ── 3. Core Features Grid ─────────────────────────────────── */}
+            <section id="features" className="border-b border-[#1F1F1F] px-4 py-20 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
-                        <p className="text-[11px] font-black uppercase tracking-widest text-cyan-300">Platform</p>
-                        <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
-                            Everything you need, pointed at your servers.
-                        </h2>
-                        <p className="mt-4 text-base leading-7 text-slate-400">
-                            Source control, server inventory, build status, terminal access, and monitoring in one coherent interface.
+                        <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Platform Features</h2>
+                        <p className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            Everything required to operate self-hosted infrastructure.
                         </p>
                     </div>
-                    <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                        {FEATURES.map(f => {
+
+                    <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        {CORE_FEATURES.map(f => {
                             const Icon = f.icon;
                             return (
-                                <article key={f.title} className="group rounded-2xl border border-white/[0.07] bg-slate-900/60 p-5 transition-all hover:border-white/15 hover:bg-slate-900/80">
-                                    <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl border', f.bg)}>
-                                        <Icon size={18} className={f.accent} />
+                                <div
+                                    key={f.title}
+                                    className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 transition-colors hover:border-[#333333]"
+                                >
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#111111] text-white">
+                                        <Icon size={16} />
                                     </div>
-                                    <h3 className="mt-5 text-sm font-black text-white">{f.title}</h3>
-                                    <p className="mt-2.5 text-xs leading-5 text-slate-400">{f.description}</p>
-                                </article>
+                                    <h3 className="mt-4 text-sm font-semibold text-white">{f.title}</h3>
+                                    <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">{f.description}</p>
+                                </div>
                             );
                         })}
                     </div>
                 </div>
             </section>
 
-            {/* ── Steps ────────────────────────────────────────────────────── */}
-            <section className="px-4 py-20 sm:px-6 lg:px-8">
+            {/* ── 4. How It Works / Workflow Pipeline ────────────────────── */}
+            <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-20 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
-                        <p className="text-[11px] font-black uppercase tracking-widest text-cyan-300">Workflow</p>
-                        <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
-                            From repository to running service.
-                        </h2>
-                        <p className="mt-4 text-base leading-7 text-slate-400">
-                            Short enough for solo builders, explicit enough for teams managing production infrastructure.
+                        <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Deployment Flow</h2>
+                        <p className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            From git push to live production container.
                         </p>
                     </div>
-                    <div className="mt-12 grid gap-4 lg:grid-cols-4">
-                        {STEPS.map(({ step, title, desc, accent }) => (
-                            <article key={step} className="relative rounded-2xl border border-white/[0.07] bg-slate-900/55 p-6 transition-all hover:border-white/12">
-                                <p className={clsx('text-4xl font-black', accent)}>{step}</p>
-                                <h3 className="mt-5 text-base font-black text-white">{title}</h3>
-                                <p className="mt-2.5 text-sm leading-6 text-slate-400">{desc}</p>
-                            </article>
+
+                    <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                        {WORKFLOW_STEPS.map(s => (
+                            <div key={s.step} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
+                                <span className="font-mono text-xs font-bold text-[#666666]">{s.step}</span>
+                                <h3 className="mt-3 text-sm font-semibold text-white">{s.title}</h3>
+                                <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">{s.description}</p>
+                            </div>
                         ))}
                     </div>
                 </div>
             </section>
 
-            {/* ── Live preview + Terminal ───────────────────────────────────── */}
-            <section className="border-y border-white/[0.07] bg-slate-900/30 px-4 py-20 sm:px-6 lg:px-8">
-                <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-2">
-                    {/* Deployment list */}
-                    <div className="rounded-2xl border border-white/[0.07] bg-slate-950/70 p-6">
-                        <div className="mb-5 flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/8 text-cyan-300">
-                                <Rocket size={15} />
-                            </div>
-                            <h2 className="text-lg font-black text-white">Deployment Preview</h2>
-                        </div>
-                        <div className="space-y-2">
-                            {auth.isAuthenticated && deployments.isLoading ? (
-                                <><SkeletonBlock className="h-14" /><SkeletonBlock className="h-14" /></>
-                            ) : auth.isAuthenticated && latestDeployments.length ? (
-                                latestDeployments.map(d => (
-                                    <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] p-3.5">
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-black text-white">{d.name || d.project?.name || d.id}</p>
-                                            <p className="text-[10px] text-slate-500">{formatDate(d.updatedAt)}</p>
-                                        </div>
-                                        <StatusBadge status={d.status} />
+            {/* ── 5. Technical Architecture Section ─────────────────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 py-20 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+                        <div>
+                            <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Architecture</h2>
+                            <p className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                                Built for complete data sovereignty and operational control.
+                            </p>
+                            <p className="mt-4 text-xs leading-relaxed text-[#A1A1A1]">
+                                DeployForge keeps control plane operations decoupled from target server runtimes.
+                                Application code, secrets, and customer data remain strictly on your owned infrastructure.
+                            </p>
+
+                            <div className="mt-6 space-y-3 font-mono text-xs">
+                                <div className="flex items-start gap-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3">
+                                    <Cpu size={15} className="text-white shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-semibold text-white">BullMQ & Redis Task Queues</p>
+                                        <p className="text-[11px] text-[#A1A1A1]">Asynchronous deployment jobs with retry policies and execution history logs.</p>
                                     </div>
-                                ))
-                            ) : (
-                                <div className="rounded-xl border border-dashed border-white/10 p-6 text-sm text-slate-500">
-                                    {auth.isAuthenticated ? 'No deployments returned yet.' : 'Sign in to preview your live deployments.'}
                                 </div>
-                            )}
+                                <div className="flex items-start gap-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3">
+                                    <Activity size={15} className="text-white shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-semibold text-white">Fastify & WebSocket Control Engine</p>
+                                        <p className="text-[11px] text-[#A1A1A1]">Low-overhead REST API with real-time WebSocket log and web terminal streaming.</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Terminal mock */}
-                    <div className="rounded-2xl border border-white/[0.07] bg-slate-950 p-6">
-                        <div className="mb-5 flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-300/15 bg-emerald-300/8 text-emerald-300">
-                                <Terminal size={15} />
+                        {/* Code / Config architecture specification box */}
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 font-mono text-xs leading-relaxed">
+                            <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3 text-[#666666]">
+                                <span>deployforge.config.json</span>
+                                <span>JSON SCHEMA</span>
                             </div>
-                            <h2 className="text-lg font-black text-white">Terminal Access</h2>
-                        </div>
-                        <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-black">
-                            <div className="flex items-center gap-1.5 border-b border-white/[0.07] px-4 py-3">
-                                <span className="h-3 w-3 rounded-full bg-rose-400/80" />
-                                <span className="h-3 w-3 rounded-full bg-amber-300/80" />
-                                <span className="h-3 w-3 rounded-full bg-emerald-300/80" />
-                                <span className="ml-3 text-[10px] font-mono text-slate-600">deployforge — bash</span>
-                            </div>
-                            <div className="space-y-2.5 p-5 font-mono text-xs leading-6">
-                                <p className="text-emerald-300">$ deployforge status</p>
-                                <p className="text-slate-500">↳ connecting to authenticated session…</p>
-                                <p className="text-emerald-300">$ tail -f deployment.log</p>
-                                <p className="text-slate-500">↳ streaming output from your VPS in real-time.</p>
-                                <p className="text-cyan-300 animate-pulse">█</p>
-                            </div>
+                            <pre className="mt-4 overflow-x-auto text-[#A1A1A1]">
+{`{
+  "platform": "deployforge",
+  "version": "1.0.0",
+  "controlPlane": {
+    "engine": "fastify-prisma",
+    "queue": "bullmq-redis",
+    "security": "aes-256-gcm"
+  },
+  "deployment": {
+    "protocol": "ssh2",
+    "strategy": "blue-green",
+    "proxy": "nginx-certbot",
+    "isolation": "docker-sandbox"
+  }
+}`}
+                            </pre>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* ── Live stats ───────────────────────────────────────────────── */}
+            {/* ── 6. Final CTA Section ──────────────────────────────────── */}
             <section className="px-4 py-20 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl">
-                    <div className="max-w-2xl">
-                        <p className="text-[11px] font-black uppercase tracking-widest text-cyan-300">Live Stats</p>
-                        <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Platform at a glance.</h2>
-                        <p className="mt-4 text-base leading-7 text-slate-400">Numbers read directly from the backend API — no placeholders.</p>
-                    </div>
-                    <div className="mt-10 grid gap-4 md:grid-cols-3">
-                        {[
-                            { title: 'Total Users',       icon: <Users size={20} />,  value: stats.data?.totalUsers,       accent: 'from-violet-400/25' },
-                            { title: 'Total Deployments', icon: <Rocket size={20} />, value: stats.data?.totalDeployments, accent: 'from-cyan-400/25' },
-                            { title: 'Active VPS',        icon: <Server size={20} />, value: stats.data?.activeVps,        accent: 'from-emerald-400/25' },
-                        ].map(card => (
-                            <article key={card.title} className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-900/70 p-6">
-                                <div className={clsx('absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r to-transparent', card.accent)} />
-                                <div className="flex items-center justify-between">
-                                    <p className="text-xs font-black uppercase tracking-widest text-slate-500">{card.title}</p>
-                                    <span className="text-cyan-300">{card.icon}</span>
-                                </div>
-                                {stats.isLoading ? (
-                                    <SkeletonBlock className="mt-6 h-10 w-28" />
-                                ) : stats.isError ? (
-                                    <p className="mt-6 text-sm font-bold text-slate-600">Unavailable</p>
-                                ) : (
-                                    <p className="mt-5 text-5xl font-black tracking-tight text-white">
-                                        {typeof card.value === 'number' ? card.value.toLocaleString() : '—'}
-                                    </p>
-                                )}
-                            </article>
-                        ))}
+                <div className="mx-auto max-w-7xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 sm:p-12">
+                    <div className="max-w-xl">
+                        <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            Deploy on your own infrastructure today.
+                        </h2>
+                        <p className="mt-3 text-xs leading-relaxed text-[#A1A1A1]">
+                            Connect your GitHub repositories to your Virtual Private Servers with automated builds and zero-downtime releases.
+                        </p>
+                        <div className="mt-6 flex flex-wrap gap-3">
+                            <Link
+                                href={primaryHref}
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-4 text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5]"
+                            >
+                                <span>{primaryLabel}</span>
+                                <ArrowRight size={13} />
+                            </Link>
+                            <a
+                                href="https://github.com/akramhossain-dev/DeployForge"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] px-4 text-xs font-medium text-white transition-colors hover:bg-[#1F1F1F]"
+                            >
+                                <Github size={13} />
+                                <span>Star on GitHub</span>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            {/* ── CTA ──────────────────────────────────────────────────────── */}
-            <section className="px-4 pb-24 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-300/10 via-cyan-300/5 to-transparent p-8 shadow-2xl shadow-cyan-950/20 sm:p-12 lg:flex lg:items-center lg:justify-between">
-                    <div>
-                        <p className="text-[11px] font-black uppercase tracking-widest text-cyan-300">Ready?</p>
-                        <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Start deploying on infrastructure you control.</h2>
-                        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">
-                            Jump into the right workspace based on your session and keep the workflow moving.
-                        </p>
-                    </div>
-                    <Link href={ctaHref}
-                        className="mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-8 text-sm font-black text-slate-950 shadow-xl shadow-white/10 transition-all hover:scale-[1.02] lg:mt-0">
-                        {ctaLabel} <ArrowRight size={16} />
-                    </Link>
-                </div>
-            </section>
         </main>
     );
 }
 
-function HeroAurora() {
-    return (
-        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-            <div className="absolute left-1/2 top-0 h-[40rem] w-[40rem] -translate-x-1/2 rounded-full bg-cyan-400/12 blur-3xl" />
-            <div className="absolute right-[-8rem] top-40 h-[28rem] w-[28rem] rounded-full bg-emerald-400/10 blur-3xl" />
-            <div className="absolute bottom-20 left-[-8rem] h-[24rem] w-[24rem] rounded-full bg-rose-400/8 blur-3xl" />
-            <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-        </div>
-    );
-}

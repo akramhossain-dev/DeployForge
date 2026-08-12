@@ -94,27 +94,26 @@ export function AdminShell({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="relative h-screen overflow-hidden bg-slate-950 text-slate-100">
-            <AuroraField />
-            <div className="relative flex h-screen overflow-hidden">
+        <div className="relative h-screen min-h-[100dvh] overflow-hidden bg-black text-white">
+            <div className="relative flex h-screen min-h-[100dvh] overflow-hidden">
                 {/* Desktop sidebar */}
-                <aside className="hidden h-screen w-60 shrink-0 flex-col border-r border-white/[0.07] bg-slate-950/80 backdrop-blur-2xl lg:flex">
+                <aside className="hidden h-screen min-h-[100dvh] w-60 shrink-0 flex-col border-r border-[#1F1F1F] bg-[#0A0A0A] lg:flex">
                     <AdminSidebar pathname={pathname} role={role} email={admin?.email} onLogout={signOut} />
                 </aside>
 
                 {/* Mobile overlay */}
                 {sidebarOpen ? (
                     <div className="fixed inset-0 z-40 lg:hidden">
-                        <button className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />
-                        <aside className="relative h-full w-[min(18rem,calc(100vw-2rem))] border-r border-white/[0.07] bg-slate-950/95 shadow-2xl shadow-slate-950 backdrop-blur-2xl">
+                        <button className="absolute inset-0 bg-black/80" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />
+                        <aside className="relative h-full w-[min(18rem,calc(100vw-2rem))] border-r border-[#1F1F1F] bg-[#0A0A0A]">
                             <AdminSidebar pathname={pathname} role={role} email={admin?.email} onLogout={signOut} onClose={() => setSidebarOpen(false)} />
                         </aside>
                     </div>
                 ) : null}
 
-                <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-black">
                     {/* Topbar */}
-                    <header className="z-30 shrink-0 border-b border-white/[0.07] bg-slate-950/60 px-4 py-3 backdrop-blur-2xl sm:px-6">
+                    <header className="z-30 shrink-0 border-b border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3 sm:px-6">
                         <div className="flex items-center justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
                                 <button
@@ -229,12 +228,5 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
 }
 
 function AuroraField() {
-    return (
-        <div className="pointer-events-none fixed inset-0 overflow-hidden">
-            <div className="absolute left-1/2 top-[-12rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-rose-400/8 blur-3xl" />
-            <div className="absolute right-[-10rem] top-36 h-[26rem] w-[26rem] rounded-full bg-cyan-400/8 blur-3xl" />
-            <div className="absolute bottom-[-8rem] left-[-8rem] h-[24rem] w-[24rem] rounded-full bg-rose-400/10 blur-3xl" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,rgba(2,6,23,0.35)_55%,#020617_100%)]" />
-        </div>
-    );
+    return null;
 }

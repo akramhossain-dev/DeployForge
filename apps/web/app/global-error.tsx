@@ -17,7 +17,7 @@ export default function GlobalError({
 
     return (
         <html lang="en" className="dark">
-            <body className="bg-slate-950 text-slate-50 antialiased">
+            <body className="bg-black text-white antialiased">
                 <GlobalErrorView reset={reset} />
             </body>
         </html>
