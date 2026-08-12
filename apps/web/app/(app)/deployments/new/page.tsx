@@ -66,7 +66,7 @@ function NewDeploymentPageContent() {
                         className={clsx(
                             'flex h-9 items-center justify-center gap-2 rounded font-semibold transition-colors',
                             tab === 'github'
-                                ? 'bg-[#111111] text-white border-l-2 border-white'
+                                ? 'bg-[#111111] text-white'
                                 : 'text-[#A1A1A1] hover:text-white'
                         )}
                     >
@@ -79,7 +79,7 @@ function NewDeploymentPageContent() {
                         className={clsx(
                             'flex h-9 items-center justify-center gap-2 rounded font-semibold transition-colors',
                             tab === 'upload'
-                                ? 'bg-[#111111] text-white border-l-2 border-white'
+                                ? 'bg-[#111111] text-white'
                                 : 'text-[#A1A1A1] hover:text-white'
                         )}
                     >

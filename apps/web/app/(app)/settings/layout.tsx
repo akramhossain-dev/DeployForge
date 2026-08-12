@@ -47,7 +47,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 font-mono text-xs">
             <PageHeader 
                 title="Settings" 
                 description="Manage your profile, security credentials, active sessions, and account options." 
@@ -56,14 +56,14 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
             <div className="flex flex-col gap-6 lg:flex-row">
                 {/* Settings Sidebar */}
                 <aside className="w-full shrink-0 lg:w-56">
-                    <nav className="flex flex-row flex-wrap gap-1 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-1 font-mono text-xs lg:flex-col lg:p-1.5">
+                    <nav className="flex flex-row flex-wrap gap-1 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-1 lg:flex-col lg:p-1.5">
                         {navItems.map((item) => (
                             <Link
                                 key={item.name}
                                 href={item.href}
                                 className={`flex items-center gap-2.5 rounded px-3 py-2 text-xs transition-colors ${
                                     item.active
-                                        ? 'bg-[#111111] font-semibold text-white border-l-2 border-white'
+                                        ? 'bg-[#111111] font-semibold text-white'
                                         : 'text-[#A1A1A1] hover:bg-[#111111]/50 hover:text-white'
                                 }`}
                             >

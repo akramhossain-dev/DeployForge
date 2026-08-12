@@ -101,7 +101,7 @@ export default function VpsPage() {
                             className={clsx(
                                 'flex items-center gap-2 rounded px-3.5 py-2 text-xs font-semibold transition-colors shrink-0',
                                 active
-                                    ? 'bg-[#111111] text-white border-l-2 border-white'
+                                    ? 'bg-[#111111] text-white'
                                     : 'text-[#A1A1A1] hover:text-white'
                             )}
                         >

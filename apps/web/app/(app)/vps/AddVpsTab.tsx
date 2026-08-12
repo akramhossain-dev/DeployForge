@@ -159,14 +159,14 @@ export default function AddVpsTab({ onAdded }: { onAdded?: () => void }) {
                                 <button
                                     type="button"
                                     onClick={() => setField('authType', 'password')}
-                                    className={clsx('h-8 rounded font-semibold text-xs transition-colors', form.authType === 'password' ? 'bg-[#111111] text-white border-l-2 border-white' : 'text-[#A1A1A1]')}
+                                    className={clsx('h-8 rounded font-semibold text-xs transition-colors', form.authType === 'password' ? 'bg-[#111111] text-white' : 'text-[#A1A1A1]')}
                                 >
                                     Password
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setField('authType', 'key')}
-                                    className={clsx('h-8 rounded font-semibold text-xs transition-colors', form.authType === 'key' ? 'bg-[#111111] text-white border-l-2 border-white' : 'text-[#A1A1A1]')}
+                                    className={clsx('h-8 rounded font-semibold text-xs transition-colors', form.authType === 'key' ? 'bg-[#111111] text-white' : 'text-[#A1A1A1]')}
                                 >
                                     SSH Key
                                 </button>

@@ -189,7 +189,7 @@ export default function DeploymentsPage() {
                     className={clsx(
                         'flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors',
                         activeTab === 'list'
-                            ? 'bg-[#111111] font-semibold text-white border-l-2 border-white'
+                            ? 'bg-[#111111] font-semibold text-white'
                             : 'text-[#A1A1A1] hover:text-white'
                     )}
                 >
@@ -201,7 +201,7 @@ export default function DeploymentsPage() {
                     className={clsx(
                         'flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors',
                         activeTab === 'analytics'
-                            ? 'bg-[#111111] font-semibold text-white border-l-2 border-white'
+                            ? 'bg-[#111111] font-semibold text-white'
                             : 'text-[#A1A1A1] hover:text-white'
                     )}
                 >

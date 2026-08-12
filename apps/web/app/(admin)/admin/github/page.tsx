@@ -1,15 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Github, Loader2, RefreshCw, XCircle } from 'lucide-react';
-import clsx from 'clsx';
-import { ErrorState, PageHeader, SkeletonBlock, AppModal, Button } from '@/components/ui';
+import { Github, RefreshCw, XCircle } from 'lucide-react';
 import { formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAction, useAdminGithubAccounts } from '@/hooks/useDeployForgeData';
 
 export default function AdminGithubPage() {
     const accounts = useAdminGithubAccounts();
-    const action   = useAdminAction();
+    const action = useAdminAction();
 
     const [confirmModal, setConfirmModal] = useState<{
         open: boolean;
@@ -27,14 +25,14 @@ export default function AdminGithubPage() {
         variant: 'primary',
     });
 
-    const connected  = accounts.data?.length ?? 0;
+    const connected = accounts.data?.length ?? 0;
     const totalRepos = accounts.data?.reduce((s, a) => s + a.repositories.length, 0) ?? 0;
 
     const triggerSync = (userId: string, username: string) => {
         setConfirmModal({
             open: true,
             title: 'Sync GitHub Account',
-            message: `Are you sure you want to trigger a force sync for GitHub account @${username}? This will refetch all repositories from the GitHub API.`,
+            message: `Force refetch repositories for @${username}?`,
             actionText: 'Sync Account',
             variant: 'primary',
             onConfirm: () => {
@@ -52,7 +50,7 @@ export default function AdminGithubPage() {
         setConfirmModal({
             open: true,
             title: 'Disconnect GitHub Account',
-            message: `Are you sure you want to disconnect the GitHub account @${username}? This will remove the GitHub connection and associated repositories from DeployForge.`,
+            message: `Remove GitHub integration for @${username}?`,
             actionText: 'Disconnect',
             variant: 'danger',
             onConfirm: () => {
@@ -67,173 +65,96 @@ export default function AdminGithubPage() {
     };
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="GitHub Management"
-                description="Connected accounts, repositories, forced sync, and connection removal."
-                action={
-                    <button onClick={() => accounts.refetch()} disabled={accounts.isRefetching}
-                        className="flex h-9 items-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.06] px-4 text-sm font-bold text-slate-300 transition-colors hover:bg-white/[0.1] hover:text-white disabled:opacity-50">
-                        {accounts.isRefetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                        Refresh
-                    </button>
-                }
-            />
-
-            {accounts.isError && <ErrorState message={(accounts.error as Error)?.message} onRetry={() => accounts.refetch()} />}
-            {action.isError   && <ErrorState title="Action failed" message={(action.error as Error)?.message} />}
-
-            {/* ── KPI strip ── */}
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                {[
-                    { label: 'Connected Accounts', value: connected,  cls: 'border-violet-400/20 bg-violet-400/[0.06]', val: 'text-violet-300' },
-                    { label: 'Total Repositories',  value: totalRepos, cls: 'border-white/[0.08] bg-white/[0.03]',        val: 'text-white'      },
-                ].map(k => (
-                    <div key={k.label} className={`relative overflow-hidden rounded-2xl border p-4 sm:p-5 ${k.cls}`}>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{k.label}</p>
-                        <p className={`mt-2 text-3xl font-black sm:text-4xl ${k.val}`}>{accounts.isLoading ? '—' : k.value}</p>
-                    </div>
-                ))}
+        <div className="space-y-6 font-mono text-xs">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        GitHub App Integration
+                    </h1>
+                    <p className="mt-1 text-xs text-[#A1A1A1]">
+                        Platform GitHub OAuth accounts, connected repository stats, and forced sync triggers.
+                    </p>
+                </div>
+                <button
+                    onClick={() => accounts.refetch()}
+                    disabled={accounts.isRefetching}
+                    className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-[#111111] px-3 font-semibold text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                >
+                    <RefreshCw size={13} className={accounts.isRefetching ? 'animate-spin' : ''} />
+                    <span>Refresh</span>
+                </button>
             </div>
 
-            {/* ── Loading ── */}
-            {accounts.isLoading && (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {Array.from({ length: 3 }).map((_, i) => <SkeletonBlock key={i} className="h-52 rounded-2xl" />)}
-                </div>
-            )}
+            {accounts.isError && <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-4 text-rose-300">{(accounts.error as Error)?.message}</div>}
 
-            {/* ── Empty ── */}
-            {!accounts.isLoading && !accounts.data?.length && (
-                <div className="flex flex-col items-center rounded-2xl border border-white/[0.06] bg-slate-900/50 py-16 text-center">
-                    <Github size={36} className="text-slate-600" />
-                    <p className="mt-4 font-black text-slate-300">No GitHub accounts connected.</p>
+            {/* KPI strip */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
+                    <p className="text-[10px] font-semibold uppercase text-[#666666]">Connected Accounts</p>
+                    <p className="text-2xl font-bold text-white mt-1">{accounts.isLoading ? '—' : connected}</p>
                 </div>
-            )}
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
+                    <p className="text-[10px] font-semibold uppercase text-[#666666]">Total Synced Repos</p>
+                    <p className="text-2xl font-bold text-white mt-1">{accounts.isLoading ? '—' : totalRepos}</p>
+                </div>
+            </div>
 
-            {/* ── Account cards ── */}
-            {!accounts.isLoading && accounts.data?.length ? (
+            {/* Account Grid */}
+            {!accounts.isLoading && (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {accounts.data.map(account => {
-                        const repoCount    = account.repositories.length;
-                        const privateCount = account.repositories.filter(r => r.private).length;
-                        const publicCount  = repoCount - privateCount;
-                        const userId       = account.user?.id;
+                    {(accounts.data || []).map(account => {
+                        const repoCount = account.repositories.length;
+                        const userId = account.user?.id;
 
                         return (
-                            <div key={account.id ?? account.username}
-                                className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-900/80 to-slate-950/80 shadow-lg shadow-black/20 backdrop-blur-sm transition-all duration-300 hover:border-violet-400/30 hover:shadow-[0_0_32px_-8px_theme(colors.violet.400/15)]">
-
-                                {/* Top stripe */}
-                                <div className="h-0.5 bg-gradient-to-r from-violet-400/60 via-violet-400/15 to-transparent" />
-
-                                <div className="flex flex-1 flex-col p-5">
-                                    {/* Avatar + identity */}
-                                    <div className="flex items-center gap-3">
-                                        {account.avatarUrl ? (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img src={account.avatarUrl} alt=""
-                                                className="h-12 w-12 shrink-0 rounded-2xl border border-white/10 object-cover shadow-md" />
-                                        ) : (
-                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-violet-400/20 bg-violet-400/10">
-                                                <Github size={22} className="text-violet-300" />
-                                            </div>
-                                        )}
-                                        <div className="min-w-0">
-                                            <p className="font-black text-white">@{account.username}</p>
-                                            <p className="truncate text-xs text-slate-500">{account.email || 'No public email'}</p>
-                                            <p className="truncate text-[10px] text-slate-600">{account.user?.email || 'Unknown user'}</p>
-                                        </div>
+                            <div key={account.id ?? account.username} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
+                                <div className="flex items-center gap-3 border-b border-[#1F1F1F] pb-3">
+                                    <Github size={18} className="text-white shrink-0" />
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-white">@{account.username}</p>
+                                        <p className="text-[10px] text-[#666666] truncate">{account.user?.email || 'System User'}</p>
                                     </div>
+                                </div>
 
-                                    {/* Stat mini-grid */}
-                                    <div className="mt-4 grid grid-cols-3 gap-2">
-                                        {[
-                                            { label: 'Total',   value: repoCount,    cls: 'border-white/[0.08] bg-white/[0.03]'        },
-                                            { label: 'Private', value: privateCount,  cls: 'border-amber-400/15 bg-amber-400/[0.05]'   },
-                                            { label: 'Public',  value: publicCount,   cls: 'border-emerald-400/15 bg-emerald-400/[0.05]' },
-                                        ].map(stat => (
-                                            <div key={stat.label} className={clsx('rounded-xl border p-2.5 text-center', stat.cls)}>
-                                                <p className="text-lg font-black text-white">{stat.value}</p>
-                                                <p className="text-[9px] font-black uppercase tracking-wider text-slate-600">{stat.label}</p>
-                                            </div>
-                                        ))}
-                                    </div>
+                                <div className="space-y-1 text-[#A1A1A1]">
+                                    <p><span className="text-[#666666] font-semibold uppercase text-[10px]">Synced Repos:</span> {repoCount}</p>
+                                    <p><span className="text-[#666666] font-semibold uppercase text-[10px]">Connected At:</span> {formatDate(account.connectedAt)}</p>
+                                </div>
 
-                                    {/* Spacer */}
-                                    <div className="flex-1" />
-
-                                    {/* Footer */}
-                                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-3.5">
-                                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
-                                            <CheckCircle2 size={10} />
-                                            <span className="font-black">Connected</span>
-                                            {formatDate(account.connectedAt) !== '—' && (
-                                                <span className="text-slate-600">· {formatDate(account.connectedAt)}</span>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-1.5">
-                                            <button
-                                                title="Force Sync"
-                                                onClick={() => userId && triggerSync(userId, account.username)}
-                                                className="flex h-8 items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 text-[11px] font-black text-slate-400 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
-                                            >
-                                                <RefreshCw size={10} /> Sync
-                                            </button>
-                                            <button
-                                                title="Disconnect"
-                                                onClick={() => userId && triggerDisconnect(userId, account.username)}
-                                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-rose-400/20 bg-rose-400/[0.07] text-rose-400/70 transition-all hover:border-rose-400/50 hover:bg-rose-400/15 hover:text-rose-300"
-                                            >
-                                                <XCircle size={13} />
-                                            </button>
-                                        </div>
-                                    </div>
+                                <div className="flex gap-2 pt-2 border-t border-[#1F1F1F]">
+                                    <button
+                                        onClick={() => userId && triggerSync(userId, account.username)}
+                                        className="flex-1 h-7 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]"
+                                    >
+                                        Force Sync
+                                    </button>
+                                    <button
+                                        onClick={() => userId && triggerDisconnect(userId, account.username)}
+                                        className="h-7 px-3 rounded border border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30"
+                                    >
+                                        Disconnect
+                                    </button>
                                 </div>
                             </div>
                         );
                     })}
                 </div>
-            ) : null}
-
-            {!accounts.isLoading && connected > 0 && (
-                <p className="text-center text-[11px] text-slate-600">
-                    <span className="font-black text-slate-400">{connected}</span> account{connected !== 1 ? 's' : ''} ·{' '}
-                    <span className="font-black text-slate-400">{totalRepos}</span> repositories
-                </p>
             )}
 
             {/* Confirmation Modal */}
-            <AppModal
-                open={confirmModal.open}
-                onClose={() => !action.isPending && setConfirmModal(prev => ({ ...prev, open: false }))}
-                title={confirmModal.title}
-            >
-                <div className="space-y-4">
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                        {confirmModal.message}
-                    </p>
-
-                    <div className="flex justify-end gap-2 border-t border-white/5 pt-4 mt-2">
-                        <Button 
-                            type="button" 
-                            variant="secondary"
-                            onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-                            disabled={action.isPending}
-                        >
-                            Cancel
-                        </Button>
-                        <Button 
-                            type="button" 
-                            variant={confirmModal.variant}
-                            onClick={confirmModal.onConfirm}
-                            loading={action.isPending}
-                        >
-                            {confirmModal.actionText}
-                        </Button>
+            {confirmModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono text-xs">
+                    <div className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                        <h3 className="text-sm font-bold text-white">{confirmModal.title}</h3>
+                        <p className="text-[#A1A1A1]">{confirmModal.message}</p>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-[#1F1F1F]">
+                            <button onClick={() => setConfirmModal(p => ({ ...p, open: false }))} className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white">Cancel</button>
+                            <button onClick={confirmModal.onConfirm} className="h-8 px-3 rounded border border-rose-900/40 bg-rose-950/40 text-rose-300 font-semibold">Confirm</button>
+                        </div>
                     </div>
                 </div>
-            </AppModal>
+            )}
         </div>
     );
 }

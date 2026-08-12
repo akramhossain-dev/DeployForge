@@ -356,7 +356,7 @@ export default function DocsPage() {
                                                 className={clsx(
                                                     'flex items-center justify-between rounded px-2.5 py-1.5 text-xs transition-colors',
                                                     isActive
-                                                        ? 'bg-[#111111] font-semibold text-white border-l-2 border-white'
+                                                        ? 'bg-[#111111] font-semibold text-white'
                                                         : 'text-[#A1A1A1] hover:bg-[#111111]/60 hover:text-white'
                                                 )}
                                             >

@@ -2,60 +2,36 @@
 
 import { useState } from 'react';
 import {
-    CheckCircle2, Database, Github, KeyRound, Mail, RefreshCw,
-    Settings, ShieldCheck, UserPlus, XCircle, Zap,
+    CheckCircle2, Github, KeyRound, Mail, RefreshCw,
+    ShieldCheck, UserPlus, XCircle, Zap, Loader2
 } from 'lucide-react';
 import clsx from 'clsx';
-import { ErrorState, PageHeader, PasswordInput, inputClassName, AppModal } from '@/components/ui';
-import { AdminTable, Button, Panel, SmallMeta, formatDate } from '@/components/admin/AdminWidgets';
+import { AppModal } from '@/components/ui';
+import { AdminTable, SmallMeta, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAccounts, useAdminAction, useAdminMe, useAdminSettings } from '@/hooks/useDeployForgeData';
 
-function SectionPanel({ icon, title, description, children, accent }: {
-    icon: React.ReactNode; title: string; description?: string; children: React.ReactNode; accent?: string;
-}) {
-    return (
-        <Panel className="relative overflow-hidden">
-            <div className={clsx('absolute inset-x-0 top-0 h-0.5', accent || 'bg-gradient-to-r from-rose-300/25 to-transparent')} />
-            <div className="mb-5 flex items-center gap-3 border-b border-white/[0.06] pb-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-rose-300/15 bg-rose-300/8 text-rose-200 shrink-0">{icon}</div>
-                <div>
-                    <h2 className="font-black text-white text-sm">{title}</h2>
-                    {description && <p className="text-[10px] text-slate-500 mt-0.5">{description}</p>}
-                </div>
-            </div>
-            {children}
-        </Panel>
-    );
-}
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 function StatusChip({ ok, label }: { ok: boolean; label: string }) {
     return (
-        <div className={clsx(
-            'flex items-center gap-2 rounded-xl border px-3 py-2.5',
-            ok ? 'border-emerald-400/20 bg-emerald-400/[0.05]' : 'border-rose-400/15 bg-rose-400/[0.04]'
-        )}>
-            {ok
-                ? <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-                : <XCircle size={13} className="text-rose-400 shrink-0" />}
-            <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-                <p className={clsx('text-xs font-black', ok ? 'text-emerald-300' : 'text-rose-300')}>{ok ? 'Configured' : 'Not Set'}</p>
-            </div>
+        <div className="flex items-center justify-between border-b border-[#1F1F1F] py-1.5 font-mono text-xs">
+            <span className="text-[#666666] font-semibold uppercase text-[10px]">{label}</span>
+            <span className={clsx('font-bold', ok ? 'text-emerald-400' : 'text-[#666666]')}>{ok ? 'CONFIGURED' : 'NOT SET'}</span>
         </div>
     );
 }
 
 export default function AdminSettingsPage() {
-    const settings  = useAdminSettings();
-    const me        = useAdminMe();
-    const action    = useAdminAction();
-    const data      = settings.data;
-    const [email,       setEmail]       = useState('');
-    const [password,    setPassword]    = useState('');
-    const [role,        setRole]        = useState('ADMIN');
+    const settings = useAdminSettings();
+    const me = useAdminMe();
+    const action = useAdminAction();
+    const data = settings.data;
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [role, setRole] = useState('ADMIN');
     const [adminSecret, setAdminSecret] = useState('');
-    const isSuperAdmin  = me.data?.role === 'SUPER_ADMIN';
-    const accounts      = useAdminAccounts(isSuperAdmin);
+    const isSuperAdmin = me.data?.role === 'SUPER_ADMIN';
+    const accounts = useAdminAccounts(isSuperAdmin);
 
     const [confirmModal, setConfirmModal] = useState<{
         open: boolean;
@@ -83,9 +59,9 @@ export default function AdminSettingsPage() {
             variant: 'primary',
             onConfirm: () => {
                 action.mutate({ path: '/admin/create-user', body: { email, password, role, adminSecret } }, {
-                    onSuccess: () => { 
-                        setEmail(''); 
-                        setPassword(''); 
+                    onSuccess: () => {
+                        setEmail('');
+                        setPassword('');
                         setAdminSecret('');
                         setConfirmModal(prev => ({ ...prev, open: false }));
                         accounts.refetch();
@@ -95,201 +71,112 @@ export default function AdminSettingsPage() {
         });
     };
 
-    const triggerRoleChange = (id: string, adminEmail: string, newRole: string) => {
-        setConfirmModal({
-            open: true,
-            title: 'Change Administrator Role',
-            message: `Are you sure you want to change the role of "${adminEmail}" to "${newRole}"?`,
-            actionText: 'Update Role',
-            variant: 'primary',
-            onConfirm: () => {
-                action.mutate({ method: 'patch', path: `/admin/users/${id}/role`, body: { role: newRole } }, {
-                    onSuccess: () => {
-                        setConfirmModal(prev => ({ ...prev, open: false }));
-                        accounts.refetch();
-                    }
-                });
-            }
-        });
-    };
-
-    const triggerDeleteAdmin = (id: string, adminEmail: string) => {
-        setConfirmModal({
-            open: true,
-            title: 'Delete Administrative Account',
-            message: `Are you sure you want to permanently delete the administrative account "${adminEmail}"? This action is permanent and cannot be undone.`,
-            actionText: 'Delete Account',
-            variant: 'danger',
-            onConfirm: () => {
-                action.mutate({ method: 'delete', path: `/admin/users/${id}` }, {
-                    onSuccess: () => {
-                        setConfirmModal(prev => ({ ...prev, open: false }));
-                        accounts.refetch();
-                    }
-                });
-            }
-        });
-    };
-
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Admin Settings"
-                description="Current SMTP, GitHub OAuth, queue, security, and app configuration state."
-                action={
-                    <Button variant="secondary" onClick={() => settings.refetch()} loading={settings.isRefetching}>
-                        <RefreshCw size={14} /> Refresh
-                    </Button>
-                }
-            />
+        <div className="space-y-6 font-mono text-xs">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        Platform System Config
+                    </h1>
+                    <p className="mt-1 text-xs text-[#A1A1A1]">
+                        Inspect platform environment variables, SMTP parameters, GitHub App config, and system secrets.
+                    </p>
+                </div>
+                <button
+                    onClick={() => settings.refetch()}
+                    disabled={settings.isRefetching}
+                    className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-[#111111] px-3 font-semibold text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                >
+                    <RefreshCw size={13} className={settings.isRefetching ? 'animate-spin' : ''} />
+                    <span>Refresh</span>
+                </button>
+            </div>
 
-            {settings.isError ? <ErrorState message={(settings.error as Error)?.message} onRetry={() => settings.refetch()} /> : null}
-            {action.isError   ? <ErrorState title="Admin action failed" message={(action.error as Error)?.message} /> : null}
+            {settings.isError && <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-4 text-rose-300">{(settings.error as Error)?.message}</div>}
 
-            {/* SUPER_ADMIN: provision + manage */}
+            {/* SUPER_ADMIN Provision Form */}
             {isSuperAdmin && (
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                    <SectionPanel icon={<UserPlus size={15} />} title="Provision Admin / Moderator" description="Create a new administrative account.">
-                        <div className="space-y-3">
-                            <label>
-                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Email Address</p>
-                                <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="admin@example.com" className={inputClassName} />
-                            </label>
-                            <label>
-                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Password</p>
-                                <PasswordInput value={password} onChange={e => setPassword(e.target.value)} placeholder="Temporary password" />
-                            </label>
-                            <label>
-                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">System Role</p>
-                                <select value={role} onChange={e => setRole(e.target.value)} className={inputClassName}>
-                                    <option value="ADMIN">ADMIN</option>
-                                    <option value="MODERATOR">MODERATOR</option>
-                                </select>
-                            </label>
-                            <label>
-                                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Admin Secret</p>
-                                <PasswordInput value={adminSecret} onChange={e => setAdminSecret(e.target.value)} placeholder="ADMIN_SECRET env value" />
-                            </label>
-                            <div className="pt-1">
-                                <Button onClick={triggerCreateAdmin} loading={action.isPending} disabled={!email || !password || !adminSecret} className="w-full">
-                                    <UserPlus size={14} /> Create Account
-                                </Button>
-                            </div>
-                        </div>
-                    </SectionPanel>
-
-                    <SectionPanel icon={<ShieldCheck size={15} />} title="Admin Accounts" description="Manage administrator and moderator roles.">
-                        <AdminTable
-                            columns={['Email', 'Role', 'Last Login', '']}
-                            empty="No admin accounts found."
-                            rows={accounts.isLoading ? undefined : accounts.data?.map(admin => [
-                                <div key="e">
-                                    <p className="font-black text-white text-sm">{admin.name || 'Admin'}</p>
-                                    <p className="text-[10px] text-slate-500">{admin.email}</p>
-                                </div>,
-                                <select key="r" value={admin.role}
-                                    onChange={e => triggerRoleChange(admin.id, admin.email || 'Admin', e.target.value)}
-                                    className={`${inputClassName} h-8 py-1 text-xs`}>
-                                    <option>SUPER_ADMIN</option><option>ADMIN</option><option>MODERATOR</option>
-                                </select>,
-                                <span key="l" className="text-xs text-slate-500">{formatDate(admin.lastLoginAt)}</span>,
-                                <Button key="d" variant="danger" className="h-7 px-2 text-[11px]"
-                                    onClick={() => triggerDeleteAdmin(admin.id, admin.email || 'Admin')}>
-                                    Delete
-                                </Button>,
-                            ]) || []}
-                        />
-                    </SectionPanel>
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
+                        <UserPlus size={14} />
+                        <span>Provision System Admin or Moderator</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+                        <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="admin@example.com" className={INPUT_STYLE} />
+                        <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Password" className={INPUT_STYLE} />
+                        <select value={role} onChange={e => setRole(e.target.value)} className={INPUT_STYLE}>
+                            <option value="ADMIN">ADMIN</option>
+                            <option value="MODERATOR">MODERATOR</option>
+                        </select>
+                        <input value={adminSecret} onChange={e => setAdminSecret(e.target.value)} type="password" placeholder="ADMIN_SECRET" className={INPUT_STYLE} />
+                    </div>
+                    <div className="flex justify-end pt-2 border-t border-[#1F1F1F]">
+                        <button onClick={triggerCreateAdmin} disabled={!email || !password || !adminSecret || action.isPending} className="h-8 px-4 rounded border border-[#1F1F1F] bg-white font-semibold text-black hover:bg-[#E5E5E5] disabled:opacity-50">
+                            Create Account
+                        </button>
+                    </div>
                 </div>
             )}
 
-            {/* Config overview */}
+            {/* Config Panels */}
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 {/* SMTP */}
-                <SectionPanel icon={<Mail size={15} />} title="SMTP" description="Email delivery configuration." accent="bg-gradient-to-r from-cyan-400/20 to-transparent">
-                    <div className="grid grid-cols-2 gap-3">
-                        <SmallMeta label="Host"   value={data?.smtp.host || '—'} />
-                        <SmallMeta label="Port"   value={data?.smtp.port ?? '—'} />
-                        <SmallMeta label="Secure" value={data?.smtp.secure ? 'TLS Enabled' : 'Disabled'} />
-                        <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-2.5">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Auth User</p>
-                            {data?.smtp.userConfigured
-                                ? <span className="flex items-center gap-1 text-xs font-black text-emerald-300"><CheckCircle2 size={11} />Configured</span>
-                                : <span className="flex items-center gap-1 text-xs font-black text-slate-600"><XCircle size={11} />Not Set</span>}
-                        </div>
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
+                        <Mail size={14} />
+                        <span>SMTP Email Transport</span>
                     </div>
-                </SectionPanel>
+                    <StatusChip ok={!!data?.smtp.host} label="SMTP Host" />
+                    <StatusChip ok={!!data?.smtp.port} label="SMTP Port" />
+                    <StatusChip ok={!!data?.smtp.userConfigured} label="SMTP Auth Credentials" />
+                </div>
 
                 {/* GitHub OAuth */}
-                <SectionPanel icon={<Github size={15} />} title="GitHub OAuth" description="OAuth app credentials for GitHub integration." accent="bg-gradient-to-r from-violet-400/20 to-transparent">
-                    <div className="space-y-2">
-                        <StatusChip ok={!!data?.github.clientIdConfigured}     label="Client ID" />
-                        <StatusChip ok={!!data?.github.clientSecretConfigured} label="Client Secret" />
-                        <SmallMeta label="Redirect URI" value={data?.github.redirectUri || '—'} />
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
+                        <Github size={14} />
+                        <span>GitHub App Integration</span>
                     </div>
-                </SectionPanel>
+                    <StatusChip ok={!!data?.github.clientIdConfigured} label="GitHub Client ID" />
+                    <StatusChip ok={!!data?.github.clientSecretConfigured} label="GitHub Client Secret" />
+                </div>
 
                 {/* Queue */}
-                <SectionPanel icon={<Zap size={15} />} title="Queue" description="Redis queue and job retry configuration." accent="bg-gradient-to-r from-amber-400/15 to-transparent">
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-2.5">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Redis</p>
-                            {data?.queue.redisConfigured
-                                ? <span className="flex items-center gap-1 text-xs font-black text-emerald-300"><CheckCircle2 size={11} />Connected</span>
-                                : <span className="flex items-center gap-1 text-xs font-black text-rose-300"><XCircle size={11} />Not Set</span>}
-                        </div>
-                        <SmallMeta label="Max Attempts" value={data?.queue.maxAttempts ?? 0} />
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
+                        <Zap size={14} />
+                        <span>Redis Queue & Worker</span>
                     </div>
-                </SectionPanel>
+                    <StatusChip ok={!!data?.queue.redisConfigured} label="Redis Server Status" />
+                    <StatusChip ok={!!data?.queue.maxAttempts} label="Max Job Retry Attempts" />
+                </div>
 
-                {/* Security & App */}
-                <SectionPanel icon={<KeyRound size={15} />} title="Security & App" description="JWT secrets, encryption keys, and environment.">
-                    <div className="grid grid-cols-1 gap-2">
-                        <div className="grid grid-cols-2 gap-2">
-                            <StatusChip ok={!!data?.security.jwtConfigured}         label="JWT Secret" />
-                            <StatusChip ok={!!data?.security.adminJwtConfigured}    label="Admin JWT" />
-                            <StatusChip ok={!!data?.security.adminSecretConfigured} label="Admin Secret" />
-                            <StatusChip ok={!!data?.security.encryptionConfigured}  label="Encryption Key" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 mt-1">
-                            <SmallMeta label="App URL"     value={data?.app.appUrl || '—'} />
-                            <SmallMeta label="Environment" value={data?.app.nodeEnv || 'development'} />
-                        </div>
+                {/* Security */}
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
+                        <KeyRound size={14} />
+                        <span>Platform Secrets & Security</span>
                     </div>
-                </SectionPanel>
+                    <StatusChip ok={!!data?.security.jwtConfigured} label="Session JWT Secret" />
+                    <StatusChip ok={!!data?.security.adminSecretConfigured} label="System Admin Secret" />
+                    <StatusChip ok={!!data?.security.encryptionConfigured} label="Database Encryption Key" />
+                </div>
             </div>
 
-            {/* Confirmation Modal */}
-            <AppModal
-                open={confirmModal.open}
-                onClose={() => !action.isPending && setConfirmModal(prev => ({ ...prev, open: false }))}
-                title={confirmModal.title}
-            >
-                <div className="space-y-4">
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                        {confirmModal.message}
-                    </p>
-
-                    <div className="flex justify-end gap-2 border-t border-white/5 pt-4 mt-2">
-                        <Button 
-                            type="button" 
-                            variant="secondary"
-                            onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-                            disabled={action.isPending}
-                        >
-                            Cancel
-                        </Button>
-                        <Button 
-                            type="button" 
-                            variant={confirmModal.variant}
-                            onClick={confirmModal.onConfirm}
-                            loading={action.isPending}
-                        >
-                            {confirmModal.actionText}
-                        </Button>
+            {/* Modal */}
+            {confirmModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono text-xs">
+                    <div className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                        <h3 className="text-sm font-bold text-white">{confirmModal.title}</h3>
+                        <p className="text-[#A1A1A1]">{confirmModal.message}</p>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-[#1F1F1F]">
+                            <button onClick={() => setConfirmModal(p => ({ ...p, open: false }))} className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white">Cancel</button>
+                            <button onClick={confirmModal.onConfirm} className="h-8 px-3 rounded border border-[#1F1F1F] bg-white font-semibold text-black hover:bg-[#E5E5E5]">Confirm</button>
+                        </div>
                     </div>
                 </div>
-            </AppModal>
+            )}
         </div>
     );
 }

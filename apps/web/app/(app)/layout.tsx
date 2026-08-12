@@ -19,26 +19,26 @@ const NAV_GROUPS = [
     {
         label: 'MAIN',
         items: [
-            { name: 'Overview',     icon: LayoutDashboard, href: '/dashboard' },
-            { name: 'Deployments',  icon: Rocket,          href: '/deployments' },
-            { name: 'Repositories', icon: Github,           href: '/repositories' },
-            { name: 'Team',         icon: Users,            href: '/team' },
+            { name: 'Overview', icon: LayoutDashboard, href: '/dashboard' },
+            { name: 'Deployments', icon: Rocket, href: '/deployments' },
+            { name: 'Repositories', icon: Github, href: '/repositories' },
+            { name: 'Team', icon: Users, href: '/team' },
         ],
     },
     {
         label: 'INFRASTRUCTURE',
         items: [
-            { name: 'VPS Manager',    icon: Server,     href: '/vps' },
-            { name: 'Domain Manager', icon: Globe,       href: '/domains' },
-            { name: 'File Manager',   icon: FolderOpen,  href: '/file-manager' },
-            { name: 'Terminal',       icon: Terminal,    href: '/terminal' },
+            { name: 'VPS Manager', icon: Server, href: '/vps' },
+            { name: 'Domain Manager', icon: Globe, href: '/domains' },
+            { name: 'File Manager', icon: FolderOpen, href: '/file-manager' },
+            { name: 'Terminal', icon: Terminal, href: '/terminal' },
         ],
     },
     {
         label: 'SYSTEM',
         items: [
-            { name: 'Notifications', icon: Bell,     href: '/notifications' },
-            { name: 'Settings',      icon: Settings, href: '/settings' },
+            { name: 'Notifications', icon: Bell, href: '/notifications' },
+            { name: 'Settings', icon: Settings, href: '/settings' },
         ],
     },
 ];
@@ -62,7 +62,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     React.useEffect(() => { if (me.data) setUser(me.data); }, [me.data, setUser]);
     React.useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
-    // Loading / Hydration Shell
     if (!hasHydrated || me.isLoading) {
         return (
             <div className="flex h-screen min-h-[100dvh] w-full items-center justify-center bg-black p-6 text-white">
@@ -125,7 +124,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             </div>
 
                             <div className="flex items-center gap-2.5">
-                                {/* API Status Pill */}
                                 <div className="hidden items-center gap-1.5 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 py-1 font-mono text-[10px] text-[#A1A1A1] sm:flex">
                                     <span className={`h-1.5 w-1.5 rounded-full ${me.isError ? 'bg-rose-400' : 'bg-emerald-400'}`} />
                                     <span>API OPERATIONAL</span>
@@ -196,7 +194,7 @@ function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: strin
                                         href={item.href}
                                         className={`flex h-8 items-center gap-2.5 rounded px-2.5 text-xs transition-colors ${
                                             isActive
-                                                ? 'bg-[#111111] font-semibold text-white border-l-2 border-white'
+                                                ? 'bg-[#111111] font-semibold text-white'
                                                 : 'text-[#A1A1A1] hover:bg-[#111111]/50 hover:text-white'
                                         }`}
                                     >

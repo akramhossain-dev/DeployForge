@@ -4,50 +4,41 @@ import { ReactNode } from 'react';
 import clsx from 'clsx';
 import { AppButton, AppCard, AppTable, SectionHeading, SkeletonBlock, StatusBadge, formatDate } from '@/components/ui';
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
 export function AdminStat({
-    title, value, detail, icon, accent,
-}: { title: string; value: string | number; detail?: string; icon?: ReactNode; accent?: string }) {
+    title, value, detail, icon,
+}: { title: string; value: string | number; detail?: string; icon?: ReactNode }) {
     return (
-        <AppCard className="relative overflow-hidden">
-            <div className={clsx('absolute inset-x-0 top-0 h-0.5', accent || 'bg-gradient-to-r from-rose-300/30 to-transparent')} />
-            <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{title}</p>
-                    <p className="mt-3 text-4xl font-black tracking-tight text-white">{value}</p>
-                    {detail ? <p className="mt-1.5 text-xs font-bold text-slate-500">{detail}</p> : null}
-                </div>
-                {icon ? (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-300/15 bg-rose-300/8 text-rose-200">
-                        {icon}
-                    </div>
-                ) : null}
+        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 font-mono text-xs space-y-2">
+            <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase text-[#666666]">{title}</span>
+                {icon && <div className="text-[#A1A1A1]">{icon}</div>}
             </div>
-        </AppCard>
+            <p className="text-2xl font-bold tracking-tight text-white">{value}</p>
+            {detail && <p className="text-[11px] text-[#A1A1A1]">{detail}</p>}
+        </div>
     );
 }
 
-// ── Resource bars ─────────────────────────────────────────────────────────────
 export function ResourceBars({ cpu, ram, disk }: { cpu?: number; ram?: number; disk?: number }) {
     const bars = [
-        { label: 'CPU',  value: cpu  || 0 },
-        { label: 'RAM',  value: ram  || 0 },
-        { label: 'Disk', value: disk || 0 },
+        { label: 'CPU Usage', value: cpu || 0 },
+        { label: 'RAM Memory', value: ram || 0 },
+        { label: 'Disk Storage', value: disk || 0 },
     ];
+
     return (
-        <div className="space-y-4">
+        <div className="space-y-3 font-mono text-xs">
             {bars.map(({ label, value }) => {
-                const pct   = Math.min(Math.round(value), 100);
-                const color = pct > 85 ? 'bg-rose-400' : pct > 65 ? 'bg-amber-400' : 'bg-emerald-400';
-                const text  = pct > 85 ? 'text-rose-300' : pct > 65 ? 'text-amber-300' : 'text-emerald-300';
+                const pct = Math.min(Math.round(value), 100);
+                const color = pct > 85 ? 'bg-rose-400' : pct > 65 ? 'bg-amber-400' : 'bg-white';
                 return (
-                    <div key={label} className="space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-slate-400">{label}</span>
-                            <span className={clsx('font-black tabular-nums', text)}>{pct}%</span>
+                    <div key={label} className="space-y-1">
+                        <div className="flex justify-between text-[11px]">
+                            <span className="text-[#666666] font-semibold uppercase">{label}</span>
+                            <span className="font-bold text-white">{pct}%</span>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-white/[0.07]">
-                            <div className={clsx('h-full rounded-full transition-all duration-700', color)} style={{ width: `${pct}%` }} />
+                        <div className="h-1.5 w-full rounded bg-[#000000] border border-[#1F1F1F] overflow-hidden">
+                            <div className={clsx('h-full transition-all duration-300', color)} style={{ width: `${pct}%` }} />
                         </div>
                     </div>
                 );
@@ -56,42 +47,39 @@ export function ResourceBars({ cpu, ram, disk }: { cpu?: number; ram?: number; d
     );
 }
 
-// ── Small meta chip ───────────────────────────────────────────────────────────
 export function SmallMeta({ label, value }: { label: string; value?: ReactNode }) {
     return (
-        <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-            <div className="mt-1.5 text-sm font-bold text-slate-200">{value || '—'}</div>
+        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3 font-mono text-xs">
+            <p className="text-[10px] font-semibold uppercase text-[#666666]">{label}</p>
+            <div className="mt-1 font-bold text-white truncate">{value || '—'}</div>
         </div>
     );
 }
 
-// ── Severity badge ────────────────────────────────────────────────────────────
 export function AdminSeverityBadge({ severity }: { severity?: string }) {
     const s = (severity || 'info').toUpperCase();
-    const color =
-        s === 'ERROR' ? 'bg-rose-400/10 text-rose-300 ring-rose-400/20' :
-        s === 'WARN'  ? 'bg-amber-400/10 text-amber-300 ring-amber-400/20' :
-                       'bg-cyan-400/10 text-cyan-300 ring-cyan-400/20';
-    return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black uppercase ring-1 ${color}`}>{s}</span>;
+    const style = s === 'ERROR'
+        ? 'border-rose-900/40 bg-rose-950/20 text-rose-400 font-bold'
+        : s === 'WARN'
+        ? 'border-amber-900/40 bg-amber-950/20 text-amber-400 font-bold'
+        : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]';
+
+    return <span className={clsx('inline-flex items-center rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider', style)}>{s}</span>;
 }
 
-// ── Loading skeleton grid ─────────────────────────────────────────────────────
-export function LoadingGrid({ count = 4, className = 'h-36' }: { count?: number; className?: string }) {
+export function LoadingGrid({ count = 4, className = 'h-24' }: { count?: number; className?: string }) {
     return <>{Array.from({ length: count }).map((_, i) => <SkeletonBlock key={i} className={className} />)}</>;
 }
 
-// ── Info row (label / value) ──────────────────────────────────────────────────
 export function InfoRow({ label, value }: { label: string; value: ReactNode }) {
     return (
-        <div className="flex items-center justify-between gap-4 border-b border-white/[0.05] py-2.5 last:border-0">
-            <span className="text-xs text-slate-500 shrink-0">{label}</span>
-            <span className="text-xs font-bold text-slate-200 text-right truncate">{value}</span>
+        <div className="flex items-center justify-between gap-4 border-b border-[#1F1F1F] py-2 last:border-0 font-mono text-xs">
+            <span className="text-[#666666] font-semibold uppercase text-[10px]">{label}</span>
+            <span className="font-bold text-white text-right truncate">{value}</span>
         </div>
     );
 }
 
-// ── Re-exports ────────────────────────────────────────────────────────────────
 export {
     AppButton as Button,
     AppCard as Panel,

@@ -6,12 +6,12 @@ import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     Github, LayoutDashboard, ListFilter, LogOut, Menu,
-    Rocket, Server, Settings, ShieldCheck, Users, X,
+    Rocket, Server, Settings, ShieldCheck, Users, X, RefreshCw
 } from 'lucide-react';
 import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
 import { useAdminMe } from '@/hooks/useDeployForgeData';
-import { Button, Panel, SkeletonBlock } from '@/components/ui';
 import api from '@/lib/api/client';
+import clsx from 'clsx';
 
 const adminRoles = new Set(['SUPER_ADMIN', 'ADMIN', 'MODERATOR']);
 
@@ -19,22 +19,22 @@ const NAV_GROUPS = [
     {
         label: 'Dashboard',
         items: [
-            { href: '/admin',      label: 'Overview',     icon: LayoutDashboard },
+            { href: '/admin', label: 'Overview', icon: LayoutDashboard },
         ],
     },
     {
         label: 'Platform',
         items: [
-            { href: '/admin/users',       label: 'Users',       icon: Users },
+            { href: '/admin/users', label: 'Users', icon: Users },
             { href: '/admin/deployments', label: 'Deployments', icon: Rocket },
-            { href: '/admin/vps',         label: 'VPS',         icon: Server },
-            { href: '/admin/github',      label: 'GitHub',      icon: Github },
+            { href: '/admin/vps', label: 'VPS Nodes', icon: Server },
+            { href: '/admin/github', label: 'GitHub App', icon: Github },
         ],
     },
     {
         label: 'System',
         items: [
-            { href: '/admin/logs',     label: 'Logs',     icon: ListFilter },
+            { href: '/admin/logs', label: 'Audit Logs', icon: ListFilter },
             { href: '/admin/settings', label: 'Settings', icon: Settings },
         ],
     },
@@ -61,26 +61,20 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
     if (!hasHydrated || me.isLoading) {
         return (
-            <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-slate-200">
-                <AuroraField />
-                <div className="w-full max-w-md space-y-3">
-                    <SkeletonBlock className="h-12 w-56" />
-                    <SkeletonBlock className="h-36 w-full" />
-                    <SkeletonBlock className="h-36 w-full" />
-                </div>
+            <div className="flex h-screen items-center justify-center bg-[#000000] font-mono text-xs text-[#666666]">
+                <RefreshCw size={16} className="animate-spin mr-2" /> Loading admin control plane...
             </div>
         );
     }
 
     if (!adminRoles.has(role || '')) {
         return (
-            <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-center">
-                <AuroraField />
-                <Panel className="max-w-md border-rose-400/30 bg-rose-500/10">
-                    <ShieldCheck className="mx-auto text-rose-300" size={36} />
-                    <h1 className="mt-4 text-xl font-black text-white">Admin access required</h1>
-                    <p className="mt-2 text-sm leading-6 text-rose-100/80">Use an admin account created by a super admin to continue.</p>
-                </Panel>
+            <div className="flex h-screen flex-col items-center justify-center bg-[#000000] p-6 font-mono text-xs text-[#666666]">
+                <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-6 text-center text-rose-300 space-y-2 max-w-sm">
+                    <ShieldCheck className="mx-auto text-rose-400" size={32} />
+                    <p className="font-bold text-white text-sm">Admin Access Required</p>
+                    <p>You must be an authenticated administrator to access the control plane.</p>
+                </div>
             </div>
         );
     }
@@ -94,7 +88,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="relative h-screen min-h-[100dvh] overflow-hidden bg-black text-white">
+        <div className="relative h-screen min-h-[100dvh] overflow-hidden bg-[#000000] text-white font-mono text-xs">
             <div className="relative flex h-screen min-h-[100dvh] overflow-hidden">
                 {/* Desktop sidebar */}
                 <aside className="hidden h-screen min-h-[100dvh] w-60 shrink-0 flex-col border-r border-[#1F1F1F] bg-[#0A0A0A] lg:flex">
@@ -102,16 +96,16 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 </aside>
 
                 {/* Mobile overlay */}
-                {sidebarOpen ? (
+                {sidebarOpen && (
                     <div className="fixed inset-0 z-40 lg:hidden">
                         <button className="absolute inset-0 bg-black/80" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />
-                        <aside className="relative h-full w-[min(18rem,calc(100vw-2rem))] border-r border-[#1F1F1F] bg-[#0A0A0A]">
+                        <aside className="relative h-full w-60 border-r border-[#1F1F1F] bg-[#0A0A0A]">
                             <AdminSidebar pathname={pathname} role={role} email={admin?.email} onLogout={signOut} onClose={() => setSidebarOpen(false)} />
                         </aside>
                     </div>
-                ) : null}
+                )}
 
-                <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-black">
+                <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#000000]">
                     {/* Topbar */}
                     <header className="z-30 shrink-0 border-b border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3 sm:px-6">
                         <div className="flex items-center justify-between gap-4">
@@ -119,31 +113,36 @@ export function AdminShell({ children }: { children: ReactNode }) {
                                 <button
                                     type="button"
                                     onClick={() => setSidebarOpen(true)}
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-white lg:hidden"
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-white lg:hidden"
                                     aria-label="Open admin navigation"
                                 >
-                                    <Menu size={17} />
+                                    <Menu size={16} />
                                 </button>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-rose-300/70">Admin Control Plane</p>
-                                    <h1 className="truncate text-lg font-black leading-tight text-white">{activeItem.label}</h1>
+                                <div>
+                                    <p className="text-[10px] font-semibold uppercase text-[#666666]">Control Plane</p>
+                                    <h1 className="truncate text-base font-bold text-white">{activeItem.label}</h1>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
                                 {role && (
-                                    <span className="hidden items-center gap-1.5 rounded-full border border-rose-400/20 bg-rose-400/8 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-rose-300 sm:flex">
-                                        <ShieldCheck size={11} />{role}
+                                    <span className="hidden items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 py-1 text-[10px] font-bold uppercase text-rose-400 sm:flex">
+                                        <ShieldCheck size={11} /> {role}
                                     </span>
                                 )}
-                                <Button variant="secondary" onClick={() => me.refetch()} loading={me.isFetching} className="h-9 text-xs">
-                                    Refresh
-                                </Button>
+                                <button
+                                    onClick={() => me.refetch()}
+                                    disabled={me.isFetching}
+                                    className="flex h-8 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-3 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                                >
+                                    <RefreshCw size={12} className={me.isFetching ? 'animate-spin' : ''} />
+                                    <span>Refresh</span>
+                                </button>
                             </div>
                         </div>
                     </header>
 
                     <div className="min-h-0 flex-1 overflow-y-auto terminal-scrollbar">
-                        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">{children}</div>
+                        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
                     </div>
                 </main>
             </div>
@@ -155,30 +154,30 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
     pathname: string; role?: string; email?: string; onLogout: () => void; onClose?: () => void;
 }) {
     return (
-        <div className="flex h-full flex-col">
-            {/* Brand */}
-            <div className="flex items-center justify-between gap-2 border-b border-white/[0.07] px-4 py-4">
-                <Link href="/admin" className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-rose-300/25 bg-gradient-to-br from-rose-300/20 to-rose-500/5 text-rose-200 shadow-lg shadow-rose-950/30">
-                        <ShieldCheck size={17} />
+        <div className="flex h-full flex-col font-mono text-xs">
+            {/* Brand Header */}
+            <div className="flex items-center justify-between gap-2 border-b border-[#1F1F1F] px-4 py-4">
+                <Link href="/admin" className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-white font-bold">
+                        DF
                     </div>
                     <div className="min-w-0">
-                        <p className="truncate text-sm font-black tracking-tight text-white">Admin Panel</p>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-400/60">{role || 'Control Plane'}</p>
+                        <p className="truncate text-xs font-bold text-white">DeployForge Admin</p>
+                        <p className="text-[10px] text-[#666666] uppercase">{role || 'Control Plane'}</p>
                     </div>
                 </Link>
-                {onClose ? (
-                    <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-slate-400 hover:text-white" aria-label="Close">
-                        <X size={15} />
+                {onClose && (
+                    <button type="button" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] text-[#A1A1A1] hover:text-white" aria-label="Close">
+                        <X size={14} />
                     </button>
-                ) : null}
+                )}
             </div>
 
             {/* Nav groups */}
-            <nav className="flex-1 overflow-y-auto no-scrollbar px-3 py-3 space-y-5">
+            <nav className="flex-1 overflow-y-auto no-scrollbar px-3 py-3 space-y-4">
                 {NAV_GROUPS.map(group => (
                     <div key={group.label}>
-                        <p className="mb-1.5 px-3 text-[9px] font-black uppercase tracking-widest text-slate-600">{group.label}</p>
+                        <p className="mb-1 px-2 text-[9px] font-semibold uppercase text-[#666666]">{group.label}</p>
                         <div className="space-y-0.5">
                             {group.items.map(item => {
                                 const Icon = item.icon;
@@ -187,15 +186,15 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
                                     <Link
                                         key={item.href}
                                         href={item.href}
-                                        className={`group relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-bold transition-all ${
+                                        className={clsx(
+                                            'flex h-8 items-center gap-2 rounded px-2.5 text-xs font-semibold transition-colors',
                                             isActive
-                                                ? 'bg-rose-300/10 text-rose-100'
-                                                : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'
-                                        }`}
+                                                ? 'bg-[#111111] text-white'
+                                                : 'text-[#A1A1A1] hover:text-white'
+                                        )}
                                     >
-                                        {isActive ? <span className="absolute left-0 top-1.5 h-7 w-0.5 rounded-r-full bg-rose-300 shadow-lg shadow-rose-500/40" /> : null}
-                                        <Icon size={15} className={isActive ? 'text-rose-300' : 'text-slate-600 transition-colors group-hover:text-slate-400'} />
-                                        <span className="truncate">{item.label}</span>
+                                        <Icon size={14} />
+                                        <span>{item.label}</span>
                                     </Link>
                                 );
                             })}
@@ -205,28 +204,21 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
             </nav>
 
             {/* User footer */}
-            <div className="border-t border-white/[0.07] p-3">
-                <div className="flex items-center gap-3 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-slate-900 text-xs font-black text-white">
-                        {email?.[0]?.toUpperCase() || 'A'}
-                    </div>
+            <div className="border-t border-[#1F1F1F] p-3">
+                <div className="flex items-center justify-between gap-2 rounded border border-[#1F1F1F] bg-[#000000] p-2.5">
                     <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-black text-white">{email || 'Admin'}</p>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-400/60">{role}</p>
+                        <p className="truncate text-xs font-bold text-white">{email || 'Admin'}</p>
+                        <p className="text-[10px] text-[#666666] uppercase">{role}</p>
                     </div>
                     <button
                         onClick={onLogout}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-400/20 bg-rose-500/8 text-rose-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white transition-colors"
                         title="Log out"
                     >
-                        <LogOut size={14} />
+                        <LogOut size={13} />
                     </button>
                 </div>
             </div>
         </div>
     );
-}
-
-function AuroraField() {
-    return null;
 }
