@@ -1,10 +1,9 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { Clock, Cpu, Globe, HardDrive, Info, MemoryStick, RefreshCw, Server, Thermometer } from 'lucide-react';
-import { Button, EmptyState, ErrorState, Panel, SectionHeading, SkeletonBlock } from '@/components/ui';
+import { Clock, Cpu, Globe, HardDrive, Info, MemoryStick, RefreshCw, Server } from 'lucide-react';
 import { useVpsServerInfo } from '@/hooks/useDeployForgeData';
-import type { Vps } from '@/lib/api/types';
+import clsx from 'clsx';
 
 function kbToHuman(kb: number): string {
     if (kb >= 1024 * 1024) return `${(kb / (1024 * 1024)).toFixed(1)} GB`;
@@ -14,38 +13,36 @@ function kbToHuman(kb: number): string {
 
 function InfoCard({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
     return (
-        <Panel className="space-y-4">
-            <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-300/15 bg-cyan-300/8 text-cyan-200">
-                    {icon}
-                </div>
-                <h3 className="text-sm font-black text-white">{title}</h3>
+        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4 font-mono text-xs">
+            <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
+                {icon}
+                <span>{title}</span>
             </div>
-            <div className="space-y-2.5">{children}</div>
-        </Panel>
+            <div className="space-y-2">{children}</div>
+        </div>
     );
 }
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
     return (
-        <div className="flex items-start justify-between gap-4 border-b border-white/[0.04] pb-2 last:border-0 last:pb-0">
-            <span className="text-[11px] font-bold uppercase text-slate-500 shrink-0 mt-0.5">{label}</span>
-            <span className="text-xs text-slate-200 text-right break-all">{value}</span>
+        <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-[#666666] font-semibold uppercase">{label}</span>
+            <span className="text-white text-right truncate">{value}</span>
         </div>
     );
 }
 
 function UsageBar({ used, total, label }: { used: number; total: number; label: string }) {
     const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-    const color = pct > 85 ? 'bg-rose-400' : pct > 70 ? 'bg-amber-400' : 'bg-cyan-400';
+    const colorClass = pct > 85 ? 'bg-rose-400' : pct > 70 ? 'bg-amber-400' : 'bg-white';
     return (
         <div className="space-y-1">
-            <div className="flex justify-between text-[11px]">
-                <span className="font-bold uppercase text-slate-500">{label}</span>
-                <span className="text-slate-300">{kbToHuman(used)} / {kbToHuman(total)} <span className="text-slate-500">({pct}%)</span></span>
+            <div className="flex justify-between text-[10px] font-mono">
+                <span className="text-[#666666] font-semibold uppercase">{label}</span>
+                <span className="text-white font-bold">{kbToHuman(used)} / {kbToHuman(total)} ({pct}%)</span>
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+            <div className="h-1.5 w-full rounded bg-[#000000] border border-[#1F1F1F] overflow-hidden">
+                <div className={clsx('h-full transition-all duration-300', colorClass)} style={{ width: `${pct}%` }} />
             </div>
         </div>
     );
@@ -57,35 +54,36 @@ interface ServerInfoTabProps {
     useServerInfoHook?: (vpsId?: string) => any;
 }
 
-export default function ServerInfoTab({ vps, vpsList = [], useServerInfoHook = useVpsServerInfo }: ServerInfoTabProps) {
+export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInfo }: ServerInfoTabProps) {
     const info = useServerInfoHook(vps?.id);
 
     if (!vps) {
         return (
-            <EmptyState
-                title="Select a server"
-                description="Choose a VPS from the list to view its system information."
-            />
+            <div className="rounded-md border border-dashed border-[#1F1F1F] bg-[#0A0A0A] p-10 text-center font-mono text-xs text-[#666666]">
+                <Server size={24} className="mx-auto mb-2 text-[#666666]" />
+                <p className="text-white font-semibold">Select a Server Node</p>
+                <p className="mt-1">Choose a VPS server from the list above to view deep system diagnostics.</p>
+            </div>
         );
     }
 
     if (info.isLoading) {
         return (
-            <div className="space-y-5">
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                    {Array.from({ length: 6 }).map((_, i) => <SkeletonBlock key={i} className="h-48" />)}
-                </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 font-mono text-xs">
+                {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-44 animate-pulse rounded-md border border-[#1F1F1F] bg-[#0A0A0A]" />
+                ))}
             </div>
         );
     }
 
     if (info.isError) {
         return (
-            <ErrorState
-                title="Could not fetch server info"
-                message="SSH connection failed or timed out. Ensure the server is online and SSH is accessible."
-                onRetry={() => info.refetch()}
-            />
+            <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-5 font-mono text-xs text-rose-300 space-y-2">
+                <p className="font-bold text-white">Could Not Fetch Server Information</p>
+                <p>SSH connection failed or timed out. Ensure the server is online and port {vps.port} is accessible.</p>
+                <button onClick={() => info.refetch()} className="h-7 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]">Retry</button>
+            </div>
         );
     }
 
@@ -93,68 +91,62 @@ export default function ServerInfoTab({ vps, vpsList = [], useServerInfoHook = u
     if (!d) return null;
 
     return (
-        <div className="space-y-5">
-            {/* Top meta bar */}
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-white/[0.08] bg-white/[0.03] px-5 py-3">
-                <div className="flex items-center gap-3 min-w-0">
-                    <Server size={16} className="text-cyan-300 shrink-0" />
-                    <div className="min-w-0">
-                        <p className="font-black text-white text-sm truncate">{vps.name}</p>
-                        <p className="text-xs text-slate-400 font-mono">{d.publicIp} · {d.hostname}</p>
+        <div className="space-y-4 font-mono text-xs">
+            {/* Top Bar */}
+            <div className="flex items-center justify-between gap-4 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <Server size={14} className="text-white" />
+                    <div>
+                        <p className="font-bold text-white text-sm">{vps.name}</p>
+                        <p className="text-xs text-[#A1A1A1]">{d.publicIp} · {d.hostname}</p>
                     </div>
                 </div>
-                <Button variant="secondary" onClick={() => info.refetch()} loading={info.isFetching} className="shrink-0">
-                    <RefreshCw size={14} /> Refresh
-                </Button>
+                <button onClick={() => info.refetch()} className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A]">
+                    <RefreshCw size={12} className={info.isFetching ? 'animate-spin' : ''} /> Refresh
+                </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {/* Network */}
-                <InfoCard icon={<Globe size={15} />} title="Network">
+                <InfoCard icon={<Globe size={14} />} title="Network Configuration">
                     <Row label="Hostname" value={d.hostname} />
-                    <Row label="Public IP" value={<span className="font-mono text-cyan-300">{d.publicIp}</span>} />
-                    <Row label="Private IP" value={<span className="font-mono">{d.privateIp}</span>} />
-                    <Row label="SSH Port" value={<span className="font-mono">{vps.port}</span>} />
+                    <Row label="Public IP" value={d.publicIp} />
+                    <Row label="Private IP" value={d.privateIp} />
+                    <Row label="SSH Port" value={vps.port} />
                 </InfoCard>
 
                 {/* OS */}
-                <InfoCard icon={<Info size={15} />} title="Operating System">
+                <InfoCard icon={<Info size={14} />} title="Operating System">
                     <Row label="OS" value={d.os} />
-                    <Row label="Kernel" value={<span className="font-mono text-xs">{d.kernel}</span>} />
+                    <Row label="Kernel" value={d.kernel} />
                     <Row label="Architecture" value={d.architecture} />
                     <Row label="Timezone" value={d.timezone} />
                 </InfoCard>
 
                 {/* CPU */}
-                <InfoCard icon={<Cpu size={15} />} title="Processor">
+                <InfoCard icon={<Cpu size={14} />} title="Processor">
                     <Row label="Model" value={d.cpuModel} />
-                    <Row label="Cores" value={<span className="font-black text-white">{d.cpuCores}</span>} />
+                    <Row label="CPU Cores" value={d.cpuCores} />
                 </InfoCard>
 
                 {/* Memory */}
-                <InfoCard icon={<MemoryStick size={15} />} title="Memory">
+                <InfoCard icon={<MemoryStick size={14} />} title="Memory Allocation">
                     <UsageBar used={d.ramUsed} total={d.ramTotal} label="RAM" />
                     {d.swapTotal > 0 && <UsageBar used={d.swapUsed} total={d.swapTotal} label="Swap" />}
-                    {d.swapTotal === 0 && <Row label="Swap" value={<span className="text-slate-500 italic">Not configured</span>} />}
                 </InfoCard>
 
                 {/* Storage */}
-                <InfoCard icon={<HardDrive size={15} />} title="Storage">
+                <InfoCard icon={<HardDrive size={14} />} title="Disk Storage">
                     <Row label="Total" value={d.diskTotal} />
                     <Row label="Used" value={d.diskUsed} />
                     <Row label="Free" value={d.diskFree} />
-                    <Row label="Usage" value={
-                        <span className={parseInt(d.diskPercent) > 85 ? 'text-rose-300 font-black' : parseInt(d.diskPercent) > 70 ? 'text-amber-300 font-black' : 'text-emerald-300 font-black'}>
-                            {d.diskPercent}
-                        </span>
-                    } />
+                    <Row label="Usage" value={d.diskPercent} />
                 </InfoCard>
 
-                {/* Uptime */}
-                <InfoCard icon={<Clock size={15} />} title="System Time">
-                    <Row label="Uptime" value={<span className="font-black text-white">{d.uptimeFormatted}</span>} />
-                    <Row label="Boot time" value={<span className="font-mono text-xs">{d.bootTime}</span>} />
-                    <Row label="Timezone" value={d.timezone} />
+                {/* Time */}
+                <InfoCard icon={<Clock size={14} />} title="System Time & Uptime">
+                    <Row label="Uptime" value={d.uptimeFormatted} />
+                    <Row label="Boot Time" value={d.bootTime} />
                 </InfoCard>
             </div>
         </div>

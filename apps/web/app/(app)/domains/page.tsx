@@ -16,20 +16,11 @@ import {
     WifiOff,
     X,
     Zap,
+    Loader2
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import {
-    Button,
-    EmptyState,
-    ErrorState,
-    PageHeader,
-    Panel,
-    SkeletonBlock,
-    StatusBadge,
-    formatDate,
-    inputClassName,
-    AppModal,
-} from '@/components/ui';
+import clsx from 'clsx';
+import { formatDate } from '@/components/ui';
 import {
     useAttachDomain,
     useDeployments,
@@ -41,7 +32,7 @@ import {
 } from '@/hooks/useDeployForgeData';
 import type { Domain } from '@/lib/api/types';
 
-// ─── Add Domain Modal ────────────────────────────────────────────────────────
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 function AddDomainModal({
     open,
@@ -71,276 +62,134 @@ function AddDomainModal({
         );
     }
 
-    return (
-        <AppModal title="Add Domain" open={open} onClose={onClose}>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-400">
-                        Deployment
-                    </label>
-                    <select
-                        id="domain-deployment-select"
-                        value={deploymentId}
-                        onChange={(e) => setDeploymentId(e.target.value)}
-                        className={inputClassName}
-                        required
-                    >
-                        <option value="">Select a running deployment…</option>
-                        {deployments.map((d) => (
-                            <option key={d.id} value={d.id}>
-                                {d.name || d.id.slice(0, 8)}
-                                {d.vps?.ipAddress ? ` — ${d.vps.ipAddress}` : ''}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <div>
-                    <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-400">
-                        Domain / Subdomain
-                    </label>
-                    <input
-                        id="domain-name-input"
-                        type="text"
-                        value={domainName}
-                        onChange={(e) => setDomainName(e.target.value)}
-                        placeholder="e.g. app.example.com or sub.example.com"
-                        className={inputClassName}
-                        required
-                    />
-                    <p className="mt-1.5 text-xs text-slate-500">
-                        Enter the exact domain or subdomain pointing to your VPS IP.
-                    </p>
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                    <Button type="button" variant="secondary" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" loading={attach.isPending} disabled={!deploymentId || !domainName.trim()}>
-                        <Globe size={15} /> Attach Domain
-                    </Button>
-                </div>
-            </form>
-        </AppModal>
-    );
-}
-
-// ─── DNS Status Panel ────────────────────────────────────────────────────────
-
-function DnsStatusPanel({ domain, vpsIp }: { domain: Domain; vpsIp?: string }) {
-    // MEDIUM FIX #12 (frontend): Start disabled — only fire DNS lookup on explicit
-    // user click. This prevents N simultaneous requests when multiple cards are expanded,
-    // which could self-rate-limit at the server's 30/min threshold.
-    const [dnsEnabled, setDnsEnabled] = useState(false);
-    const verify = useVerifyDns(domain.domainName, vpsIp, dnsEnabled && !!vpsIp);
-
-    if (!vpsIp) {
-        return (
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-                <WifiOff size={13} /> No VPS IP available
-            </div>
-        );
-    }
-
-    function handleCheck() {
-        if (!dnsEnabled) {
-            setDnsEnabled(true);
-        } else {
-            verify.refetch();
-        }
-    }
+    if (!open) return null;
 
     return (
-        <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 text-xs">
-            <div className="mb-2 flex items-center justify-between">
-                <span className="font-black text-slate-400 uppercase tracking-wide">DNS Status</span>
-                <button
-                    id={`dns-refresh-${domain.id}`}
-                    onClick={handleCheck}
-                    className="flex items-center gap-1 text-slate-500 hover:text-cyan-300 transition-colors"
-                >
-                    <RefreshCw size={11} className={verify.isFetching ? 'animate-spin' : ''} />
-                    {verify.isLoading ? 'Checking…' : verify.data ? 'Recheck' : 'Check DNS'}
-                </button>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono text-xs">
+            <div className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
+                    <h3 className="text-sm font-bold text-white">Attach Custom Domain</h3>
+                    <button onClick={onClose} className="text-[#666666] hover:text-white">✕</button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">
+                            Target Deployment
+                        </label>
+                        <select
+                            value={deploymentId}
+                            onChange={(e) => setDeploymentId(e.target.value)}
+                            className={INPUT_STYLE}
+                            required
+                        >
+                            <option value="">Select running deployment...</option>
+                            {deployments.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                    {d.name || d.id.slice(0, 8)}
+                                    {d.vps?.ipAddress ? ` — (${d.vps.ipAddress})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
-            {!dnsEnabled && (
-                <p className="text-slate-600 italic">Click &quot;Check DNS&quot; to verify propagation.</p>
-            )}
-
-            {verify.isLoading && (
-                <div className="h-4 w-32 animate-pulse rounded bg-slate-800" />
-            )}
-
-            {verify.data && (
-                <div className="space-y-1.5">
-                    <Row
-                        label="Propagated"
-                        value={
-                            verify.data.propagated ? (
-                                <span className="flex items-center gap-1 text-emerald-400">
-                                    <CheckCircle2 size={12} /> Yes
-                                </span>
-                            ) : (
-                                <span className="flex items-center gap-1 text-rose-400">
-                                    <WifiOff size={12} /> No
-                                </span>
-                            )
-                        }
-                    />
-                    <Row label="Expected IP" value={<span className="font-mono">{verify.data.expectedIp}</span>} />
-                    {verify.data.resolvedIps.length > 0 && (
-                        <Row
-                            label="Resolved IPs"
-                            value={<span className="font-mono">{verify.data.resolvedIps.join(', ')}</span>}
+                    <div>
+                        <label className="block text-[10px] font-semibold uppercase text-[#666666] mb-1">
+                            Domain Name / Subdomain
+                        </label>
+                        <input
+                            type="text"
+                            value={domainName}
+                            onChange={(e) => setDomainName(e.target.value)}
+                            placeholder="app.example.com"
+                            className={INPUT_STYLE}
+                            required
                         />
-                    )}
-                    {verify.data.cname && (
-                        <Row label="CNAME" value={<span className="font-mono">{verify.data.cname}</span>} />
-                    )}
-                    <Row
-                        label="Checked"
-                        value={<span>{new Date(verify.data.checkedAt).toLocaleTimeString()}</span>}
-                    />
-                </div>
-            )}
+                        <p className="mt-1 text-[11px] text-[#666666]">
+                            Enter full domain name pointing to the target VPS IP via A/CNAME record.
+                        </p>
+                    </div>
+
+                    <div className="flex justify-end gap-2 border-t border-[#1F1F1F] pt-4">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={attach.isPending || !deploymentId || !domainName.trim()}
+                            className="flex h-8 items-center gap-1 rounded border border-[#1F1F1F] bg-white px-4 font-semibold text-black hover:bg-[#E5E5E5] disabled:opacity-50"
+                        >
+                            {attach.isPending ? <Loader2 size={13} className="animate-spin" /> : <Globe size={13} />}
+                            <span>Attach Domain</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 }
-
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-    return (
-        <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500">{label}</span>
-            <span className="text-slate-200">{value}</span>
-        </div>
-    );
-}
-
-// ─── Domain Card ─────────────────────────────────────────────────────────────
 
 function DomainCard({ domain, vpsIp }: { domain: Domain & { deployment?: any }; vpsIp?: string }) {
     const remove = useRemoveDomain();
     const issueSSL = useIssueSSL();
     const toggleHttps = useToggleAutoHttps();
     const [expanded, setExpanded] = useState(false);
-    const [confirmDelete, setConfirmDelete] = useState(false);
-    const [autoHttpsEnabled, setAutoHttpsEnabled] = useState(false);
+    const [autoHttpsEnabled, setAutoHttpsEnabled] = useState(domain.autoHttps ?? false);
 
     const isDeleted = domain.status === 'DELETED';
     const sslIssued = domain.sslStatus === 'ISSUED';
-    // LOW FIX #14: sslFailed is now used — shows a warning banner with Retry SSL action.
     const sslFailed = domain.sslStatus === 'FAILED';
-    const isSubdomain = domain.domainName.split('.').length > 2;
 
     return (
-        <Panel className={`transition-all ${isDeleted ? 'opacity-50' : ''}`}>
+        <div className={clsx('rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4 font-mono text-xs', isDeleted && 'opacity-50')}>
             {/* Header */}
-            <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                    <div
-                        className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
-                            isDeleted
-                                ? 'border-slate-700 bg-slate-800 text-slate-500'
-                                : sslIssued
-                                ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
-                                : 'border-cyan-300/15 bg-cyan-300/10 text-cyan-300'
-                        }`}
-                    >
-                        {sslIssued ? <ShieldCheck size={17} /> : <Globe size={17} />}
-                    </div>
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-black text-white truncate">{domain.domainName}</p>
-                            {isSubdomain && (
-                                <span className="rounded-full bg-violet-400/10 px-2 py-0.5 text-[10px] font-black uppercase text-violet-300 ring-1 ring-violet-400/20">
-                                    Subdomain
-                                </span>
-                            )}
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                            Deployment: {domain.deployment?.name || domain.deploymentId.slice(0, 8)}
-                        </p>
-                    </div>
+            <div className="flex items-start justify-between gap-3 border-b border-[#1F1F1F] pb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    <Globe size={14} className={sslIssued ? 'text-emerald-400 shrink-0' : 'text-[#666666] shrink-0'} />
+                    <p className="font-bold text-white text-sm truncate">{domain.domainName}</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                    <StatusBadge status={domain.status} />
-                    {!isDeleted && (
-                        <button
-                            id={`domain-expand-${domain.id}`}
-                            onClick={() => setExpanded((v) => !v)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-slate-400 hover:text-white transition-colors"
-                        >
-                            <ChevronRight size={15} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
-                        </button>
-                    )}
+                <div className="flex items-center gap-2">
+                    <span className={clsx(
+                        'inline-flex items-center rounded border px-2 py-0.5 text-[10px] uppercase font-bold',
+                        sslIssued ? 'border-[#1F1F1F] bg-[#000000] text-emerald-400' : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]'
+                    )}>
+                        {sslIssued ? 'SSL Active' : 'No SSL'}
+                    </span>
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white"
+                    >
+                        <ChevronRight size={13} className={clsx('transition-transform', expanded && 'rotate-90')} />
+                    </button>
                 </div>
             </div>
 
-            {/* Badges row */}
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-                <SslBadge status={domain.sslStatus} />
-                {domain.domainName && (
-                    <a
-                        href={`http${sslIssued ? 's' : ''}://${domain.domainName}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-300/5 px-2.5 py-1 text-[11px] font-black text-cyan-300 hover:bg-cyan-300/10 transition-colors"
-                    >
-                        <Wifi size={11} /> Visit
-                    </a>
-                )}
-                <span className="ml-auto text-xs text-slate-500">{formatDate(domain.createdAt)}</span>
+            {/* Subtext info */}
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-[#A1A1A1]">
+                <span>Deployment: {domain.deployment?.name || domain.deploymentId.slice(0, 8)}</span>
+                <span>{formatDate(domain.createdAt)}</span>
             </div>
 
             {/* Expanded panel */}
             {expanded && !isDeleted && (
-                <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
-                    {/* LOW FIX #14: SSL failed warning banner with Retry action */}
-                    {sslFailed && (
-                        <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2">
-                            <div className="flex items-center gap-2 text-xs text-rose-300">
-                                <AlertTriangle size={13} />
-                                SSL issuance failed. Check DNS propagation then retry.
-                            </div>
-                            <Button
-                                id={`ssl-retry-${domain.id}`}
-                                variant="secondary"
-                                className="shrink-0 border-rose-400/25 text-rose-200 hover:bg-rose-500/15 text-xs py-1"
-                                onClick={() => issueSSL.mutate(domain.id)}
-                                loading={issueSSL.isPending}
-                            >
-                                <RefreshCw size={12} /> Retry SSL
-                            </Button>
-                        </div>
-                    )}
-
-                    {/* DNS Status */}
-                    <DnsStatusPanel domain={domain} vpsIp={vpsIp} />
-
-                    {/* Actions */}
-                    <div className="flex flex-wrap gap-2 pt-1">
-                        {/* SSL Issue */}
+                <div className="space-y-3 border-t border-[#1F1F1F] pt-3">
+                    {/* Controls */}
+                    <div className="flex flex-wrap gap-2">
                         {!sslIssued && (
-                            <Button
-                                id={`ssl-issue-${domain.id}`}
-                                variant="secondary"
+                            <button
                                 onClick={() => issueSSL.mutate(domain.id)}
-                                loading={issueSSL.isPending}
+                                disabled={issueSSL.isPending}
+                                className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
                             >
-                                <Lock size={14} /> Issue SSL
-                            </Button>
+                                {issueSSL.isPending ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />}
+                                <span>Issue SSL</span>
+                            </button>
                         )}
-
-                        {/* Auto-HTTPS toggle — HIGH FIX #8: proper enable/disable */}
                         {sslIssued && (
-                            <Button
-                                id={`auto-https-${domain.id}`}
-                                variant="secondary"
-                                className={autoHttpsEnabled
-                                    ? 'border-amber-400/25 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15'
-                                    : 'border-cyan-300/20 bg-cyan-300/5 text-cyan-200 hover:bg-cyan-300/10'
-                                }
+                            <button
                                 onClick={() => {
                                     const next = !autoHttpsEnabled;
                                     toggleHttps.mutate(
@@ -348,77 +197,27 @@ function DomainCard({ domain, vpsIp }: { domain: Domain & { deployment?: any }; 
                                         { onSuccess: () => setAutoHttpsEnabled(next) }
                                     );
                                 }}
-                                loading={toggleHttps.isPending}
+                                disabled={toggleHttps.isPending}
+                                className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
                             >
-                                <Zap size={14} />
-                                {autoHttpsEnabled ? 'Disable Auto-HTTPS' : 'Enable Auto-HTTPS'}
-                            </Button>
+                                <Zap size={12} />
+                                <span>{autoHttpsEnabled ? 'Disable Auto-HTTPS' : 'Enable Auto-HTTPS'}</span>
+                            </button>
                         )}
-
-                        {/* LOW FIX #15: Keep confirm dialog visible while deletion is
-                            in flight so the user sees a spinner instead of the dialog
-                            disappearing and leaving no feedback. */}
-                        {confirmDelete ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-rose-300">
-                                    {remove.isPending ? 'Removing…' : 'Are you sure?'}
-                                </span>
-                                {!remove.isPending && (
-                                    <>
-                                        <Button
-                                            id={`domain-delete-confirm-${domain.id}`}
-                                            variant="danger"
-                                            onClick={() => remove.mutate(domain.id)}
-                                            loading={remove.isPending}
-                                        >
-                                            Yes, remove
-                                        </Button>
-                                        <Button
-                                            variant="secondary"
-                                            onClick={() => setConfirmDelete(false)}
-                                        >
-                                            <X size={14} />
-                                        </Button>
-                                    </>
-                                )}
-                                {remove.isPending && (
-                                    <RefreshCw size={14} className="animate-spin text-rose-400" />
-                                )}
-                            </div>
-                        ) : (
-                            <Button
-                                id={`domain-delete-${domain.id}`}
-                                variant="secondary"
-                                className="border-rose-400/20 text-rose-300 hover:border-rose-300/30 hover:bg-rose-500/10"
-                                onClick={() => setConfirmDelete(true)}
-                            >
-                                <Trash2 size={14} /> Remove
-                            </Button>
-                        )}
+                        <button
+                            onClick={() => remove.mutate(domain.id)}
+                            disabled={remove.isPending}
+                            className="flex h-7 items-center gap-1 rounded border border-rose-900/40 bg-rose-950/20 px-2.5 text-xs text-rose-300 hover:bg-rose-900/30 disabled:opacity-50"
+                        >
+                            <Trash2 size={12} />
+                            <span>Remove</span>
+                        </button>
                     </div>
                 </div>
             )}
-        </Panel>
+        </div>
     );
 }
-
-function SslBadge({ status }: { status?: string }) {
-    const s = (status || 'NONE').toUpperCase();
-    const map: Record<string, { label: string; className: string; Icon: React.ElementType }> = {
-        ISSUED: { label: 'SSL Active', className: 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/20', Icon: ShieldCheck },
-        FAILED: { label: 'SSL Failed', className: 'bg-rose-400/10 text-rose-300 ring-rose-400/20', Icon: AlertTriangle },
-        EXPIRED: { label: 'SSL Expired', className: 'bg-amber-400/10 text-amber-300 ring-amber-400/20', Icon: AlertTriangle },
-        NONE: { label: 'No SSL', className: 'bg-slate-700/40 text-slate-400 ring-slate-600', Icon: Shield },
-    };
-    const { label, className, Icon } = map[s] || map['NONE'];
-    return (
-        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ${className}`}>
-            <Icon size={11} /> {label}
-        </span>
-    );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DomainsPage() {
     const domains = useDomains();
@@ -428,10 +227,7 @@ export default function DomainsPage() {
     const [addOpen, setAddOpen] = useState(false);
 
     const runningDeployments = useMemo(
-        () =>
-            (deployments.data || []).filter((d) =>
-                ['RUNNING', 'PAUSED'].includes(d.status)
-            ),
+        () => (deployments.data || []).filter((d) => ['RUNNING', 'PAUSED'].includes(d.status)),
         [deployments.data]
     );
 
@@ -445,113 +241,89 @@ export default function DomainsPage() {
         });
     }, [domains.data, search, statusFilter]);
 
-    // Build a map: deploymentId -> vpsIp for DNS checks
-    const vpsIpMap = useMemo(() => {
-        const map: Record<string, string> = {};
-        for (const dep of deployments.data || []) {
-            if (dep.vps?.ipAddress) map[dep.id] = dep.vps.ipAddress;
-        }
-        return map;
-    }, [deployments.data]);
-
-    // LOW FIX #16: Exclude DELETED domains from all metric counts — previously
-    // "Total Domains" included soft-deleted records which was misleading.
     const activeDomains = (domains.data || []).filter((d) => d.status !== 'DELETED');
     const activeCount = activeDomains.filter((d) => d.status === 'ACTIVE').length;
     const sslCount = activeDomains.filter((d) => d.sslStatus === 'ISSUED').length;
-    const failedCount = activeDomains.filter((d) => d.status === 'FAILED' || d.sslStatus === 'FAILED').length;
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Domain Manager"
-                description="Add custom domains and subdomains, manage SSL certificates, monitor DNS propagation, and enable Auto-HTTPS redirects."
-                action={
-                    <div className="flex flex-wrap gap-2">
-                        <Button variant="secondary" onClick={() => domains.refetch()} loading={domains.isFetching}>
-                            <RefreshCw size={15} /> Refresh
-                        </Button>
-                        <Button id="add-domain-btn" onClick={() => setAddOpen(true)}>
-                            <PlusCircle size={15} /> Add Domain
-                        </Button>
-                    </div>
-                }
-            />
-
-            {domains.isError ? (
-                <ErrorState message={(domains.error as Error)?.message} onRetry={() => domains.refetch()} />
-            ) : null}
-
-            {/* Metrics */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <MetricCard title="Total Domains" value={activeDomains.length} icon={<Globe size={18} />} />
-                <MetricCard title="Active" value={activeCount} icon={<CheckCircle2 size={18} />} accent="emerald" />
-                <MetricCard title="Issues" value={failedCount} icon={<AlertTriangle size={18} />} accent={failedCount > 0 ? 'rose' : undefined} />
+        <div className="space-y-6 font-mono text-xs">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        Domain Manager
+                    </h1>
+                    <p className="mt-1 text-xs text-[#A1A1A1]">
+                        Attach custom domains, monitor DNS propagation, issue Let&apos;s Encrypt SSL certificates, and enable Auto-HTTPS.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => domains.refetch()}
+                        disabled={domains.isFetching}
+                        className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-[#111111] px-3 font-semibold text-white transition-colors hover:bg-[#1A1A1A]"
+                    >
+                        <RefreshCw size={13} className={domains.isFetching ? 'animate-spin' : ''} />
+                        <span>Refresh</span>
+                    </button>
+                    <button
+                        onClick={() => setAddOpen(true)}
+                        className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-white px-3 font-semibold text-black transition-colors hover:bg-[#E5E5E5]"
+                    >
+                        <PlusCircle size={13} />
+                        <span>Add Domain</span>
+                    </button>
+                </div>
             </div>
 
-            {/* SSL Summary banner — only shown when there are active (non-deleted) domains */}
-            {activeDomains.length > 0 && (
-                <Panel>
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-300/20 bg-emerald-300/10 text-emerald-300">
-                                <ShieldCheck size={18} />
-                            </div>
-                            <div>
-                                <p className="text-sm font-black text-white">SSL Coverage</p>
-                                <p className="text-xs text-slate-400">
-                                    {sslCount} of {activeDomains.length} domain{activeDomains.length !== 1 ? 's' : ''} secured
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="h-2 w-40 overflow-hidden rounded-full bg-slate-800">
-                                <div
-                                    className="h-full rounded-full bg-emerald-400 transition-all"
-                                    style={{ width: `${activeDomains.length ? (sslCount / activeDomains.length) * 100 : 0}%` }}
-                                />
-                            </div>
-                            <span className="text-xs font-black text-slate-300">
-                                {activeDomains.length ? Math.round((sslCount / activeDomains.length) * 100) : 0}%
-                            </span>
-                        </div>
-                    </div>
-                </Panel>
+            {/* Error state */}
+            {domains.isError && (
+                <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
+                    Failed to load domains: {(domains.error as Error)?.message}
+                </div>
             )}
 
-            {/* Filters */}
-            <Panel>
-                <div className="flex flex-col gap-3 md:flex-row">
-                    <label className="relative flex-1">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={15} />
-                        <input
-                            id="domain-search"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search domains…"
-                            className={`${inputClassName} pl-10`}
-                        />
-                    </label>
-                    <select
-                        id="domain-status-filter"
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className={`${inputClassName} md:max-w-44`}
-                    >
-                        <option value="all">All statuses</option>
-                        <option value="active">Active</option>
-                        <option value="pending">Pending</option>
-                        <option value="failed">Failed</option>
-                        <option value="deleted">Deleted</option>
-                    </select>
+            {/* Summary metrics */}
+            <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
+                    <p className="text-[10px] uppercase text-[#666666]">TOTAL DOMAINS</p>
+                    <p className="text-2xl font-bold text-white">{activeDomains.length}</p>
                 </div>
-            </Panel>
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
+                    <p className="text-[10px] uppercase text-[#666666]">ACTIVE DOMAINS</p>
+                    <p className="text-2xl font-bold text-emerald-400">{activeCount}</p>
+                </div>
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
+                    <p className="text-[10px] uppercase text-[#666666]">SSL SECURED</p>
+                    <p className="text-2xl font-bold text-cyan-400">{sslCount}</p>
+                </div>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search custom domains..."
+                    className={clsx(INPUT_STYLE, 'flex-1')}
+                />
+                <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className={clsx(INPUT_STYLE, 'sm:w-44')}
+                >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
 
             {/* Domain list */}
             {domains.isLoading ? (
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                     {Array.from({ length: 4 }).map((_, i) => (
-                        <SkeletonBlock key={i} className="h-40" />
+                        <div key={i} className="h-32 animate-pulse rounded-md border border-[#1F1F1F] bg-[#0A0A0A]" />
                     ))}
                 </div>
             ) : filtered.length ? (
@@ -560,20 +332,22 @@ export default function DomainsPage() {
                         <DomainCard
                             key={domain.id}
                             domain={domain}
-                            vpsIp={vpsIpMap[domain.deploymentId]}
                         />
                     ))}
                 </div>
             ) : (
-                <EmptyState
-                    title="No domains found"
-                    description="Attach a custom domain or subdomain to a running deployment to get started. You can also issue SSL certificates and enable Auto-HTTPS."
-                    action={
-                        <Button id="add-domain-empty" onClick={() => setAddOpen(true)}>
-                            <PlusCircle size={15} /> Add First Domain
-                        </Button>
-                    }
-                />
+                <div className="rounded-md border border-dashed border-[#1F1F1F] bg-[#0A0A0A] p-10 text-center text-[#666666]">
+                    <Globe size={24} className="mx-auto mb-2 text-[#666666]" />
+                    <p className="text-white font-semibold">No Custom Domains Attached</p>
+                    <p className="mt-1 text-xs">Attach a custom domain or subdomain to your running application deployments.</p>
+                    <button
+                        onClick={() => setAddOpen(true)}
+                        className="mt-4 inline-flex h-8 items-center gap-1.5 rounded border border-[#1F1F1F] bg-white px-4 font-semibold text-black hover:bg-[#E5E5E5]"
+                    >
+                        <PlusCircle size={13} />
+                        <span>Add First Domain</span>
+                    </button>
+                </div>
             )}
 
             {/* Add Domain Modal */}
@@ -583,34 +357,5 @@ export default function DomainsPage() {
                 deployments={runningDeployments}
             />
         </div>
-    );
-}
-
-function MetricCard({
-    title,
-    value,
-    icon,
-    accent,
-}: {
-    title: string;
-    value: number;
-    icon: React.ReactNode;
-    accent?: 'emerald' | 'rose';
-}) {
-    const valueColor =
-        accent === 'emerald'
-            ? 'text-emerald-300'
-            : accent === 'rose'
-            ? 'text-rose-300'
-            : 'text-white';
-
-    return (
-        <Panel>
-            <div className="flex items-center justify-between">
-                <p className="text-xs font-black uppercase tracking-wide text-slate-500">{title}</p>
-                <span className="text-slate-600">{icon}</span>
-            </div>
-            <p className={`mt-3 text-3xl font-black ${valueColor}`}>{value}</p>
-        </Panel>
     );
 }

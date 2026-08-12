@@ -1,12 +1,14 @@
 'use client';
 
-import { CheckCircle2, Github, GitBranch, GitFork, Lock, RefreshCw, Rocket, Unlock, XCircle } from 'lucide-react';
+import { CheckCircle2, Github, GitBranch, Lock, RefreshCw, Rocket, Unlock, XCircle, Search, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import clsx from 'clsx';
-import { Button, EmptyState, ErrorState, PageHeader, Panel, SkeletonBlock, formatDate, inputClassName } from '@/components/ui';
 import { useGitHubProfile, useRepositories, useSyncRepositories } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import Link from 'next/link';
+import { formatDate } from '@/components/ui';
+
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 export default function RepositoriesPage() {
     const profile = useGitHubProfile();
@@ -23,7 +25,7 @@ export default function RepositoriesPage() {
             const response = await api.get<{ url: string }>('/auth/github/connect');
             window.location.href = response.url;
         } catch (err: any) {
-            setConnectError(err.message || 'Unable to start GitHub OAuth.');
+            setConnectError(err.message || 'Unable to start GitHub OAuth authorization flow.');
         } finally {
             setIsConnecting(false);
         }
@@ -36,140 +38,180 @@ export default function RepositoriesPage() {
     const webhookReady = repos.data?.filter(r => r.webhookId).length || 0;
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Repositories"
-                description="GitHub repositories synced into DeployForge for deployment selection and webhook setup."
-                action={
-                    profile.data ? (
-                        <div className="flex gap-2">
-                            <Button variant="secondary" onClick={() => sync.mutate()} loading={sync.isPending}>
-                                <RefreshCw size={15} /> Sync
-                            </Button>
-                        </div>
-                    ) : (
-                        <Button onClick={connectGitHub} loading={isConnecting}>
-                            <Github size={15} /> Connect GitHub
-                        </Button>
-                    )
-                }
-            />
-
-            {connectError  ? <ErrorState title="GitHub connect failed" message={connectError} /> : null}
-            {profile.isError ? <ErrorState message={(profile.error as Error)?.message} onRetry={() => profile.refetch()} /> : null}
-            {sync.isError    ? <ErrorState title="Sync failed" message={(sync.error as Error)?.message} onRetry={() => sync.mutate()} /> : null}
-            {repos.isError   ? <ErrorState message={(repos.error as Error)?.message} onRetry={() => repos.refetch()} /> : null}
-
-            {/* Stats row */}
-            {profile.data && repos.data?.length ? (
-                <div className="grid grid-cols-3 gap-4">
-                    {[
-                        { label: 'Total Repos',    value: repos.data.length,                         accent: 'bg-gradient-to-r from-violet-400/30 to-transparent' },
-                        { label: 'Webhook Ready',  value: webhookReady,                              accent: 'bg-gradient-to-r from-emerald-400/30 to-transparent' },
-                        { label: 'No Webhook',     value: repos.data.length - webhookReady,          accent: 'bg-gradient-to-r from-amber-400/20 to-transparent' },
-                    ].map(({ label, value, accent }) => (
-                        <Panel key={label} className="relative overflow-hidden py-4">
-                            <div className={clsx('absolute inset-x-0 top-0 h-0.5', accent)} />
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-                            <p className="mt-2 text-3xl font-black text-white">{value}</p>
-                        </Panel>
-                    ))}
+        <div className="space-y-6 font-mono text-xs">
+            {/* Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        GitHub Repositories
+                    </h1>
+                    <p className="mt-1 text-xs text-[#A1A1A1]">
+                        Synced GitHub repositories for automated release triggers, branch builds, and webhooks.
+                    </p>
                 </div>
-            ) : null}
+                <div>
+                    {profile.data ? (
+                        <button
+                            onClick={() => sync.mutate()}
+                            disabled={sync.isPending}
+                            className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-[#111111] px-3 font-semibold text-white transition-colors hover:bg-[#1A1A1A] disabled:opacity-50"
+                        >
+                            <RefreshCw size={13} className={sync.isPending ? 'animate-spin' : ''} />
+                            <span>{sync.isPending ? 'Syncing...' : 'Sync Repositories'}</span>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={connectGitHub}
+                            disabled={isConnecting}
+                            className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-white px-3 font-semibold text-black transition-colors hover:bg-[#E5E5E5] disabled:opacity-50"
+                        >
+                            {isConnecting ? <Loader2 size={13} className="animate-spin" /> : <Github size={13} />}
+                            <span>Connect GitHub</span>
+                        </button>
+                    )}
+                </div>
+            </div>
 
-            {/* GitHub profile banner */}
-            {profile.data ? (
-                <Panel className="py-3">
+            {/* Error banners */}
+            {connectError && (
+                <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
+                    GitHub Connect Error: {connectError}
+                </div>
+            )}
+
+            {/* GitHub profile status banner */}
+            {profile.data && (
+                <div className="flex items-center justify-between rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                     <div className="flex items-center gap-3">
                         {profile.data.avatarUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={profile.data.avatarUrl} alt="" className="h-8 w-8 rounded-full border border-white/10" />
+                            <img src={profile.data.avatarUrl} alt="" className="h-8 w-8 rounded-full border border-[#1F1F1F]" />
                         ) : (
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-violet-300/20 bg-violet-300/10 text-violet-300"><Github size={15} /></div>
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-white">
+                                <Github size={15} />
+                            </div>
                         )}
-                        <div className="min-w-0 flex-1">
-                            <p className="text-sm font-black text-white">@{profile.data.username}</p>
-                            <p className="text-[11px] text-slate-500">{profile.data.email || 'No public email'} · GitHub connected</p>
+                        <div>
+                            <p className="font-bold text-white">@{profile.data.username}</p>
+                            <p className="text-[11px] text-[#A1A1A1]">{profile.data.email || 'No public email'} · Connected</p>
                         </div>
-                        <span className="flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-2.5 py-1 text-[11px] font-black text-emerald-300">
-                            <CheckCircle2 size={11} /> Connected
-                        </span>
                     </div>
-                </Panel>
+                    <span className="inline-flex items-center gap-1 rounded border border-[#1F1F1F] bg-[#000000] px-2.5 py-1 text-[10px] font-semibold text-emerald-400">
+                        <CheckCircle2 size={11} /> Connected
+                    </span>
+                </div>
+            )}
+
+            {/* Stats Overview */}
+            {profile.data && repos.data?.length ? (
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
+                        <p className="text-[10px] uppercase text-[#666666]">TOTAL REPOS</p>
+                        <p className="text-2xl font-bold text-white">{repos.data.length}</p>
+                    </div>
+                    <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
+                        <p className="text-[10px] uppercase text-[#666666]">WEBHOOK READY</p>
+                        <p className="text-2xl font-bold text-emerald-400">{webhookReady}</p>
+                    </div>
+                    <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
+                        <p className="text-[10px] uppercase text-[#666666]">PENDING WEBHOOK</p>
+                        <p className="text-2xl font-bold text-[#A1A1A1]">{repos.data.length - webhookReady}</p>
+                    </div>
+                </div>
             ) : null}
 
-            {/* Search */}
+            {/* Search toolbar */}
             {repos.data?.length ? (
-                <Panel className="py-3">
+                <div className="relative">
                     <input
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search repositories…"
-                        className={inputClassName}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search synced repositories..."
+                        className={INPUT_STYLE}
                     />
-                </Panel>
+                </div>
             ) : null}
 
-            {/* Repo grid */}
+            {/* Repository grid */}
             {profile.isLoading || repos.isLoading ? (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    {Array.from({ length: 6 }).map((_, i) => <SkeletonBlock key={i} className="h-32" />)}
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="h-36 animate-pulse rounded-md border border-[#1F1F1F] bg-[#0A0A0A]" />
+                    ))}
                 </div>
             ) : filtered.length ? (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    {filtered.map(repo => (
-                        <Panel key={repo.id} className="group transition-all hover:border-violet-300/20 hover:bg-violet-300/[0.03]">
-                            <div className="flex items-start gap-3">
-                                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-slate-400">
-                                    <Github size={16} />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <p className="truncate font-black text-white">{repo.fullName}</p>
-                                        <span className="shrink-0 text-slate-500">{repo.private ? <Lock size={14} /> : <Unlock size={14} />}</span>
+                    {filtered.map((repo) => (
+                        <div key={repo.id} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4 hover:border-[#333333] transition-colors flex flex-col justify-between">
+                            <div className="space-y-2">
+                                <div className="flex items-start justify-between gap-2 border-b border-[#1F1F1F] pb-3">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <Github size={14} className="text-white shrink-0" />
+                                        <p className="font-bold text-white text-sm truncate">{repo.fullName}</p>
                                     </div>
-                                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                                        {repo.description || 'No description provided.'}
-                                    </p>
+                                    <span className="text-[#666666] shrink-0">{repo.private ? <Lock size={13} /> : <Unlock size={13} />}</span>
                                 </div>
+                                <p className="text-[#A1A1A1] text-xs leading-relaxed line-clamp-2">
+                                    {repo.description || 'No description provided.'}
+                                </p>
                             </div>
 
-                            {/* Chips */}
-                            <div className="mt-4 flex flex-wrap items-center gap-2">
-                                <span className="flex items-center gap-1 rounded-full border border-white/[0.07] bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold text-slate-400">
-                                    <GitBranch size={10} />{repo.defaultBranch}
-                                </span>
-                                {repo.webhookId ? (
-                                    <span className="flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/8 px-2.5 py-1 text-[10px] font-black text-emerald-300">
-                                        <CheckCircle2 size={10} />Webhook ready
+                            {/* Tags */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#1F1F1F] pt-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center gap-1 rounded border border-[#1F1F1F] bg-[#000000] px-2 py-0.5 text-[10px] text-[#A1A1A1]">
+                                        <GitBranch size={10} /> {repo.defaultBranch}
                                     </span>
-                                ) : (
-                                    <span className="flex items-center gap-1 rounded-full border border-amber-400/15 bg-amber-400/5 px-2.5 py-1 text-[10px] font-black text-amber-400/70">
-                                        <XCircle size={10} />No webhook
-                                    </span>
-                                )}
-                                <span className="ml-auto text-[10px] text-slate-600">{formatDate(repo.updatedAt)}</span>
-                            </div>
+                                    {repo.webhookId ? (
+                                        <span className="inline-flex items-center gap-1 rounded border border-[#1F1F1F] bg-[#000000] px-2 py-0.5 text-[10px] text-emerald-400">
+                                            <CheckCircle2 size={10} /> Webhook Active
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 rounded border border-[#1F1F1F] bg-[#000000] px-2 py-0.5 text-[10px] text-[#666666]">
+                                            <XCircle size={10} /> No Webhook
+                                        </span>
+                                    )}
+                                </div>
 
-                            {/* Action row */}
-                            <div className="mt-4 border-t border-white/[0.05] pt-3">
                                 <Link href={`/deployments/new?repo=${encodeURIComponent(repo.fullName)}&branch=${encodeURIComponent(repo.defaultBranch)}`}>
-                                    <Button variant="secondary" className="h-8 text-xs w-full">
-                                        <Rocket size={13} /> Deploy this repo
-                                    </Button>
+                                    <button className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-white px-3 text-[11px] font-semibold text-black hover:bg-[#E5E5E5] transition-colors">
+                                        <Rocket size={12} />
+                                        <span>Deploy</span>
+                                    </button>
                                 </Link>
                             </div>
-                        </Panel>
+                        </div>
                     ))}
                 </div>
             ) : (
-                <EmptyState
-                    title={profile.data ? (search ? 'No matches found' : 'No repositories synced') : 'GitHub is not connected'}
-                    description={profile.data ? (search ? 'Try a different search term.' : 'Run sync to pull your latest repositories from GitHub.') : 'Connect your GitHub account before syncing repositories.'}
-                    action={profile.data
-                        ? <Button onClick={() => sync.mutate()} loading={sync.isPending}><RefreshCw size={15} /> Sync repositories</Button>
-                        : <Button onClick={connectGitHub} loading={isConnecting}><Github size={15} /> Connect GitHub</Button>}
-                />
+                <div className="rounded-md border border-dashed border-[#1F1F1F] bg-[#0A0A0A] p-10 text-center text-[#666666]">
+                    <Github size={24} className="mx-auto mb-2 text-[#666666]" />
+                    <p className="text-white font-semibold">
+                        {profile.data ? (search ? 'No matching repositories found' : 'No repositories synced') : 'GitHub is not connected'}
+                    </p>
+                    <p className="mt-1 text-xs">
+                        {profile.data ? 'Run sync to pull latest repositories from GitHub.' : 'Connect your GitHub account to sync repositories.'}
+                    </p>
+                    {profile.data ? (
+                        <button
+                            onClick={() => sync.mutate()}
+                            disabled={sync.isPending}
+                            className="mt-4 inline-flex h-8 items-center gap-1.5 rounded border border-[#1F1F1F] bg-white px-4 font-semibold text-black hover:bg-[#E5E5E5]"
+                        >
+                            <RefreshCw size={13} className={sync.isPending ? 'animate-spin' : ''} />
+                            <span>Sync Repositories</span>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={connectGitHub}
+                            disabled={isConnecting}
+                            className="mt-4 inline-flex h-8 items-center gap-1.5 rounded border border-[#1F1F1F] bg-white px-4 font-semibold text-black hover:bg-[#E5E5E5]"
+                        >
+                            <Github size={13} />
+                            <span>Connect GitHub</span>
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );

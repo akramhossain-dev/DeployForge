@@ -28,7 +28,6 @@ export default function FileEditPage({ params }: EditPageProps) {
     const fileName = filePath ? filePath.split('/').pop() || '' : '';
 
     const handleClose = () => {
-        
         if (filePath) {
             const parentDir = filePath.substring(0, filePath.lastIndexOf('/')) || '/';
             router.push(`/file-manager/${vpsId}?path=${encodeURIComponent(parentDir)}`);
@@ -39,23 +38,19 @@ export default function FileEditPage({ params }: EditPageProps) {
 
     if (vpsLoading) {
         return (
-            <div className="flex h-full items-center justify-center bg-slate-950">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
+            <div className="flex h-64 items-center justify-center font-mono text-xs text-[#666666]">
+                <Loader2 size={16} className="animate-spin mr-2" /> Loading remote file editor...
             </div>
         );
     }
 
     if (!vps) {
         return (
-            <div className="flex h-full flex-col items-center justify-center gap-4 bg-slate-950">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-slate-900">
-                    <Server size={20} className="text-slate-600" />
-                </div>
-                <div className="text-center">
-                    <p className="text-sm font-semibold text-slate-400">VPS not found</p>
-                </div>
-                <Link href="/file-manager" className="h-7 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-xs font-semibold text-slate-400 hover:text-white transition-colors">
-                    Back to VPS list
+            <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-6 font-mono text-xs text-rose-300 space-y-3">
+                <p className="font-bold text-white">VPS Server Node Not Found</p>
+                <Link href="/file-manager" className="inline-flex h-8 items-center gap-1.5 rounded border border-[#1F1F1F] bg-[#111111] px-3 font-semibold text-white hover:bg-[#1A1A1A]">
+                    <ArrowLeft size={13} />
+                    <span>Return to Server List</span>
                 </Link>
             </div>
         );
@@ -63,15 +58,10 @@ export default function FileEditPage({ params }: EditPageProps) {
 
     if (!filePath) {
         return (
-            <div className="flex h-full flex-col items-center justify-center gap-4 bg-slate-950">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-slate-900">
-                    <AlertTriangle size={20} className="text-rose-400" />
-                </div>
-                <div className="text-center">
-                    <p className="text-sm font-semibold text-slate-400">No file path provided</p>
-                </div>
-                <button onClick={handleClose} className="h-7 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-xs font-semibold text-slate-400 hover:text-white transition-colors">
-                    Back to File Manager
+            <div className="rounded-md border border-amber-900/50 bg-amber-950/20 p-6 font-mono text-xs text-amber-300 space-y-3">
+                <p className="font-bold text-white">No File Path Provided</p>
+                <button onClick={handleClose} className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]">
+                    Return to File Manager
                 </button>
             </div>
         );
@@ -89,9 +79,8 @@ export default function FileEditPage({ params }: EditPageProps) {
     };
 
     return (
-        <div className="flex h-full flex-col gap-0 overflow-hidden bg-slate-950">
-            {}
-            <div className="flex min-h-0 flex-1">
+        <div className="space-y-4 font-mono text-xs h-[calc(100vh-140px)] flex flex-col">
+            <div className="flex-1 min-h-0 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] overflow-hidden">
                 <CodeEditor
                     vpsId={vpsId}
                     vpsName={vps.name}

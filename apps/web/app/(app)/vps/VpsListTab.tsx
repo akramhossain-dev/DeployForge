@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import { Activity, CheckCircle2, Info, KeyRound, LockKeyhole, RefreshCw, Server, Trash2, WifiOff, XCircle } from 'lucide-react';
 import clsx from 'clsx';
-import { Button, EmptyState, ErrorState, Panel, SkeletonBlock, StatusBadge, formatDate } from '@/components/ui';
+import { formatDate } from '@/components/ui';
 import type { Vps } from '@/lib/api/types';
 
 interface VpsListTabProps {
@@ -20,61 +20,69 @@ interface VpsListTabProps {
     onMonitor: (vps: Vps) => void;
 }
 
-function RadialProgress({ value, color }: { value: number; color: string }) {
-    const r = 18, circ = 2 * Math.PI * r;
-    const pct = Math.min(Math.max(value, 0), 100);
+function ProgressMeter({ label, value }: { label: string; value: number }) {
+    const colorClass = value > 85 ? 'bg-rose-400' : value > 70 ? 'bg-amber-400' : 'bg-white';
     return (
-        <svg width="44" height="44" viewBox="0 0 44 44" className="-rotate-90">
-            <circle cx="22" cy="22" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
-            <circle cx="22" cy="22" r={r} fill="none" stroke={color} strokeWidth="4"
-                strokeLinecap="round" strokeDasharray={circ}
-                strokeDashoffset={circ - (pct / 100) * circ}
-                style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
-        </svg>
-    );
-}
-
-function MetricRing({ label, value, color }: { label: string; value: number; color: string }) {
-    return (
-        <div className="flex flex-col items-center gap-1">
-            <div className="relative">
-                <RadialProgress value={value} color={color} />
-                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-white rotate-90">
-                    {Math.round(value)}%
-                </span>
+        <div className="space-y-1">
+            <div className="flex justify-between text-[10px] uppercase font-mono">
+                <span className="text-[#666666]">{label}</span>
+                <span className="text-white font-bold">{Math.round(value)}%</span>
             </div>
-            <span className="text-[10px] font-bold uppercase text-slate-500">{label}</span>
+            <div className="h-1.5 w-full rounded bg-[#000000] overflow-hidden border border-[#1F1F1F]">
+                <div className={clsx('h-full transition-all duration-300', colorClass)} style={{ width: `${Math.min(value, 100)}%` }} />
+            </div>
         </div>
     );
 }
 
-function InfoRow({ label, value }: { label: string; value: ReactNode }) {
+function StatusTag({ status }: { status?: string }) {
+    const s = String(status || 'active').toLowerCase();
+    const style = s === 'active'
+        ? 'border-[#1F1F1F] bg-[#000000] text-emerald-400'
+        : s === 'failed'
+        ? 'border-rose-900/40 bg-rose-950/20 text-rose-400'
+        : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]';
+
     return (
-        <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-bold uppercase text-slate-500 shrink-0">{label}</span>
-            <span className="text-xs text-slate-300 truncate text-right">{value}</span>
-        </div>
+        <span className={clsx('inline-flex items-center rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider', style)}>
+            {status}
+        </span>
     );
-}
-
-function statusDot(status: string) {
-    const s = String(status).toLowerCase();
-    if (s === 'active') return 'bg-emerald-400';
-    if (s === 'failed') return 'bg-rose-400';
-    return 'bg-slate-500';
 }
 
 export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, onRetry, testingId, deletingId, onTest, onDelete, onViewInfo, onMonitor }: VpsListTabProps) {
-    if (isError) return <ErrorState message={errorMessage} onRetry={onRetry} />;
-    if (isLoading) return (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonBlock key={i} className="h-72" />)}
-        </div>
-    );
-    if (!vpsList.length) return <EmptyState title="No servers connected" description="Add your first VPS to start deploying applications." />;
+    if (isError) {
+        return (
+            <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-6 font-mono text-xs text-rose-300 space-y-2">
+                <p className="font-bold text-white">Failed to load server list</p>
+                <p>{errorMessage}</p>
+                <button onClick={onRetry} className="h-7 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]">Retry</button>
+            </div>
+        );
+    }
+
+    if (isLoading) {
+        return (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 font-mono text-xs">
+                {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-64 animate-pulse rounded-md border border-[#1F1F1F] bg-[#0A0A0A]" />
+                ))}
+            </div>
+        );
+    }
+
+    if (!vpsList.length) {
+        return (
+            <div className="rounded-md border border-dashed border-[#1F1F1F] bg-[#0A0A0A] p-10 text-center font-mono text-xs text-[#666666]">
+                <Server size={24} className="mx-auto mb-2 text-[#666666]" />
+                <p className="text-white font-semibold">No VPS Server Nodes Registered</p>
+                <p className="mt-1">Connect an Ubuntu server node via SSH to start hosting deployments.</p>
+            </div>
+        );
+    }
 
     return (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 font-mono text-xs">
             {vpsList.map((server) => {
                 const health = server.healthRecords?.[0];
                 const cpu = Math.round(health?.cpuUsage || 0);
@@ -83,56 +91,83 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                 const lastSeen = server.lastCheckedAt || health?.checkedAt || server.updatedAt;
 
                 return (
-                    <Panel key={server.id} className="flex flex-col gap-0 p-0 overflow-hidden">
-                        <div className="relative flex items-start justify-between gap-3 px-5 pt-5 pb-4">
-                            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-300/40 via-cyan-200/20 to-transparent" />
-                            <div className="flex items-center gap-3 min-w-0">
-                                <div className="relative shrink-0 flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-300/15 bg-cyan-300/8">
-                                    <Server size={18} className="text-cyan-300" />
-                                    <span className={clsx('absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-slate-900', statusDot(server.status))} />
+                    <div key={server.id} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 flex flex-col justify-between space-y-4 hover:border-[#333333] transition-colors">
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-3 border-b border-[#1F1F1F] pb-3">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <Server size={14} className="text-white shrink-0" />
+                                    <p className="font-bold text-white text-sm truncate">{server.name}</p>
                                 </div>
-                                <div className="min-w-0">
-                                    <p className="truncate font-black text-white text-sm leading-tight">{server.name}</p>
-                                    <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">{server.ipAddress}:{server.port}</p>
-                                </div>
+                                <p className="mt-0.5 text-xs text-[#A1A1A1] truncate">{server.ipAddress}:{server.port}</p>
                             </div>
-                            <StatusBadge status={server.status} />
+                            <StatusTag status={server.status} />
                         </div>
 
+                        {/* Resource Health Metrics */}
                         {health ? (
-                            <div className="flex items-center justify-around border-y border-white/[0.05] bg-white/[0.02] px-5 py-4">
-                                <MetricRing label="CPU" value={cpu} color={cpu > 80 ? '#f87171' : cpu > 60 ? '#fbbf24' : '#22d3ee'} />
-                                <MetricRing label="RAM" value={ram} color={ram > 80 ? '#f87171' : ram > 60 ? '#fbbf24' : '#34d399'} />
-                                <MetricRing label="Disk" value={disk} color={disk > 85 ? '#f87171' : disk > 70 ? '#fbbf24' : '#a78bfa'} />
+                            <div className="space-y-2 border-b border-[#1F1F1F] pb-3">
+                                <ProgressMeter label="CPU Utilization" value={cpu} />
+                                <ProgressMeter label="RAM Memory" value={ram} />
+                                <ProgressMeter label="Disk Storage" value={disk} />
                             </div>
                         ) : (
-                            <div className="flex items-center justify-center border-y border-white/[0.05] bg-white/[0.02] px-5 py-5 gap-2 text-xs text-slate-500">
-                                <WifiOff size={14} /><span>No health data — run a connection test</span>
+                            <div className="flex items-center gap-2 text-xs text-[#666666] border-b border-[#1F1F1F] pb-3">
+                                <WifiOff size={13} />
+                                <span>No telemetry — run SSH test probe</span>
                             </div>
                         )}
 
-                        <div className="flex flex-col gap-2.5 px-5 py-4">
-                            <InfoRow label="User" value={<span className="font-mono">{server.username}</span>} />
-                            <InfoRow label="Auth" value={server.authType === 'password'
-                                ? <span className="flex items-center gap-1"><LockKeyhole size={11} className="text-amber-300" />Password</span>
-                                : <span className="flex items-center gap-1"><KeyRound size={11} className="text-cyan-300" />SSH Key</span>}
-                            />
-                            <InfoRow label="Last seen" value={formatDate(lastSeen)} />
-                            {health?.dockerInstalled !== undefined && (
-                                <InfoRow label="Docker" value={health.dockerInstalled
-                                    ? <span className="flex items-center gap-1 text-emerald-300"><CheckCircle2 size={11} />Ready</span>
-                                    : <span className="flex items-center gap-1 text-slate-500"><XCircle size={11} />Not installed</span>}
-                                />
-                            )}
+                        {/* Metadata Rows */}
+                        <div className="space-y-1.5 text-[11px] text-[#A1A1A1]">
+                            <div className="flex justify-between">
+                                <span className="text-[#666666]">SSH USER</span>
+                                <span className="text-white">{server.username}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-[#666666]">AUTH TYPE</span>
+                                <span className="text-white uppercase">{server.authType}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-[#666666]">LAST PROBE</span>
+                                <span>{formatDate(lastSeen)}</span>
+                            </div>
                         </div>
 
-                        <div className="mt-auto grid grid-cols-4 gap-2 border-t border-white/[0.05] px-5 py-4">
-                            <Button variant="secondary" className="col-span-1 h-9 px-2 text-xs" onClick={() => onViewInfo(server)} title="Server Info"><Info size={14} /></Button>
-                            <Button variant="secondary" className="col-span-1 h-9 px-2 text-xs" onClick={() => onMonitor(server)} title="Live Monitor"><Activity size={14} /></Button>
-                            <Button variant="secondary" className="col-span-1 h-9 px-2 text-xs" onClick={() => onTest(server.id)} loading={testingId === server.id} title="Test SSH"><RefreshCw size={14} /></Button>
-                            <Button variant="danger" className="col-span-1 h-9 px-2 text-xs" onClick={() => onDelete(server)} loading={deletingId === server.id} title="Delete"><Trash2 size={14} /></Button>
+                        {/* Action Buttons */}
+                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[#1F1F1F]">
+                            <button
+                                onClick={() => onViewInfo(server)}
+                                title="Server Info"
+                                className="flex h-8 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white hover:bg-[#1A1A1A]"
+                            >
+                                <Info size={13} />
+                            </button>
+                            <button
+                                onClick={() => onMonitor(server)}
+                                title="Live Monitor"
+                                className="flex h-8 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white hover:bg-[#1A1A1A]"
+                            >
+                                <Activity size={13} />
+                            </button>
+                            <button
+                                onClick={() => onTest(server.id)}
+                                disabled={testingId === server.id}
+                                title="Test Connection"
+                                className="flex h-8 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                            >
+                                <RefreshCw size={13} className={testingId === server.id ? 'animate-spin' : ''} />
+                            </button>
+                            <button
+                                onClick={() => onDelete(server)}
+                                disabled={deletingId === server.id}
+                                title="Delete VPS"
+                                className="flex h-8 items-center justify-center rounded border border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30 disabled:opacity-50"
+                            >
+                                <Trash2 size={13} />
+                            </button>
                         </div>
-                    </Panel>
+                    </div>
                 );
             })}
         </div>
