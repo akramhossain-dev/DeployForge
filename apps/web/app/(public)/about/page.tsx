@@ -1,120 +1,277 @@
-import Link from 'next/link';
-import { ArrowRight, Github, Server, ShieldCheck, Terminal, Zap } from 'lucide-react';
-import { SystemCta, SystemHero } from '@/components/system/PublicSystem';
+'use client';
 
-const principles = [
-    {
-        icon: Server,
-        title: 'Infrastructure ownership',
-        description: 'Modern deployment ergonomics while keeping full control over your VPS infrastructure and credentials.',
-        accent: 'border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-300',
-    },
-    {
-        icon: Github,
-        title: 'Source-connected workflow',
-        description: 'GitHub OAuth, repository sync, and webhooks keep deployments tightly attached to the code that triggered them.',
-        accent: 'border-violet-400/20 bg-violet-400/[0.06] text-violet-300',
-    },
-    {
-        icon: Terminal,
-        title: 'Operational clarity',
-        description: 'Live terminals, logs, metrics, and admin controls — organized as quiet production surfaces, not noisy dashboards.',
-        accent: 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300',
-    },
+import Link from 'next/link';
+import {
+    ArrowRight,
+    CheckCircle2,
+    Cpu,
+    Database,
+    Github,
+    Globe,
+    KeyRound,
+    Lock,
+    Rocket,
+    Server,
+    ShieldCheck,
+    Terminal,
+    Zap
+} from 'lucide-react';
+import { useAuthSession } from '@/hooks/useDeployForgeData';
+
+const TECH_STACK = [
+    { category: 'Frontend Dashboard', tech: 'Next.js 14 App Router, React 18, Tailwind CSS, xterm.js', detail: 'Public pages, dashboard console, browser SSH terminal, admin views' },
+    { category: 'Control Plane API', tech: 'Fastify, TypeScript, Pino Logger, WebSockets', detail: 'High-performance REST API, webhook handlers, live streaming sockets' },
+    { category: 'Task & Queue Engine', tech: 'BullMQ, ioredis, Redis 7', detail: 'Asynchronous deployment pipelines, job retries, task scheduling' },
+    { category: 'Database & ORM', tech: 'PostgreSQL 16, Prisma ORM', detail: 'Relational store for users, VPS nodes, projects, builds, and audit logs' },
+    { category: 'Orchestration Driver', tech: 'Agentless SSH2, SFTP, Docker Engine', detail: 'Direct server command execution, container build, and file sync' },
+    { category: 'Security & Encryption', tech: 'AES-256-GCM, Argon2id, Crypto HMAC', detail: 'Vault secrets encryption, password hashing, webhook signature checks' },
+    { category: 'Proxy & Networking', tech: 'Nginx 1.27 Alpine, Certbot ACME', detail: 'Dynamic reverse proxy routing, Let\'s Encrypt TLS cert renewal' },
 ];
 
-const stats = [
-    { label: 'Self-hosted', value: '100%', accent: 'text-cyan-300' },
-    { label: 'Open source', value: 'MIT',  accent: 'text-emerald-300' },
-    { label: 'VPS support', value: '∞',    accent: 'text-violet-300' },
+const PRACTICAL_PROBLEMS = [
+    {
+        title: 'Infrastructure Sovereignty',
+        description: 'Host applications on Virtual Private Servers you control. DeployForge connects over standard SSH without third-party daemons or platform lock-in.'
+    },
+    {
+        title: 'Predictable Cost & Scaling',
+        description: 'Avoid arbitrary per-app or per-bandwidth pricing penalties. Run high-density workloads on fixed-cost cloud servers or bare metal.'
+    },
+    {
+        title: 'Zero-Downtime Reliability',
+        description: 'Blue-Green deployments isolate new container builds, verify HTTP health check endpoints, and update Nginx upstream routes without dropping connections.'
+    },
+    {
+        title: 'Zero-Trust Data Protection',
+        description: 'Environment variables are encrypted at rest with AES-256-GCM. Passwords use Argon2id, and admin controls enforce lockout rules.'
+    }
+];
+
+const PHILOSOPHY = [
+    {
+        title: 'Developer Control',
+        description: 'Infrastructure management should feel transparent. Operators retain full root access and visibility into underlying Docker containers and Nginx configs.'
+    },
+    {
+        title: 'Agentless Architecture',
+        description: 'No proprietary agent daemons or cluster overhead on target servers. SSH2 is the single, auditable communication channel.'
+    },
+    {
+        title: 'Operational Simplicity',
+        description: 'Focus on clear status surfaces, real-time logs, and direct terminal access rather than noisy dashboards and complex abstractions.'
+    }
 ];
 
 export default function AboutPage() {
+    const auth = useAuthSession();
+    const primaryHref = auth.isAuthenticated ? '/dashboard' : '/register';
+    const primaryLabel = auth.isAuthenticated ? 'Open Console' : 'Get Started';
+
     return (
-        <main className="overflow-hidden bg-slate-950 text-white">
-            <SystemHero
-                eyebrow="About DeployForge"
-                title="A deployment console for people who still want the keys."
-                description="DeployForge brings repository automation, VPS management, live terminals, monitoring, and administrative control into one focused self-hosted delivery surface."
-                action={
-                    <Link href="/docs" className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-lg transition-all hover:scale-[1.02] hover:shadow-white/10">
-                        Read Docs <ArrowRight size={17} />
-                    </Link>
-                }
-            />
+        <main className="min-h-screen bg-black text-white">
 
-            {/* ── Stats strip ── */}
-            <section className="border-y border-white/[0.07] bg-white/[0.02] px-4 py-8 sm:px-6 lg:px-8">
+            {/* ── 1. Header Section ────────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 pb-16 pt-14 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
-                    <div className="grid grid-cols-3 gap-4 sm:gap-6">
-                        {stats.map(s => (
-                            <div key={s.label} className="text-center">
-                                <p className={`text-3xl font-black sm:text-4xl ${s.accent}`}>{s.value}</p>
-                                <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-500">{s.label}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
+                    <div className="max-w-3xl">
+                        {/* Eyebrow */}
+                        <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            <span>DEPLOYFORGE — ABOUT</span>
+                        </div>
 
-            {/* ── Principles ── */}
-            <section className="px-4 py-20 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl">
-                    <div className="max-w-3xl mb-12">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Principles</p>
-                        <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Built for clear production ownership.</h2>
-                        <p className="mt-4 text-base leading-7 text-slate-400">
-                            Every core workflow is designed to make source, server, deployment, and operator state visible. No hidden infrastructure assumptions.
+                        {/* Title */}
+                        <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+                            Self-hosted deployment control for modern software teams.
+                        </h1>
+
+                        {/* Description */}
+                        <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
+                            DeployForge bridges the gap between polished platform ergonomics and complete server sovereignty. Connect repositories, manage VPS fleets over agentless SSH, and release applications with zero downtime.
                         </p>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-3">
-                        {principles.map(p => {
-                            const Icon = p.icon;
-                            return (
-                                <article key={p.title} className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-6 transition-all hover:border-white/[0.15]">
-                                    <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/30 to-transparent" />
-                                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${p.accent}`}>
-                                        <Icon size={20} />
-                                    </div>
-                                    <h3 className="mt-5 text-lg font-black text-white">{p.title}</h3>
-                                    <p className="mt-3 text-sm leading-6 text-slate-400">{p.description}</p>
-                                </article>
-                            );
-                        })}
+
+                        {/* CTAs */}
+                        <div className="mt-8 flex flex-wrap items-center gap-3">
+                            <Link
+                                href={primaryHref}
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-4 text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5]"
+                            >
+                                <span>{primaryLabel}</span>
+                                <ArrowRight size={13} />
+                            </Link>
+                            <Link
+                                href="/docs"
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 text-xs font-medium text-white transition-colors hover:bg-[#111111]"
+                            >
+                                <span>Read Documentation</span>
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            {/* ── Why it exists ── */}
-            <section className="border-y border-white/[0.07] bg-white/[0.02] px-4 py-20 sm:px-6 lg:px-8">
+            {/* ── 2. What is DeployForge? ────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
-                    <div className="relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/[0.06] to-transparent p-8 sm:p-10">
-                        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/60 via-cyan-400/20 to-transparent" />
-                        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-                                <ShieldCheck size={24} />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <Zap size={13} className="text-cyan-400" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Why DeployForge exists</span>
+                    <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
+                        <div className="space-y-4 lg:col-span-6">
+                            <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Platform Purpose</h2>
+                            <h3 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                                An open-source PaaS orchestrator built for owned infrastructure.
+                            </h3>
+                            <p className="text-sm leading-relaxed text-[#A1A1A1]">
+                                DeployForge is an open-source, self-hosted Platform-as-a-Service designed to automate application building, deployment, and operational monitoring on your Virtual Private Servers (VPS).
+                            </p>
+                            <p className="text-sm leading-relaxed text-[#A1A1A1]">
+                                It connects GitHub repositories directly to your infrastructure. Pushing code triggers container builds, dynamic Nginx reverse proxy updates, Let’s Encrypt TLS certificate generation, and zero-downtime Blue-Green releases without relying on third-party cloud lock-in.
+                            </p>
+                        </div>
+
+                        {/* Specs Box */}
+                        <div className="lg:col-span-6">
+                            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 font-mono text-xs">
+                                <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3 text-[#666666]">
+                                    <span>DEPLOYFORGE PRIMITIVES</span>
+                                    <span className="text-emerald-400">STATUS: ACTIVE</span>
                                 </div>
-                                <h2 className="text-2xl font-black tracking-tight text-white">GitHub-driven deployment on infrastructure you own.</h2>
-                                <p className="mt-3 max-w-4xl text-base leading-7 text-slate-400">
-                                    Many teams want the polish of hosted deployment platforms without surrendering runtime control. DeployForge is shaped for that middle ground — GitHub-driven deployment automation on infrastructure you own, with practical operational visibility built in.
-                                </p>
+                                <div className="mt-4 space-y-3">
+                                    <div className="flex items-start gap-3 rounded border border-[#1F1F1F] bg-[#000000] p-3">
+                                        <Server size={15} className="text-white shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-semibold text-white">Agentless SSH Protocol</p>
+                                            <p className="text-[11px] text-[#A1A1A1]">Executes builds and container lifecycles via SSH2. Zero custom daemons required on target VPS.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 rounded border border-[#1F1F1F] bg-[#000000] p-3">
+                                        <Zap size={15} className="text-white shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-semibold text-white">Blue-Green Zero Downtime</p>
+                                            <p className="text-[11px] text-[#A1A1A1]">Parallel container deployments with HTTP health checks before Nginx route switching.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 rounded border border-[#1F1F1F] bg-[#000000] p-3">
+                                        <Lock size={15} className="text-white shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="font-semibold text-white">AES-256 Secret Vault</p>
+                                            <p className="text-[11px] text-[#A1A1A1]">Environment variables encrypted at rest with AES-256-GCM and Argon2id auth hashing.</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <SystemCta
-                title="Explore the system."
-                description="Read the docs for the deployment path, security model, GitHub integration, VPS setup, and admin control flow."
-                href="/docs"
-                label="Open Docs"
-            />
+            {/* ── 3. Why DeployForge? ────────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 py-16 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="max-w-2xl">
+                        <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Problem & Solution</h2>
+                        <p className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            Why DeployForge exists.
+                        </p>
+                    </div>
+
+                    <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        {PRACTICAL_PROBLEMS.map((prob) => (
+                            <div key={prob.title} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5">
+                                <h3 className="text-sm font-semibold text-white">{prob.title}</h3>
+                                <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">{prob.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* ── 4. Product Philosophy ──────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="max-w-2xl">
+                        <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Core Principles</h2>
+                        <p className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            Design & engineering philosophy.
+                        </p>
+                    </div>
+
+                    <div className="mt-8 grid gap-6 md:grid-cols-3">
+                        {PHILOSOPHY.map((item) => (
+                            <div key={item.title} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
+                                <h3 className="text-sm font-semibold text-white">{item.title}</h3>
+                                <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">{item.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* ── 5. Technology Stack ───────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 py-16 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="max-w-2xl">
+                        <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">Technology Architecture</h2>
+                        <p className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            Built with production-proven open primitives.
+                        </p>
+                    </div>
+
+                    <div className="mt-8 overflow-hidden rounded-md border border-[#1F1F1F] bg-[#0A0A0A]">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left font-mono text-xs">
+                                <thead className="border-b border-[#1F1F1F] bg-[#111111] text-[#666666]">
+                                    <tr>
+                                        <th className="px-4 py-3 font-semibold">COMPONENT</th>
+                                        <th className="px-4 py-3 font-semibold">TECHNOLOGY</th>
+                                        <th className="px-4 py-3 font-semibold">ROLE & FUNCTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#1F1F1F] text-[#A1A1A1]">
+                                    {TECH_STACK.map((row) => (
+                                        <tr key={row.category} className="transition-colors hover:bg-[#111111]/50">
+                                            <td className="px-4 py-3 font-semibold text-white">{row.category}</td>
+                                            <td className="px-4 py-3 text-emerald-400">{row.tech}</td>
+                                            <td className="px-4 py-3 text-[#A1A1A1]">{row.detail}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── 6. Final CTA ──────────────────────────────────────────── */}
+            <section className="px-4 py-16 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 sm:p-10">
+                    <div className="max-w-xl">
+                        <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            Ready to take control of your deployments?
+                        </h2>
+                        <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">
+                            Connect your servers, authorize your GitHub repositories, and start shipping software on your own infrastructure.
+                        </p>
+                        <div className="mt-6 flex flex-wrap gap-3">
+                            <Link
+                                href={primaryHref}
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-4 text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5]"
+                            >
+                                <span>{primaryLabel}</span>
+                                <ArrowRight size={13} />
+                            </Link>
+                            <a
+                                href="https://github.com/akramhossain-dev/DeployForge"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] px-4 text-xs font-medium text-white transition-colors hover:bg-[#1F1F1F]"
+                            >
+                                <Github size={13} />
+                                <span>Star on GitHub</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
     );
 }

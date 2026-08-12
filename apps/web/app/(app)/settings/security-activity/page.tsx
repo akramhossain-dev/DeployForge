@@ -14,11 +14,10 @@ import {
     Shield,
     Key,
     Github,
-    User,
     LogOut,
-    AlertTriangle
+    AlertTriangle,
+    Loader2
 } from 'lucide-react';
-import { Button, Panel } from '@/components/ui';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 
@@ -104,41 +103,41 @@ export default function SecurityActivityPage() {
     };
 
     const getDeviceIcon = (device?: string) => {
-        if (!device) return <Monitor size={15} className="text-slate-400" />;
+        if (!device) return <Monitor size={13} className="text-[#666666]" />;
         const d = device.toLowerCase();
-        if (d.includes('mobile') || d.includes('phone')) return <Smartphone size={15} className="text-slate-400" />;
-        if (d.includes('tablet') || d.includes('ipad')) return <Tablet size={15} className="text-slate-400" />;
-        return <Monitor size={15} className="text-slate-400" />;
+        if (d.includes('mobile') || d.includes('phone')) return <Smartphone size={13} className="text-[#666666]" />;
+        if (d.includes('tablet') || d.includes('ipad')) return <Tablet size={13} className="text-[#666666]" />;
+        return <Monitor size={13} className="text-[#666666]" />;
     };
 
     const getActionBadge = (action: string) => {
         const actionLower = action.toLowerCase();
 
-        let colorClasses = 'bg-slate-500/10 border-slate-500/20 text-slate-300';
+        let colorClasses = 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]';
         let Icon = Shield;
 
         if (actionLower.includes('success') || actionLower.includes('verified')) {
-            colorClasses = 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400';
+            colorClasses = 'border-[#1F1F1F] bg-[#0A0A0A] text-emerald-400';
         } else if (actionLower.includes('failure') || actionLower.includes('attempt') || actionLower.includes('warn')) {
-            colorClasses = 'bg-rose-500/10 border-rose-500/25 text-rose-400';
+            colorClasses = 'border-rose-900/40 bg-rose-950/20 text-rose-400';
             Icon = AlertTriangle;
         } else if (actionLower.includes('password') || actionLower.includes('reset')) {
-            colorClasses = 'bg-amber-500/10 border-amber-500/25 text-amber-400';
+            colorClasses = 'border-[#1F1F1F] bg-[#0A0A0A] text-amber-300';
             Icon = Key;
         } else if (actionLower.includes('github')) {
-            colorClasses = 'bg-indigo-500/10 border-indigo-500/25 text-indigo-400';
+            colorClasses = 'border-[#1F1F1F] bg-[#0A0A0A] text-white';
             Icon = Github;
         } else if (actionLower.includes('logout') || actionLower.includes('revoke')) {
-            colorClasses = 'bg-cyan-500/10 border-cyan-500/25 text-cyan-400';
+            colorClasses = 'border-[#1F1F1F] bg-[#0A0A0A] text-[#A1A1A1]';
             Icon = LogOut;
         } else if (actionLower.includes('deleted')) {
-            colorClasses = 'bg-rose-600/15 border-rose-600/30 text-rose-300';
+            colorClasses = 'border-rose-900/50 bg-rose-950/30 text-rose-300';
             Icon = AlertTriangle;
         }
 
         return (
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${colorClasses}`}>
-                <Icon size={12} />
+            <span className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${colorClasses}`}>
+                <Icon size={11} />
                 {action.replace(/_/g, ' ')}
             </span>
         );
@@ -146,41 +145,44 @@ export default function SecurityActivityPage() {
 
     return (
         <div className="space-y-6">
-            <Panel>
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4">
+            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border-b border-[#1F1F1F] pb-3 mb-4">
                     <div className="flex items-center gap-2">
-                        <Clock className="text-cyan-400" size={18} />
-                        <h3 className="font-bold text-white">Security Activity Log</h3>
+                        <Clock size={15} className="text-white" />
+                        <h3 className="text-sm font-semibold text-white">Security Activity Audit Log</h3>
                     </div>
-                    <Button
-                        variant="secondary"
-                        className="self-end md:self-auto text-xs px-3 py-1.5"
+                    <button
+                        type="button"
                         onClick={() => fetchLogs(true)}
                         disabled={isLoading}
+                        className="flex h-7 items-center gap-1.5 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs font-mono text-[#A1A1A1] hover:text-white transition-colors disabled:opacity-50"
                     >
-                        <RefreshCw size={14} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />
-                        Refresh Logs
-                    </Button>
+                        <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+                        <span>Refresh Logs</span>
+                    </button>
                 </div>
 
-                <p className="text-xs text-slate-400 mb-6">
-                    Audit log of the security-relevant events, logins, session changes, and credential updates for your account.
+                <p className="text-xs text-[#A1A1A1] mb-4">
+                    Comprehensive audit trail of security events, login attempts, session changes, and account credential updates.
                 </p>
 
-                {}
-                <div className="grid gap-4 md:grid-cols-12 mb-6">
+                {/* Filter and Search Bar */}
+                <div className="grid gap-3 md:grid-cols-12 mb-6">
                     <form onSubmit={handleSearchSubmit} className="relative md:col-span-7 flex">
                         <input
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search by event, description, browser, OS or IP..."
-                            className="w-full bg-slate-950 border border-white/10 rounded-l-md pl-9 pr-3 py-2 text-white focus:outline-none focus:border-cyan-500 text-sm placeholder-slate-500"
+                            placeholder="Search event, description, browser, OS, or IP..."
+                            className="w-full rounded-l-md border border-[#1F1F1F] bg-[#000000] py-1.5 pl-8 pr-3 font-mono text-xs text-white outline-none placeholder:text-[#666666] focus:border-[#333333]"
                         />
-                        <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
-                        <Button type="submit" className="rounded-l-none rounded-r-md px-4">
+                        <Search className="absolute left-2.5 top-2 text-[#666666]" size={14} />
+                        <button
+                            type="submit"
+                            className="rounded-r-md border border-l-0 border-[#1F1F1F] bg-[#111111] px-3 font-mono text-xs text-white hover:bg-[#1A1A1A]"
+                        >
                             Search
-                        </Button>
+                        </button>
                     </form>
 
                     <div className="md:col-span-5">
@@ -190,9 +192,9 @@ export default function SecurityActivityPage() {
                                 setCategory(e.target.value);
                                 setPage(1);
                             }}
-                            className="w-full bg-slate-950 border border-white/10 rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm"
+                            className="w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-1.5 font-mono text-xs text-white outline-none focus:border-[#333333]"
                         >
-                            <option value="all">All Events</option>
+                            <option value="all">All Event Categories</option>
                             <option value="auth">Authentication (Logins & Logouts)</option>
                             <option value="sessions">Session Management</option>
                             <option value="password">Password Actions</option>
@@ -203,49 +205,49 @@ export default function SecurityActivityPage() {
                 </div>
 
                 {isLoading ? (
-                    <div className="flex h-64 items-center justify-center">
-                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+                    <div className="flex h-48 items-center justify-center font-mono text-xs text-[#666666]">
+                        <Loader2 size={16} className="animate-spin mr-2" /> Loading security activity logs...
                     </div>
                 ) : logs.length === 0 ? (
-                    <div className="py-16 text-center text-slate-500 border border-dashed border-white/5 rounded-lg bg-slate-950/20">
-                        <HelpCircle className="mx-auto text-slate-600 mb-2" size={32} />
-                        <p className="text-sm font-medium">No activity matches your filters.</p>
-                        <p className="text-xs text-slate-600 mt-1">Try clearing your search query or selecting another category filter.</p>
+                    <div className="py-12 text-center font-mono text-xs text-[#666666] border border-dashed border-[#1F1F1F] rounded bg-[#000000]">
+                        <HelpCircle className="mx-auto mb-2 text-[#666666]" size={24} />
+                        <p className="text-white font-semibold">No activity logs match your filter criteria.</p>
+                        <p className="mt-1 text-[#666666]">Try searching with a different term or clearing category filters.</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <div className="overflow-x-auto rounded-lg border border-white/5 bg-slate-950/20">
-                            <table className="w-full text-left text-xs border-collapse">
+                        <div className="overflow-x-auto rounded border border-[#1F1F1F] bg-[#000000]">
+                            <table className="w-full text-left font-mono text-xs border-collapse">
                                 <thead>
-                                    <tr className="border-b border-white/5 bg-white/[0.02] text-slate-400">
-                                        <th className="p-3 font-semibold">Event Type</th>
-                                        <th className="p-3 font-semibold">Details</th>
-                                        <th className="p-3 font-semibold">Context (OS / Browser)</th>
-                                        <th className="p-3 font-semibold">IP Address</th>
-                                        <th className="p-3 font-semibold">Time</th>
+                                    <tr className="border-b border-[#1F1F1F] bg-[#111111] text-[#666666]">
+                                        <th className="p-2.5 font-semibold">EVENT TYPE</th>
+                                        <th className="p-2.5 font-semibold">DETAILS</th>
+                                        <th className="p-2.5 font-semibold">CONTEXT (OS / BROWSER)</th>
+                                        <th className="p-2.5 font-semibold">IP ADDRESS</th>
+                                        <th className="p-2.5 font-semibold">TIMESTAMP</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/5 text-slate-300">
+                                <tbody className="divide-y divide-[#1F1F1F] text-[#A1A1A1]">
                                     {logs.map((log) => (
-                                        <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
-                                            <td className="p-3 font-medium text-white whitespace-nowrap">
+                                        <tr key={log.id} className="hover:bg-[#111111]/50 transition-colors">
+                                            <td className="p-2.5 whitespace-nowrap">
                                                 {getActionBadge(log.action)}
                                             </td>
-                                            <td className="p-3 max-w-sm font-normal text-slate-300 leading-relaxed break-words">
+                                            <td className="p-2.5 max-w-sm text-white leading-relaxed break-words">
                                                 {log.details}
                                             </td>
-                                            <td className="p-3 whitespace-nowrap">
-                                                <div className="flex items-center gap-2">
+                                            <td className="p-2.5 whitespace-nowrap">
+                                                <div className="flex items-center gap-1.5">
                                                     {getDeviceIcon(log.device)}
-                                                    <span className="text-slate-300">{log.os || 'Unknown OS'}</span>
-                                                    <span className="text-slate-500">•</span>
-                                                    <span className="text-slate-400">{log.browser || 'Unknown'}</span>
+                                                    <span>{log.os || 'Unknown OS'}</span>
+                                                    <span className="text-[#666666]">•</span>
+                                                    <span>{log.browser || 'Unknown'}</span>
                                                 </div>
                                             </td>
-                                            <td className="p-3 font-mono text-slate-400 whitespace-nowrap">
+                                            <td className="p-2.5 text-[#A1A1A1] whitespace-nowrap">
                                                 {log.ipAddress || '—'}
                                             </td>
-                                            <td className="p-3 text-slate-400 whitespace-nowrap">
+                                            <td className="p-2.5 text-[#666666] whitespace-nowrap">
                                                 {new Date(log.createdAt).toLocaleString()}
                                             </td>
                                         </tr>
@@ -254,35 +256,35 @@ export default function SecurityActivityPage() {
                             </table>
                         </div>
 
-                        {}
+                        {/* Pagination Bar */}
                         {pagination && pagination.totalPages > 1 && (
-                            <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                                <div className="text-xs text-slate-400">
-                                    Showing page <span className="font-semibold text-white">{pagination.page}</span> of <span className="font-semibold text-white">{pagination.totalPages}</span> ({pagination.total} total events)
+                            <div className="flex items-center justify-between pt-3 border-t border-[#1F1F1F] font-mono text-xs">
+                                <div className="text-[#666666]">
+                                    Page <span className="font-bold text-white">{pagination.page}</span> of <span className="font-bold text-white">{pagination.totalPages}</span> ({pagination.total} events)
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="secondary"
-                                        className="p-1.5 text-xs"
+                                <div className="flex gap-1.5">
+                                    <button
+                                        type="button"
                                         disabled={pagination.page <= 1}
                                         onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                                        className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A] disabled:opacity-40"
                                     >
-                                        <ChevronLeft size={16} />
-                                    </Button>
-                                    <Button
-                                        variant="secondary"
-                                        className="p-1.5 text-xs"
+                                        <ChevronLeft size={14} />
+                                    </button>
+                                    <button
+                                        type="button"
                                         disabled={pagination.page >= pagination.totalPages}
                                         onClick={() => setPage(prev => Math.min(pagination.totalPages, prev + 1))}
+                                        className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A] disabled:opacity-40"
                                     >
-                                        <ChevronRight size={16} />
-                                    </Button>
+                                        <ChevronRight size={14} />
+                                    </button>
                                 </div>
                             </div>
                         )}
                     </div>
                 )}
-            </Panel>
+            </div>
         </div>
     );
 }

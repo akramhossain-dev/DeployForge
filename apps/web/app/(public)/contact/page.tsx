@@ -1,18 +1,19 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { CheckCircle2, Loader2, Lock, Mail, MessageSquare, Send, Shield } from 'lucide-react';
+import Link from 'next/link';
+import { CheckCircle2, Loader2, Lock, Mail, MessageSquare, Send, Shield, BookOpen, Github } from 'lucide-react';
 import api, { ApiError } from '@/lib/api/client';
-import { PublicAurora, SystemHero } from '@/components/system/PublicSystem';
 
 const initialForm = { name: '', email: '', subject: '', message: '' };
 
-const FIELD = 'w-full rounded-xl border border-white/[0.1] bg-slate-900/80 px-4 text-white outline-none placeholder:text-slate-600 transition-colors focus:border-cyan-400/50 text-sm';
+const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
-const topics = [
-    { icon: Shield, label: 'Security & privacy requests' },
-    { icon: Mail,   label: 'GitHub OAuth & repository sync issues' },
-    { icon: Lock,   label: 'VPS, deployment, terminal & monitoring support' },
+const SUPPORT_TOPICS = [
+    { icon: Shield, label: 'Security & Privacy Inquiries' },
+    { icon: Github, label: 'GitHub OAuth & Repository Sync Issues' },
+    { icon: Lock,   label: 'VPS, Terminal, Deployment & Monitoring' },
+    { icon: BookOpen, label: 'Documentation & Architecture Questions' },
 ];
 
 export default function ContactPage() {
@@ -37,106 +38,206 @@ export default function ContactPage() {
         setForm(f => ({ ...f, [key]: e.target.value }));
 
     return (
-        <main className="overflow-hidden bg-slate-950 text-white">
-            <SystemHero
-                eyebrow="Contact"
-                title="Reach the DeployForge team."
-                description="Send questions about accounts, security, integrations, infrastructure workflows, privacy, or operational support."
-            />
+        <main className="min-h-screen bg-black text-white">
 
-            <section className="relative isolate border-y border-white/[0.07] bg-white/[0.02] px-4 py-16 sm:px-6 lg:px-8">
-                <PublicAurora />
-                <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-
-                    {/* ── Left info panel ── */}
-                    <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-6 sm:p-7">
-                        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/50 to-transparent" />
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-                            <Mail size={22} />
+            {/* ── 1. Page Header ────────────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 pb-12 pt-14 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <div className="max-w-3xl">
+                        {/* Eyebrow */}
+                        <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
+                            <Mail size={13} className="text-white" />
+                            <span>DEPLOYFORGE — SUPPORT</span>
                         </div>
-                        <h2 className="mt-5 text-2xl font-black tracking-tight text-white">Support for self-hosted delivery.</h2>
-                        <p className="mt-3 text-sm leading-6 text-slate-400">
-                            Include the account email, affected repository or VPS name, and a clear description of what happened. Never send passwords, private keys, tokens, or production secrets.
+
+                        {/* Title */}
+                        <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+                            Contact Support
+                        </h1>
+
+                        {/* Description */}
+                        <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
+                            Send questions about account credentials, security inquiries, repository integrations, infrastructure workflows, or platform operations.
                         </p>
+                    </div>
+                </div>
+            </section>
 
-                        <div className="mt-6 space-y-2.5">
-                            {topics.map(t => {
-                                const Icon = t.icon;
-                                return (
-                                    <div key={t.label} className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
-                                        <Icon size={14} className="shrink-0 text-cyan-400" />
-                                        <span className="text-sm font-semibold text-slate-300">{t.label}</span>
-                                    </div>
-                                );
-                            })}
+            {/* ── 2. Support Content & Form Grid ────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-12 sm:px-6 lg:px-8">
+                <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-12 lg:items-start">
+
+                    {/* Left Column: Support Information (5 cols) */}
+                    <div className="space-y-6 lg:col-span-5">
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
+                            <h2 className="text-sm font-semibold text-white">Support Channels & Guidelines</h2>
+                            <p className="text-xs leading-relaxed text-[#A1A1A1]">
+                                For the fastest resolution, please include the account email, affected repository or VPS server name, and a clear description of the issue.
+                            </p>
+                            <div className="rounded border border-[#1F1F1F] bg-[#000000] p-3 text-xs font-mono text-[#666666]">
+                                SECURITY NOTICE: Never include passwords, SSH private keys, secret tokens, or production API keys in support messages.
+                            </div>
                         </div>
 
-                        {/* Response notice */}
-                        <div className="mt-6 rounded-xl border border-amber-400/15 bg-amber-400/[0.05] px-4 py-3">
-                            <p className="text-[11px] font-black uppercase tracking-wider text-amber-400">Response time</p>
-                            <p className="mt-0.5 text-xs text-slate-400">We typically respond within 1–2 business days.</p>
+                        {/* Topics List */}
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-3 font-mono text-xs">
+                            <p className="border-b border-[#1F1F1F] pb-2 font-semibold uppercase tracking-wider text-[#666666]">
+                                COMMON SUPPORT AREAS
+                            </p>
+                            <div className="space-y-2">
+                                {SUPPORT_TOPICS.map(topic => {
+                                    const Icon = topic.icon;
+                                    return (
+                                        <div key={topic.label} className="flex items-center gap-2.5 rounded border border-[#1F1F1F] bg-[#000000] p-2.5 text-[#A1A1A1]">
+                                            <Icon size={14} className="shrink-0 text-white" />
+                                            <span>{topic.label}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Direct Link Options */}
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 font-mono text-xs space-y-3">
+                            <p className="border-b border-[#1F1F1F] pb-2 font-semibold uppercase tracking-wider text-[#666666]">
+                                SELF-SERVICE RESOURCES
+                            </p>
+                            <div className="flex flex-col gap-2">
+                                <Link
+                                    href="/docs"
+                                    className="flex items-center justify-between rounded border border-[#1F1F1F] bg-[#000000] p-2.5 text-[#A1A1A1] hover:text-white transition-colors"
+                                >
+                                    <span>Read Documentation</span>
+                                    <BookOpen size={13} />
+                                </Link>
+                                <a
+                                    href="https://github.com/akramhossain-dev/DeployForge/issues"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex items-center justify-between rounded border border-[#1F1F1F] bg-[#000000] p-2.5 text-[#A1A1A1] hover:text-white transition-colors"
+                                >
+                                    <span>GitHub Issues</span>
+                                    <Github size={13} />
+                                </a>
+                            </div>
+                            <div className="pt-2 text-[11px] text-[#666666]">
+                                Typical response time: 1–2 business days.
+                            </div>
                         </div>
                     </div>
 
-                    {/* ── Form panel ── */}
-                    <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.06] p-1 shadow-2xl backdrop-blur-xl">
-                        <div className="rounded-xl border border-white/[0.08] bg-slate-950/90 p-6 sm:p-8">
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-                                    <MessageSquare size={18} />
-                                </div>
-                                <div>
-                                    <h2 className="text-xl font-black tracking-tight text-white">Send a message</h2>
-                                    <p className="text-xs text-slate-500 mt-0.5">All fields required · protected by rate limiting</p>
-                                </div>
+                    {/* Right Column: Contact Form (7 cols) */}
+                    <div className="lg:col-span-7">
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 lg:p-8">
+                            <div className="border-b border-[#1F1F1F] pb-4 mb-6">
+                                <h2 className="text-lg font-bold text-white">Send a Message</h2>
+                                <p className="mt-1 text-xs text-[#666666]">
+                                    All fields are required. Submissions are rate-limited.
+                                </p>
                             </div>
 
                             <form onSubmit={submitContact} className="space-y-4">
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                    <Field label="Name">
-                                        <input required minLength={2} maxLength={80} value={form.name} onChange={set('name')} className={`${FIELD} h-11`} placeholder="Your name" autoComplete="name" />
-                                    </Field>
-                                    <Field label="Email">
-                                        <input required type="email" maxLength={160} value={form.email} onChange={set('email')} className={`${FIELD} h-11`} placeholder="you@example.com" autoComplete="email" />
-                                    </Field>
+                                    <div>
+                                        <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                                            Your Name
+                                        </label>
+                                        <input
+                                            required
+                                            minLength={2}
+                                            maxLength={80}
+                                            value={form.name}
+                                            onChange={set('name')}
+                                            className={INPUT_STYLE}
+                                            placeholder="Jane Doe"
+                                            autoComplete="name"
+                                            disabled={loading}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                                            Email Address
+                                        </label>
+                                        <input
+                                            required
+                                            type="email"
+                                            maxLength={160}
+                                            value={form.email}
+                                            onChange={set('email')}
+                                            className={INPUT_STYLE}
+                                            placeholder="jane@company.com"
+                                            autoComplete="email"
+                                            disabled={loading}
+                                        />
+                                    </div>
                                 </div>
 
-                                <Field label="Subject">
-                                    <input required minLength={4} maxLength={140} value={form.subject} onChange={set('subject')} className={`${FIELD} h-11`} placeholder="What should we look at?" />
-                                </Field>
+                                <div>
+                                    <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                                        Subject
+                                    </label>
+                                    <input
+                                        required
+                                        minLength={4}
+                                        maxLength={140}
+                                        value={form.subject}
+                                        onChange={set('subject')}
+                                        className={INPUT_STYLE}
+                                        placeholder="Brief summary of request"
+                                        disabled={loading}
+                                    />
+                                </div>
 
-                                <Field label="Message">
-                                    <textarea required minLength={20} maxLength={4000} value={form.message} onChange={set('message')} className={`${FIELD} min-h-36 resize-y py-3`} placeholder="Describe the request without sharing secrets." />
-                                </Field>
+                                <div>
+                                    <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                                        Message
+                                    </label>
+                                    <textarea
+                                        required
+                                        minLength={20}
+                                        maxLength={4000}
+                                        value={form.message}
+                                        onChange={set('message')}
+                                        className={`${INPUT_STYLE} min-h-36 resize-y py-2.5`}
+                                        placeholder="Describe your inquiry without sharing private keys or secrets."
+                                        disabled={loading}
+                                    />
+                                </div>
 
+                                {/* Feedback states */}
                                 {success && (
-                                    <div className="flex items-start gap-3 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.07] p-4 text-sm leading-6 text-emerald-100">
-                                        <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-400" size={16} />
+                                    <div className="flex items-center gap-2.5 rounded border border-emerald-900/50 bg-emerald-950/20 p-3 text-xs font-mono text-emerald-300">
+                                        <CheckCircle2 size={14} className="shrink-0 text-emerald-400" />
                                         <span>{success}</span>
                                     </div>
                                 )}
                                 {error && (
-                                    <div className="rounded-xl border border-rose-400/25 bg-rose-500/[0.07] p-4 text-sm text-rose-200">{error}</div>
+                                    <div className="rounded border border-rose-900/50 bg-rose-950/20 p-3 text-xs font-mono text-rose-300">
+                                        {error}
+                                    </div>
                                 )}
 
-                                <button type="submit" disabled={loading}
-                                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-lg transition-all hover:scale-[1.01] hover:shadow-white/10 disabled:cursor-not-allowed disabled:opacity-60">
-                                    {loading ? <Loader2 className="animate-spin" size={18} /> : <><Send size={15} /> Submit Message</>}
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-white text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5] disabled:opacity-50"
+                                >
+                                    {loading ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Send size={13} />
+                                            <span>Send message</span>
+                                        </>
+                                    )}
                                 </button>
                             </form>
                         </div>
                     </div>
+
                 </div>
             </section>
-        </main>
-    );
-}
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-        <label className="block">
-            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
-            {children}
-        </label>
+        </main>
     );
 }

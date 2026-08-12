@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { KeyRound, Shield, RefreshCw, Monitor, Smartphone, Tablet, XCircle, LogOut } from 'lucide-react';
-import { Button, Panel } from '@/components/ui';
+import { KeyRound, Shield, RefreshCw, Monitor, Smartphone, Tablet, XCircle, LogOut, Loader2 } from 'lucide-react';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 
@@ -25,6 +24,8 @@ interface Session {
     createdAt: string;
     isCurrent?: boolean;
 }
+
+const INPUT_STYLE = 'w-full rounded-md border bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 export default function SecurityPage() {
     const addToast = useToastStore((state) => state.addToast);
@@ -203,26 +204,29 @@ export default function SecurityPage() {
     const getDeviceIcon = (device: string) => {
         const d = device.toLowerCase();
         if (d.includes('mobile') || d.includes('phone') || d.includes('ios') || d.includes('android')) {
-            return <Smartphone className="text-slate-400" size={16} />;
+            return <Smartphone size={14} className="text-white" />;
         }
         if (d.includes('tablet') || d.includes('ipad')) {
-            return <Tablet className="text-slate-400" size={16} />;
+            return <Tablet size={14} className="text-white" />;
         }
-        return <Monitor className="text-slate-400" size={16} />;
+        return <Monitor size={14} className="text-white" />;
     };
 
     return (
         <div className="space-y-6">
-            {}
-            <Panel>
-                <div className="flex items-center gap-2 mb-4">
-                    <KeyRound className="text-cyan-400" size={18} />
-                    <h3 className="font-bold text-white">Change Password</h3>
+
+            {/* ── 1. Change Password Section ── */}
+            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
+                <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 mb-4">
+                    <KeyRound size={15} className="text-white" />
+                    <h3 className="text-sm font-semibold text-white">Change Account Password</h3>
                 </div>
 
                 <form onSubmit={handleChangePassword} className="space-y-4">
                     <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1">Current Password</label>
+                        <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                            Current Password
+                        </label>
                         <input
                             ref={currentPasswordRef}
                             type="password"
@@ -233,20 +237,20 @@ export default function SecurityPage() {
                                     setPasswordErrors({ ...passwordErrors, currentPassword: '' });
                                 }
                             }}
-                            className={`w-full bg-slate-950 border rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm transition-colors ${
-                                passwordErrors.currentPassword ? 'border-rose-500 focus:border-rose-400' : 'border-white/10'
-                            }`}
+                            className={`${INPUT_STYLE} ${passwordErrors.currentPassword ? 'border-rose-900/80 focus:border-rose-700' : 'border-[#1F1F1F]'}`}
                             placeholder="••••••••"
                             disabled={isUpdating}
                         />
                         {passwordErrors.currentPassword && (
-                            <p className="mt-1 text-xs font-semibold text-rose-400">{passwordErrors.currentPassword}</p>
+                            <p className="mt-1 text-xs font-mono text-rose-400">{passwordErrors.currentPassword}</p>
                         )}
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <label className="block text-xs font-semibold text-slate-400 mb-1">New Password</label>
+                            <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                                New Password
+                            </label>
                             <input
                                 ref={newPasswordRef}
                                 type="password"
@@ -257,18 +261,18 @@ export default function SecurityPage() {
                                         setPasswordErrors({ ...passwordErrors, newPassword: '' });
                                     }
                                 }}
-                                className={`w-full bg-slate-950 border rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm transition-colors ${
-                                    passwordErrors.newPassword ? 'border-rose-500 focus:border-rose-400' : 'border-white/10'
-                                }`}
+                                className={`${INPUT_STYLE} ${passwordErrors.newPassword ? 'border-rose-900/80 focus:border-rose-700' : 'border-[#1F1F1F]'}`}
                                 placeholder="••••••••"
                                 disabled={isUpdating}
                             />
                             {passwordErrors.newPassword && (
-                                <p className="mt-1 text-xs font-semibold text-rose-400">{passwordErrors.newPassword}</p>
+                                <p className="mt-1 text-xs font-mono text-rose-400">{passwordErrors.newPassword}</p>
                             )}
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-slate-400 mb-1">Confirm New Password</label>
+                            <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                                Confirm New Password
+                            </label>
                             <input
                                 ref={confirmPasswordRef}
                                 type="password"
@@ -279,154 +283,165 @@ export default function SecurityPage() {
                                         setPasswordErrors({ ...passwordErrors, confirmPassword: '' });
                                     }
                                 }}
-                                className={`w-full bg-slate-950 border rounded-md py-2 px-3 text-white focus:outline-none focus:border-cyan-500 text-sm transition-colors ${
-                                    passwordErrors.confirmPassword ? 'border-rose-500 focus:border-rose-400' : 'border-white/10'
-                                }`}
+                                className={`${INPUT_STYLE} ${passwordErrors.confirmPassword ? 'border-rose-900/80 focus:border-rose-700' : 'border-[#1F1F1F]'}`}
                                 placeholder="••••••••"
                                 disabled={isUpdating}
                             />
                             {passwordErrors.confirmPassword && (
-                                <p className="mt-1 text-xs font-semibold text-rose-400">{passwordErrors.confirmPassword}</p>
+                                <p className="mt-1 text-xs font-mono text-rose-400">{passwordErrors.confirmPassword}</p>
                             )}
                         </div>
                     </div>
 
                     <div className="flex justify-end pt-2">
-                        <Button type="submit" loading={isUpdating}>
-                            Update Password
-                        </Button>
+                        <button
+                            type="submit"
+                            disabled={isUpdating}
+                            className="flex h-8 items-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-4 text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5] disabled:opacity-50"
+                        >
+                            {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <span>Update Password</span>}
+                        </button>
                     </div>
                 </form>
-            </Panel>
+            </div>
 
-            {}
-            <Panel>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+            {/* ── 2. Active Sessions Section ── */}
+            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-3 mb-4">
                     <div className="flex items-center gap-2">
-                        <Shield className="text-cyan-400" size={18} />
-                        <h3 className="font-bold text-white">Active Sessions</h3>
+                        <Shield size={15} className="text-white" />
+                        <h3 className="text-sm font-semibold text-white">Active Sessions</h3>
                     </div>
                     {sessions.length > 1 && (
                         <div className="flex gap-2">
-                            <Button
-                                variant="secondary"
-                                className="text-xs"
+                            <button
+                                type="button"
                                 onClick={handleRevokeOthers}
-                                loading={isRevokingOthers}
+                                disabled={isRevokingOthers}
+                                className="flex h-7 items-center gap-1.5 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs font-mono text-[#A1A1A1] hover:text-white transition-colors disabled:opacity-50"
                             >
-                                Logout Other Sessions
-                            </Button>
-                            <Button
-                                variant="danger"
-                                className="text-xs bg-rose-500/10 border-rose-500/20 text-rose-300 hover:bg-rose-500/20"
+                                {isRevokingOthers ? <Loader2 size={12} className="animate-spin" /> : <span>Revoke Other Sessions</span>}
+                            </button>
+                            <button
+                                type="button"
                                 onClick={handleRevokeAll}
-                                loading={isRevokingAll}
+                                disabled={isRevokingAll}
+                                className="flex h-7 items-center gap-1.5 rounded border border-rose-900/40 bg-rose-950/20 px-2.5 text-xs font-mono text-rose-300 hover:bg-rose-900/30 transition-colors disabled:opacity-50"
                             >
-                                <LogOut size={12} className="mr-1" /> Logout All Sessions
-                            </Button>
+                                <LogOut size={12} />
+                                <span>Revoke All Sessions</span>
+                            </button>
                         </div>
                     )}
                 </div>
 
-                <p className="text-xs text-slate-400 mb-6">
-                    This is a list of devices that have recently logged into your DeployForge account. Revoking a session will force that device to log in again.
+                <p className="text-xs text-[#A1A1A1] mb-4">
+                    Devices currently signed into your DeployForge account. Revoking a session immediately invalidates its token.
                 </p>
 
                 {isLoadingSessions ? (
-                    <div className="flex h-32 items-center justify-center">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+                    <div className="flex h-24 items-center justify-center font-mono text-xs text-[#666666]">
+                        <Loader2 size={16} className="animate-spin mr-2" /> Loading active sessions...
                     </div>
                 ) : sessions.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-slate-500">
-                        No active sessions.
+                    <div className="py-6 text-center font-mono text-xs text-[#666666]">
+                        No active sessions found.
                     </div>
                 ) : (
-                    <div className="space-y-3 mb-6">
+                    <div className="space-y-2">
                         {sessions.map((session) => (
                             <div
                                 key={session.id}
-                                className={`flex items-center justify-between p-4 rounded-lg border bg-slate-950/50 hover:bg-slate-950/80 transition-colors ${session.isCurrent ? 'border-cyan-500/30' : 'border-white/5'
-                                    }`}
+                                className={`flex flex-wrap items-center justify-between gap-3 rounded border p-3 font-mono text-xs ${
+                                    session.isCurrent ? 'border-[#333333] bg-[#111111]' : 'border-[#1F1F1F] bg-[#000000]'
+                                }`}
                             >
-                                <div className="flex items-start gap-3">
-                                    <span className="mt-1 p-2 rounded-md bg-white/5 border border-white/10">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] bg-[#0A0A0A]">
                                         {getDeviceIcon(session.device)}
-                                    </span>
+                                    </div>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <span className="font-bold text-sm text-white">{session.browser}</span>
-                                            <span className="text-xs text-slate-400">on {session.os || session.device}</span>
+                                            <span className="font-semibold text-white">{session.browser}</span>
+                                            <span className="text-[#666666]">on {session.os || session.device}</span>
                                             {session.isCurrent && (
-                                                <span className="rounded bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-400 uppercase">
-                                                    Current Session
+                                                <span className="rounded border border-[#1F1F1F] bg-[#0A0A0A] px-1.5 py-0.5 text-[10px] text-emerald-400">
+                                                    CURRENT SESSION
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                                            <span>IP: <span className="font-mono text-slate-400">{session.ip}</span></span>
-                                            <span>Last active: {new Date(session.lastActivity).toLocaleString()}</span>
+                                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#666666]">
+                                            <span>IP: <span className="text-[#A1A1A1]">{session.ip}</span></span>
+                                            <span>Active: {new Date(session.lastActivity).toLocaleString()}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {!session.isCurrent && (
-                                    <Button
-                                        variant="danger"
-                                        className="p-2 bg-rose-500/5 hover:bg-rose-500/15 border-rose-500/10 text-rose-400"
+                                    <button
+                                        type="button"
                                         onClick={() => handleRevoke(session.id)}
-                                        loading={isRevoking === session.id}
+                                        disabled={isRevoking === session.id}
+                                        className="flex h-7 items-center gap-1 rounded border border-rose-900/40 bg-rose-950/20 px-2 text-[11px] font-mono text-rose-300 hover:bg-rose-900/40 disabled:opacity-50"
                                     >
-                                        <XCircle size={16} />
-                                    </Button>
+                                        {isRevoking === session.id ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={13} />}
+                                        <span>Revoke</span>
+                                    </button>
                                 )}
                             </div>
                         ))}
                     </div>
                 )}
-            </Panel>
+            </div>
 
-            {}
-            <Panel>
-                <div className="flex items-center justify-between mb-4">
+            {/* ── 3. Recent Security Activity Section ── */}
+            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
+                <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3 mb-4">
                     <div className="flex items-center gap-2">
-                        <Shield className="text-cyan-400" size={18} />
-                        <h3 className="font-bold text-white">Recent Security Activity</h3>
+                        <Shield size={15} className="text-white" />
+                        <h3 className="text-sm font-semibold text-white">Recent Security Activity</h3>
                     </div>
-                    <Button variant="secondary" className="p-2 text-xs" onClick={() => fetchAuditLogs(true)} disabled={isLoadingLogs}>
-                        <RefreshCw size={14} className={isLoadingLogs ? 'animate-spin' : ''} />
-                    </Button>
+                    <button
+                        type="button"
+                        onClick={() => fetchAuditLogs(true)}
+                        disabled={isLoadingLogs}
+                        className="flex h-7 items-center gap-1.5 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs font-mono text-[#A1A1A1] hover:text-white transition-colors disabled:opacity-50"
+                    >
+                        <RefreshCw size={12} className={isLoadingLogs ? 'animate-spin' : ''} />
+                        <span>Refresh</span>
+                    </button>
                 </div>
 
-                <p className="text-xs text-slate-400 mb-4">
-                    Preview of your account&apos;s recent security logs. Visit the Security Activity tab for full logs, filtering, and search.
+                <p className="text-xs text-[#A1A1A1] mb-4">
+                    Preview of recent security audit events recorded for your account.
                 </p>
 
                 {isLoadingLogs ? (
-                    <div className="flex h-32 items-center justify-center">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+                    <div className="flex h-24 items-center justify-center font-mono text-xs text-[#666666]">
+                        <Loader2 size={16} className="animate-spin mr-2" /> Loading audit logs...
                     </div>
                 ) : logs.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-slate-500">
-                        No security logs recorded yet.
+                    <div className="py-6 text-center font-mono text-xs text-[#666666]">
+                        No recent security events recorded.
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                            <thead>
-                                <tr className="border-b border-white/5 text-slate-400">
-                                    <th className="py-2 font-semibold">Event</th>
-                                    <th className="py-2 font-semibold">Description</th>
-                                    <th className="py-2 font-semibold">IP Address</th>
-                                    <th className="py-2 font-semibold">Date</th>
+                    <div className="overflow-x-auto rounded border border-[#1F1F1F] bg-[#000000]">
+                        <table className="w-full text-left font-mono text-xs">
+                            <thead className="border-b border-[#1F1F1F] bg-[#111111] text-[#666666]">
+                                <tr>
+                                    <th className="px-3 py-2 font-semibold">EVENT</th>
+                                    <th className="px-3 py-2 font-semibold">DETAILS</th>
+                                    <th className="px-3 py-2 font-semibold">IP ADDRESS</th>
+                                    <th className="px-3 py-2 font-semibold">TIMESTAMP</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5 text-slate-300">
+                            <tbody className="divide-y divide-[#1F1F1F] text-[#A1A1A1]">
                                 {logs.map((log) => (
-                                    <tr key={log.id} className="hover:bg-white/5 transition-colors">
-                                        <td className="py-3 font-medium text-white">{log.action}</td>
-                                        <td className="py-3 max-w-xs truncate">{log.details}</td>
-                                        <td className="py-3 font-mono">{log.ipAddress || '—'}</td>
-                                        <td className="py-3 text-slate-400">
+                                    <tr key={log.id} className="hover:bg-[#111111]/50 transition-colors">
+                                        <td className="px-3 py-2.5 font-semibold text-white">{log.action}</td>
+                                        <td className="px-3 py-2.5 max-w-xs truncate">{log.details}</td>
+                                        <td className="px-3 py-2.5">{log.ipAddress || '—'}</td>
+                                        <td className="px-3 py-2.5 text-[#666666]">
                                             {new Date(log.createdAt).toLocaleString()}
                                         </td>
                                     </tr>
@@ -435,7 +450,8 @@ export default function SecurityPage() {
                         </table>
                     </div>
                 )}
-            </Panel>
+            </div>
+
         </div>
     );
 }

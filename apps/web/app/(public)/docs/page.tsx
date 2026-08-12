@@ -1,259 +1,471 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import {
     ArrowRight,
     BookOpen,
-    Braces,
     CheckCircle2,
-    FileTerminal,
-    Github,
-    KeyRound,
-    Lock,
-    ScrollText,
-    Server,
-    ShieldCheck,
-    Terminal,
+    Search,
+    ChevronRight
 } from 'lucide-react';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
+import clsx from 'clsx';
 
-const nav = [
-    ['Overview', 'overview'],
-    ['Getting Started', 'getting-started'],
-    ['GitHub Integration', 'github-integration'],
-    ['VPS Management', 'vps-management'],
-    ['Deployment System', 'deployment-system'],
-    ['Terminal System', 'terminal-system'],
-    ['Monitoring & Logs', 'monitoring-logs'],
-    ['Admin Panel', 'admin-panel'],
-    ['Security', 'security'],
-];
+interface DocSection {
+    id: string;
+    title: string;
+    category: string;
+    tag?: string;
+    description: string;
+    items: string[];
+    codeBlock?: {
+        title: string;
+        language: string;
+        code: string;
+    };
+}
 
-const sections = [
+const DOC_SECTIONS: DocSection[] = [
     {
         id: 'overview',
-        title: 'Overview',
-        icon: BookOpen,
-        description: 'DeployForge is a self-hosted deployment platform for GitHub-connected projects running on VPS infrastructure you control.',
+        title: 'Platform Architecture & Overview',
+        category: 'FOUNDATION',
+        description: 'DeployForge is an open-source, self-hosted PaaS orchestrator designed for GitHub-connected projects running on VPS infrastructure you control.',
         items: [
-            'It solves the gap between polished platform deployment workflows and teams that still want ownership of their servers.',
-            'The product brings repositories, VPS inventory, deployment jobs, live terminals, monitoring, logs, and admin controls into one focused interface.',
-            'The public site, dashboard, and backend are designed around production clarity: explicit actions, visible state, and minimal friction.',
+            'Bridges the gap between modern cloud platform developer experience and full server ownership.',
+            'Decouples the control plane (Fastify API, Prisma PostgreSQL, BullMQ Redis queues) from runtime execution on target servers.',
+            'Communicates with target servers strictly over secure agentless SSH2 — zero proprietary daemons or agents required on target VPS nodes.'
         ],
+        codeBlock: {
+            title: 'deployforge.config.json',
+            language: 'json',
+            code: `{
+  "platform": "deployforge",
+  "version": "1.0.0",
+  "controlPlane": {
+    "apiEngine": "fastify-prisma",
+    "queueDriver": "bullmq-redis",
+    "vaultEncryption": "aes-256-gcm"
+  },
+  "runtime": {
+    "protocol": "ssh2",
+    "isolation": "docker-sandbox",
+    "strategy": "blue-green",
+    "proxy": "nginx-certbot"
+  }
+}`
+        }
     },
     {
         id: 'getting-started',
-        title: 'Getting Started',
-        icon: CheckCircle2,
-        description: 'The first setup path connects identity, source code, server access, and a deployable project.',
+        title: 'Getting Started Quickstart',
+        category: 'GETTING STARTED',
+        description: 'Follow this 4-step path to connect your identity, source code, VPS server target, and launch your first release.',
         items: [
-            'Log in to DeployForge and connect your GitHub account from the authenticated console.',
-            'Add a VPS with reachable SSH credentials and run the connection test before assigning deployments.',
-            'Create the first deployment by selecting a repository, branch, project configuration, and destination server.',
+            '1. Account Setup & GitHub OAuth: Sign in to DeployForge console and authorize GitHub OAuth to grant repository read access.',
+            '2. Provision Target VPS: Attach your Ubuntu 22.04 LTS server credentials over SSH and verify host key connectivity.',
+            '3. Configure Project: Select a synchronized GitHub repository, branch, build command, and environment secret values.',
+            '4. Trigger First Deployment: Launch build job to compile Docker container, run health check, and route Nginx traffic.'
         ],
+        codeBlock: {
+            title: 'local-setup.sh',
+            language: 'bash',
+            code: `# 1. Clone repository & install dependencies
+git clone https://github.com/akramhossain-dev/DeployForge.git
+cd DeployForge && pnpm install
+
+# 2. Sync database schema & generate Prisma Client
+pnpm db:push && pnpm db:generate
+
+# 3. Launch development servers (API: 3001, Web: 3000)
+pnpm dev`
+        }
     },
     {
         id: 'github-integration',
-        title: 'GitHub Integration',
-        icon: Github,
-        description: 'GitHub is the source-control entry point for repositories, branches, and automated deployment events.',
+        title: 'GitHub OAuth & Webhook Automation',
+        category: 'SOURCE CONTROL',
+        description: 'GitHub serves as the source control provider for repository synchronization and automated continuous deployment triggers.',
         items: [
-            'The OAuth flow authorizes DeployForge to connect a user session to GitHub and store the access needed for repository operations.',
-            'Repository sync imports available projects and branch metadata so deployment forms can use current source-control data.',
-            'Webhook automation receives repository events and can trigger redeployment flows without manual dashboard clicks.',
+            'OAuth authorization stores scoped access tokens in the AES-256 vault for repository tree listing and branch detection.',
+            'Automatic webhook receivers listen for branch push events and validate HMAC SHA-256 signatures before queueing build jobs.',
+            'Multi-branch deployment mapping supports separate environments (.env.production for main branch, .env.staging for dev branch).'
         ],
+        codeBlock: {
+            title: 'webhook-signature.ts',
+            language: 'typescript',
+            code: `// Validate GitHub Webhook HMAC Signature
+import crypto from 'node:crypto';
+
+export function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+  const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}`
+        }
     },
     {
         id: 'vps-management',
-        title: 'VPS Management',
-        icon: Server,
-        description: 'Servers are first-class deployment targets with SSH setup, connection testing, and health visibility.',
+        title: 'VPS Provisioning & SSH Driver',
+        category: 'INFRASTRUCTURE',
+        description: 'Servers are managed as first-class deployment targets with automated SSH key validation and connection pooling.',
         items: [
-            'Add servers with host, port, username, authentication material, and metadata needed for deployment orchestration.',
-            'Test SSH connections before using a VPS in production so invalid credentials or unreachable hosts are caught early.',
-            'Use server status and health checks to understand which machines are available for terminal access and deployments.',
+            'Connect any standard Ubuntu server (20.04/22.04/24.04 LTS) by supplying IP, port, username, and SSH private key credentials.',
+            'Agentless driver executes remote commands (\`docker build\`, \`docker run\`, \`nginx -s reload\`) without installing background daemons.',
+            'Connection pool maintains persistent SSH sessions with automatic health checks and reconnect backoff logic.'
         ],
+        codeBlock: {
+            title: 'ssh-probe.sh',
+            language: 'bash',
+            code: `# Verification command executed during VPS connection test:
+ssh -i ~/.ssh/deployforge_key -p 22 root@192.168.1.100 \\
+  "docker --version && nginx -v && ufw status"
+
+# Expected Output:
+# Docker version 26.0.0, build 2ae908d
+# nginx version: nginx/1.24.0
+# Status: active`
+        }
     },
     {
-        id: 'deployment-system',
-        title: 'Deployment System',
-        icon: FileTerminal,
-        description: 'The deployment engine uses Docker-oriented automation to build, run, expose, and track project releases.',
+        id: 'deployment-engine',
+        title: 'Docker Build Engine & Blue-Green Releases',
+        category: 'DEPLOYMENT',
+        description: 'The release engine builds isolated Docker images and switches traffic with zero downtime using Blue-Green routing.',
         items: [
-            'Build detection identifies how the project should be packaged and deployed from repository content and configuration.',
-            'Docker-based deployment jobs create repeatable runtime environments and keep release state visible in the dashboard.',
-            'Auto redeploy flows can react to GitHub webhooks and push new versions through the same auditable deployment path.',
+            'Build detection parses project configuration and generates runtime Dockerfiles for Next.js, Node.js, Fastify, Vite, and Python.',
+            'Parallel release container is spawned on an ephemeral host port while the active container continues serving production traffic.',
+            'Automated HTTP health check probes confirm 200 OK responses before Nginx updates upstream pointers and drains old containers.'
         ],
+        codeBlock: {
+            title: 'nginx-upstream-switch.conf',
+            language: 'nginx',
+            code: `# Dynamic Nginx Blue-Green Upstream Target
+upstream deployforge_app_service {
+    # Blue  (Previous container): 127.0.0.1:3001 [DRAINING]
+    # Green (New release container): 127.0.0.1:3002 [ACTIVE]
+    server 127.0.0.1:3002 max_fails=3 fail_timeout=5s;
+}`
+        }
     },
     {
-        id: 'terminal-system',
-        title: 'Terminal System',
-        icon: Terminal,
-        description: 'Browser SSH gives operators direct server access from the DeployForge interface.',
+        id: 'nginx-ssl',
+        title: 'Nginx Reverse Proxy & Certbot TLS',
+        tag: 'NETWORKING',
+        category: 'NETWORKING',
+        description: 'Dynamic Nginx reverse proxy generation with automated Let\'s Encrypt SSL/TLS certificate issuance and background renewal.',
         items: [
-            'Terminal sessions connect through the backend to the selected VPS instead of exposing raw credentials in the browser.',
-            'Session handling keeps the terminal scoped to authenticated users and the server they are allowed to access.',
-            'The terminal UI is meant for inspection, recovery, and operational commands when a deployment needs hands-on attention.',
+            'Generates hardened Nginx server blocks per domain with HTTP/2, TLS 1.3, and security headers enabled.',
+            'Certbot ACME HTTP-01 challenge handler automatically issues valid TLS certificates for custom domains.',
+            'Background cron job checks certificate expiration and triggers zero-downtime renewals every 60 days.'
         ],
+        codeBlock: {
+            title: 'nginx-vhost.conf',
+            language: 'nginx',
+            code: `server {
+    listen 443 ssl http2;
+    server_name app.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/app.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/app.yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://deployforge_app_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}`
+        }
     },
     {
-        id: 'monitoring-logs',
-        title: 'Monitoring & Logs',
-        icon: ScrollText,
-        description: 'Monitoring surfaces resource usage, application logs, deployment logs, and operational alerts.',
+        id: 'secrets-env',
+        title: 'Secrets Vault & Environment Variables',
+        category: 'SECURITY',
+        description: 'Multi-environment secret storage protected with AES-256-GCM encryption at rest and deployment-time injection.',
         items: [
-            'CPU and RAM metrics help teams spot overloaded servers and correlate resource pressure with deployment activity.',
-            'Logs provide a timeline for builds, runtime behavior, errors, and infrastructure events.',
-            'Alerts and status indicators keep attention on degraded services, failed jobs, or unreachable infrastructure.',
+            'Environment values are encrypted using AES-256-GCM before database insertion and decrypted only in worker memory.',
+            'Supports multi-file tabbed management (.env.production, .env.staging, .env.preview) per project.',
+            'Secrets are injected securely into Docker container environment files during build execution without touching disk in plaintext.'
         ],
+        codeBlock: {
+            title: 'encryption-vault.ts',
+            language: 'typescript',
+            code: `// AES-256-GCM Encrypted Secret Vault
+import crypto from 'node:crypto';
+
+export function encryptSecret(text: string, masterKey: string): { ciphertext: string; iv: string; tag: string } {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(masterKey, 'hex'), iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return { ciphertext: encrypted, iv: iv.toString('hex'), tag: cipher.getAuthTag().toString('hex') };
+}`
+        }
     },
     {
-        id: 'admin-panel',
-        title: 'Admin Panel',
-        icon: ShieldCheck,
-        description: 'The admin system centralizes platform oversight, role boundaries, and sensitive operational controls.',
+        id: 'terminal-logs',
+        title: 'Web Terminal, Logs & VPS File Explorer',
+        category: 'OPERATIONS',
+        description: 'In-browser operational tools for SSH terminal access, container log streaming, and remote file management.',
         items: [
-            'RBAC controls separate administrative workflows from normal authenticated deployment operations.',
-            'Admins can review users, servers, deployments, GitHub state, monitoring data, and global settings from protected routes.',
-            'The admin control flow is designed for clear authority boundaries before changing security-sensitive resources.',
+            'Web SSH Terminal: Built with xterm.js and WebSockets, enabling full interactive shell access to registered servers.',
+            'Live Log Streamer: Real-time container log output streaming with regex search and level filtering.',
+            'VPS File Explorer: Web file manager supporting directory tree browsing, inline code editing, path search, and SFTP transfers.'
         ],
+        codeBlock: {
+            title: 'terminal-stream.sh',
+            language: 'bash',
+            code: `# WebSocket Terminal Session Stream
+$ ssh root@192.168.1.100
+root@vps-prod-01:~# docker logs -f --tail 50 deployforge-api-v1.4.2
+[22:45:12] INFO: Fastify server listening on http://0.0.0.0:3001
+[22:45:15] INFO: PostgreSQL connection pool active (20 connections)
+[22:45:18] INFO: BullMQ Redis worker listening for deployment jobs`
+        }
     },
     {
-        id: 'security',
-        title: 'Security',
-        icon: Lock,
-        description: 'DeployForge treats authentication, encryption, and secrets handling as core platform responsibilities.',
+        id: 'admin-security',
+        title: 'Admin Control Panel & Security Hardening',
+        category: 'ADMINISTRATION',
+        description: 'Enterprise access controls, admin management surfaces, rate limiting, and brute-force protection.',
         items: [
-            'JWT auth protects API and app routes while preserving a clear session model for the dashboard and admin areas.',
-            'Encryption helpers protect sensitive values such as credentials, tokens, and deployment secrets before storage or use.',
-            'Secrets handling keeps environment values scoped to projects and deployment execution instead of leaking into public UI surfaces.',
+            'Role-Based Access Control (RBAC): Differentiates regular developers from super admins with protected routes.',
+            'Authentication Security: Argon2id password hashing, double-submit CSRF tokens, and JWT session handling.',
+            'Brute-Force Lockout & Rate Limiting: Fastify rate limit plugin blocks ip addresses after repeated failed login attempts.'
         ],
-    },
+        codeBlock: {
+            title: 'security-headers.ts',
+            language: 'typescript',
+            code: `// Fastify Security & Helmet Configuration
+await fastify.register(fastifyHelmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      frameAncestors: ["'none'"]
+    }
+  }
+});`
+        }
+    }
 ];
 
 export default function DocsPage() {
     const auth = useAuthSession();
-    const ctaHref = auth.isAuthenticated ? '/dashboard' : '/login';
-    const ctaLabel = auth.isAuthenticated ? 'Go to Dashboard' : 'Get Started';
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeCategory, setActiveCategory] = useState<string>('all');
+    const [activeSectionId, setActiveSectionId] = useState<string>('overview');
+
+    const primaryHref = auth.isAuthenticated ? '/dashboard' : '/register';
+    const primaryLabel = auth.isAuthenticated ? 'Open Console' : 'Get Started';
+
+    // Filter documentation sections based on search query and category tab
+    const filteredSections = DOC_SECTIONS.filter(sec => {
+        const matchesQuery = searchQuery === '' ||
+            sec.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            sec.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            sec.items.some(i => i.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        const matchesCategory = activeCategory === 'all' || sec.category.toLowerCase() === activeCategory.toLowerCase();
+
+        return matchesQuery && matchesCategory;
+    });
+
+    const categories = ['all', ...Array.from(new Set(DOC_SECTIONS.map(s => s.category)))];
 
     return (
-        <main className="overflow-hidden bg-slate-950 text-white">
-            <section className="relative isolate px-4 pb-16 pt-20 sm:px-6 lg:px-8">
-                <Aurora />
+        <main className="min-h-screen bg-black text-white">
+
+            {/* ── 1. Header Section ────────────────────────────────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 pb-12 pt-14 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
-                    <div className="max-w-4xl">
-                        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase text-cyan-100 shadow-lg shadow-cyan-500/10">
-                            <BookOpen size={14} /> Documentation
+                    <div className="max-w-3xl">
+                        {/* Eyebrow */}
+                        <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
+                            <BookOpen size={13} className="text-white" />
+                            <span>DEPLOYFORGE — DOCUMENTATION</span>
                         </div>
-                        <h1 className="mt-8 text-5xl font-black leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
-                            DeployForge docs
+
+                        {/* Title */}
+                        <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+                            DeployForge Documentation
                         </h1>
-                        <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                            A practical guide to the platform architecture, first deployment path, GitHub automation, VPS operations, terminals, monitoring, admin controls, and security model.
+
+                        {/* Description */}
+                        <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
+                            Technical reference guide for connecting source repositories, provisioning VPS servers, configuring zero-downtime Blue-Green releases, and managing encrypted secrets.
                         </p>
-                        <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                            <Link
-                                href={ctaHref}
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-lg transition-all hover:scale-[1.02] hover:shadow-white/10"
-                            >
-                                {ctaLabel} <ArrowRight size={17} />
-                            </Link>
-                            <Link
-                                href="/features"
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-6 text-sm font-bold text-white backdrop-blur-md transition-colors hover:bg-white/15"
-                            >
-                                View Features
-                            </Link>
+
+                        {/* Search Input Box */}
+                        <div className="relative mt-6 max-w-md">
+                            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search documentation (e.g. SSH, Nginx, Blue-Green, Vault)..."
+                                className="w-full rounded-md border border-[#1F1F1F] bg-[#0A0A0A] py-2 pl-9 pr-4 text-xs font-mono text-white outline-none placeholder:text-[#666666] focus:border-[#333333] focus:ring-1 focus:ring-[#333333]"
+                            />
                         </div>
                     </div>
                 </div>
             </section>
 
-            <section className="border-y border-white/10 bg-white/[0.03] px-4 py-12 sm:px-6 lg:px-8">
-                <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[18rem_1fr]">
-                    <aside className="lg:sticky lg:top-24 lg:self-start">
-                        <div className="rounded-2xl border border-white/[0.08] bg-slate-900/60 p-4 shadow-lg backdrop-blur-sm">
-                            <div className="flex items-center gap-2 px-2 text-sm font-black text-white">
-                                <Braces className="text-cyan-400" size={18} />
-                                Contents
+            {/* ── 2. Documentation Main Grid (Sidebar + Content) ────────── */}
+            <section className="border-b border-[#1F1F1F] px-4 py-12 sm:px-6 lg:px-8">
+                <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-12">
+
+                    {/* Left Sticky Sidebar Navigation (3 cols) */}
+                    <aside className="lg:col-span-3 lg:sticky lg:top-20 lg:self-start">
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 font-mono text-xs space-y-4">
+                            <div>
+                                <p className="border-b border-[#1F1F1F] pb-2 font-semibold uppercase tracking-wider text-[#666666]">
+                                    CATEGORIES
+                                </p>
+                                <div className="mt-2.5 flex flex-wrap gap-1">
+                                    {categories.map(cat => (
+                                        <button
+                                            key={cat}
+                                            onClick={() => setActiveCategory(cat)}
+                                            className={clsx(
+                                                'rounded px-2 py-1 text-[10px] uppercase transition-colors',
+                                                activeCategory === cat
+                                                    ? 'bg-[#111111] text-white border border-[#1F1F1F]'
+                                                    : 'text-[#A1A1A1] hover:text-white'
+                                            )}
+                                        >
+                                            {cat}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <nav className="mt-4 flex flex-col gap-1">
-                                {nav.map(([label, id]) => (
-                                    <a
-                                        key={id}
-                                        href={`#${id}`}
-                                        className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
-                                    >
-                                        {label}
-                                    </a>
-                                ))}
-                            </nav>
+
+                            <div>
+                                <p className="border-b border-[#1F1F1F] pb-2 font-semibold uppercase tracking-wider text-[#666666]">
+                                    NAVIGATION
+                                </p>
+                                <nav className="mt-2.5 space-y-1">
+                                    {DOC_SECTIONS.map((sec) => {
+                                        const isActive = activeSectionId === sec.id;
+                                        return (
+                                            <a
+                                                key={sec.id}
+                                                href={`#${sec.id}`}
+                                                onClick={() => setActiveSectionId(sec.id)}
+                                                className={clsx(
+                                                    'flex items-center justify-between rounded px-2.5 py-1.5 text-xs transition-colors',
+                                                    isActive
+                                                        ? 'bg-[#111111] font-semibold text-white border-l-2 border-white'
+                                                        : 'text-[#A1A1A1] hover:bg-[#111111]/60 hover:text-white'
+                                                )}
+                                            >
+                                                <span className="truncate">{sec.title}</span>
+                                                <ChevronRight size={12} className={clsx('shrink-0', isActive ? 'text-white' : 'text-[#666666]')} />
+                                            </a>
+                                        );
+                                    })}
+                                </nav>
+                            </div>
                         </div>
                     </aside>
 
-                    <div className="space-y-5">
-                        {sections.map((section) => {
-                            const Icon = section.icon;
-                            return (
-                                <article key={section.id} id={section.id} className="relative overflow-hidden scroll-mt-24 rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-900/80 to-slate-950/80 p-6 sm:p-7 shadow-lg shadow-black/20">
-                                    <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/40 to-transparent" />
-                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200 shadow-sm">
-                                            <Icon size={22} />
-                                        </div>
-                                        <div>
-                                            <h2 className="text-2xl font-black tracking-tight text-white">{section.title}</h2>
-                                            <p className="mt-3 text-base leading-7 text-slate-400">{section.description}</p>
-                                        </div>
+                    {/* Right Documentation Content Column (9 cols) */}
+                    <div className="space-y-8 lg:col-span-9">
+                        {filteredSections.length === 0 ? (
+                            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 text-center font-mono text-xs text-[#A1A1A1]">
+                                <p>No documentation topics matched &quot;{searchQuery}&quot;.</p>
+                                <button
+                                    onClick={() => { setSearchQuery(''); setActiveCategory('all'); }}
+                                    className="mt-3 text-white underline hover:text-[#A1A1A1]"
+                                >
+                                    Clear search filters
+                                </button>
+                            </div>
+                        ) : (
+                            filteredSections.map((section) => (
+                                <article
+                                    key={section.id}
+                                    id={section.id}
+                                    className="scroll-mt-20 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 lg:p-8"
+                                >
+                                    {/* Section Header */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1F1F1F] pb-4 font-mono text-xs">
+                                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#666666]">
+                                            {section.category}
+                                        </span>
+                                        <a href={`#${section.id}`} className="text-[11px] text-[#666666] hover:text-white">
+                                            #{section.id}
+                                        </a>
                                     </div>
-                                    <div className="mt-6 grid gap-3">
-                                        {section.items.map((item) => (
-                                            <div key={item} className="rounded-xl border border-white/[0.06] bg-slate-950/40 p-4 transition-colors hover:border-white/[0.12]">
-                                                <p className="text-sm leading-6 text-slate-300">{item}</p>
+
+                                    <h2 className="mt-4 text-xl font-bold tracking-tight text-white sm:text-2xl">
+                                        {section.title}
+                                    </h2>
+
+                                    <p className="mt-2 text-sm leading-relaxed text-[#A1A1A1]">
+                                        {section.description}
+                                    </p>
+
+                                    {/* Bullet Items */}
+                                    <div className="mt-5 space-y-2 font-mono text-xs text-[#A1A1A1]">
+                                        {section.items.map((item, idx) => (
+                                            <div key={idx} className="flex items-start gap-2.5 rounded border border-[#1F1F1F] bg-[#000000] p-3">
+                                                <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-400" />
+                                                <span className="leading-relaxed">{item}</span>
                                             </div>
                                         ))}
                                     </div>
+
+                                    {/* Code Example Block */}
+                                    {section.codeBlock && (
+                                        <div className="mt-6 overflow-hidden rounded-md border border-[#1F1F1F] bg-[#000000]">
+                                            <div className="flex items-center justify-between border-b border-[#1F1F1F] bg-[#111111] px-4 py-2 font-mono text-[11px] text-[#666666]">
+                                                <span className="text-white">{section.codeBlock.title}</span>
+                                                <span className="uppercase">{section.codeBlock.language}</span>
+                                            </div>
+                                            <pre className="overflow-x-auto p-4 font-mono text-[11px] leading-relaxed text-[#A1A1A1]">
+                                                {section.codeBlock.code}
+                                            </pre>
+                                        </div>
+                                    )}
                                 </article>
-                            );
-                        })}
+                            ))
+                        )}
                     </div>
+
                 </div>
             </section>
 
-            <section className="px-4 py-20 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-7xl">
-                    <div className="relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/[0.08] via-cyan-400/[0.03] to-transparent p-8 shadow-2xl shadow-cyan-950/20 sm:p-10 lg:flex lg:items-center lg:justify-between">
-                        <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-cyan-400/60 via-cyan-400/20 to-transparent" />
-                        <div>
-                            <div className="flex items-center gap-2 text-cyan-400">
-                                <KeyRound size={16} />
-                                <p className="text-[10px] font-black uppercase tracking-widest">From docs to deployment</p>
-                            </div>
-                            <h2 className="mt-4 text-3xl font-black tracking-tight text-white">Use the guide, then open the console.</h2>
-                            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-                                Start from login when you need a session, or return directly to the dashboard when DeployForge already knows you.
-                            </p>
+            {/* ── 3. Final Product CTA ──────────────────────────────────── */}
+            <section className="px-4 py-16 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 sm:p-10">
+                    <div className="max-w-xl">
+                        <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                            Ready to launch on your infrastructure?
+                        </h2>
+                        <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">
+                            Open the console, register your Virtual Private Server, and deploy your first application with zero downtime.
+                        </p>
+                        <div className="mt-6 flex flex-wrap gap-3">
+                            <Link
+                                href={primaryHref}
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-white px-4 text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5]"
+                            >
+                                <span>{primaryLabel}</span>
+                                <ArrowRight size={13} />
+                            </Link>
+                            <Link
+                                href="/features"
+                                className="flex h-9 items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] px-4 text-xs font-medium text-white transition-colors hover:bg-[#1F1F1F]"
+                            >
+                                <span>Platform Features</span>
+                            </Link>
                         </div>
-                        <Link
-                            href={ctaHref}
-                            className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-black text-slate-950 shadow-lg transition-all hover:scale-[1.02] hover:shadow-white/10 lg:mt-0 lg:shrink-0"
-                        >
-                            {ctaLabel} <ArrowRight size={17} />
-                        </Link>
                     </div>
                 </div>
             </section>
-        </main>
-    );
-}
 
-function Aurora() {
-    return (
-        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-            <div className="absolute left-1/2 top-0 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-cyan-400/14 blur-3xl" />
-            <div className="absolute right-[-8rem] top-36 h-[26rem] w-[26rem] rounded-full bg-emerald-400/10 blur-3xl" />
-            <div className="absolute bottom-8 left-[-8rem] h-[24rem] w-[24rem] rounded-full bg-rose-400/10 blur-3xl" />
-            <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-        </div>
+        </main>
     );
 }

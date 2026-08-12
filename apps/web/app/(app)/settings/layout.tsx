@@ -17,31 +17,31 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
         {
             name: 'General',
             href: '/settings',
-            icon: <User size={16} />,
+            icon: <User size={14} />,
             active: pathname === '/settings',
         },
         {
             name: 'Security',
             href: '/settings/security',
-            icon: <Shield size={16} />,
+            icon: <Shield size={14} />,
             active: pathname === '/settings/security',
         },
         {
             name: 'Security Activity',
             href: '/settings/security-activity',
-            icon: <Clock size={16} />,
+            icon: <Clock size={14} />,
             active: pathname === '/settings/security-activity',
         },
         {
             name: 'Notifications',
             href: '/settings/notifications',
-            icon: <Bell size={16} />,
+            icon: <Bell size={14} />,
             active: pathname === '/settings/notifications',
         },
         {
             name: 'Account',
             href: '/settings/account',
-            icon: <AlertTriangle size={16} />,
+            icon: <AlertTriangle size={14} />,
             active: pathname === '/settings/account',
         },
     ];
@@ -50,33 +50,33 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
         <div className="space-y-6">
             <PageHeader 
                 title="Settings" 
-                description="Manage your DeployForge profile, security credentials, active sessions, and preferences." 
+                description="Manage your profile, security credentials, active sessions, and account options." 
             />
 
             <div className="flex flex-col gap-6 lg:flex-row">
-                {}
-                <aside className="w-full shrink-0 lg:w-64">
-                    <nav className="flex flex-row flex-wrap gap-1 rounded-lg border border-white/5 bg-slate-950/20 p-1 lg:flex-col lg:p-2">
+                {/* Settings Sidebar */}
+                <aside className="w-full shrink-0 lg:w-56">
+                    <nav className="flex flex-row flex-wrap gap-1 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-1 font-mono text-xs lg:flex-col lg:p-1.5">
                         {navItems.map((item) => (
                             <Link
                                 key={item.name}
                                 href={item.href}
-                                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                                className={`flex items-center gap-2.5 rounded px-3 py-2 text-xs transition-colors ${
                                     item.active
-                                        ? 'bg-cyan-500/10 text-cyan-400 border-l-2 border-cyan-500 lg:rounded-l-none'
-                                        : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                                        ? 'bg-[#111111] font-semibold text-white border-l-2 border-white'
+                                        : 'text-[#A1A1A1] hover:bg-[#111111]/50 hover:text-white'
                                 }`}
                             >
-                                <span className={item.active ? 'text-cyan-400' : 'text-slate-500'}>
+                                <span className={item.active ? 'text-white' : 'text-[#666666]'}>
                                     {item.icon}
                                 </span>
-                                {item.name}
+                                <span>{item.name}</span>
                             </Link>
                         ))}
                     </nav>
                 </aside>
 
-                {}
+                {/* Main Settings Content */}
                 <main className="flex-1 space-y-6">
                     {children}
                 </main>

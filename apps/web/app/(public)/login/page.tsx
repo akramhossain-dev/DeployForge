@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Chrome, Github, Loader2, LockKeyhole, Rocket } from 'lucide-react';
+import { ArrowRight, Chrome, Github, Loader2, Rocket } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useAuthStore } from '@/lib/store/useAuthStore';
@@ -11,9 +11,9 @@ import { useAuthSession } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import { PasswordInput } from '@/components/ui';
 
-const FIELD = 'h-12 w-full rounded-xl border bg-slate-950/80 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-600';
-const FIELD_OK  = 'border-white/[0.1] focus:border-cyan-400/60';
-const FIELD_ERR = 'border-rose-500/60 focus:border-rose-400';
+const INPUT_STYLE = 'w-full rounded-md border bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666]';
+const INPUT_OK    = 'border-[#1F1F1F] focus:border-[#333333]';
+const INPUT_ERR   = 'border-rose-900/80 focus:border-rose-700';
 
 export default function LoginPage() {
     const [email,         setEmail]         = useState('');
@@ -61,127 +61,127 @@ export default function LoginPage() {
     };
 
     return (
-        <main className="relative isolate overflow-hidden bg-slate-950 px-4 py-16 text-white sm:px-6 lg:px-8">
-            <AuthAurora />
+        <main className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center bg-black px-4 py-12 text-white">
+            <div className="w-full max-w-sm sm:max-w-md space-y-6">
 
-            <section className="mx-auto grid min-h-[calc(100vh-8rem)] max-w-6xl items-center gap-12 lg:grid-cols-[1fr_480px]">
-                {/* Left copy */}
-                <div className="hidden lg:block">
-                    <div className="flex items-center gap-2.5">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-300/25 bg-gradient-to-br from-cyan-300/20 to-cyan-300/5 text-cyan-200">
-                            <Rocket size={17} />
-                        </span>
-                        <span className="text-sm font-black tracking-tight text-white">DeployForge</span>
-                    </div>
-                    <h1 className="mt-8 max-w-sm text-4xl font-black leading-tight tracking-tight text-white lg:text-5xl">
-                        Welcome back.
+                {/* Brand Header */}
+                <div className="text-center space-y-2">
+                    <Link href="/" className="inline-flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-white">
+                            <Rocket size={14} />
+                        </div>
+                        <span className="text-sm font-semibold tracking-tight text-white">DeployForge</span>
+                    </Link>
+                    <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                        Sign in to DeployForge
                     </h1>
-                    <p className="mt-5 max-w-sm text-base leading-7 text-slate-400">
-                        Sign in to open your dashboard, inspect deployments, connect GitHub, and manage your VPS fleet.
+                    <p className="text-xs text-[#A1A1A1]">
+                        Enter your credentials to access your deployment console.
                     </p>
-                    <div className="mt-8 flex flex-col gap-3">
-                        {[
-                            'GitHub-connected deployment workflows',
-                            'Live terminal access to your servers',
-                            'Real-time build logs and status tracking',
-                        ].map(item => (
-                            <div key={item} className="flex items-center gap-2.5 text-sm text-slate-500">
-                                <LockKeyhole size={12} className="text-cyan-400 shrink-0" />
-                                {item}
+                </div>
+
+                {/* Auth Card */}
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 shadow-sm">
+                    {/* OAuth providers */}
+                    <div className="space-y-2">
+                        <button
+                            type="button"
+                            onClick={() => { setGoogleLoading(true); window.location.href = `${api.baseUrl}/auth/google`; }}
+                            disabled={busy}
+                            className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] text-xs font-medium text-white transition-colors hover:bg-[#1A1A1A] disabled:opacity-50"
+                        >
+                            {googleLoading ? <Loader2 size={14} className="animate-spin" /> : <Chrome size={14} />}
+                            <span>Continue with Google</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setGithubLoading(true); window.location.href = `${api.baseUrl}/auth/github`; }}
+                            disabled={busy}
+                            className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] text-xs font-medium text-white transition-colors hover:bg-[#1A1A1A] disabled:opacity-50"
+                        >
+                            {githubLoading ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
+                            <span>Continue with GitHub</span>
+                        </button>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="my-5 flex items-center gap-3">
+                        <div className="h-px flex-1 bg-[#1F1F1F]" />
+                        <span className="text-[10px] font-mono text-[#666666] uppercase">OR</span>
+                        <div className="h-px flex-1 bg-[#1F1F1F]" />
+                    </div>
+
+                    {/* Credentials Form */}
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
+                                Email Address
+                            </label>
+                            <input
+                                ref={emailRef}
+                                type="email"
+                                autoComplete="email"
+                                value={email}
+                                onChange={e => { setEmail(e.target.value); if (emailError) setEmailError(null); }}
+                                placeholder="name@company.com"
+                                disabled={busy}
+                                className={clsx(INPUT_STYLE, emailError ? INPUT_ERR : INPUT_OK)}
+                            />
+                            {emailError && <p className="mt-1 text-xs font-mono text-rose-400">{emailError}</p>}
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666]">
+                                    Password
+                                </label>
+                                <Link href="/forgot-password" className="text-xs text-[#A1A1A1] transition-colors hover:text-white">
+                                    Forgot password?
+                                </Link>
                             </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Form card */}
-                <div className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.06] p-1.5 shadow-2xl shadow-slate-950/70 backdrop-blur-xl">
-                    <div className="rounded-xl border border-white/[0.07] bg-slate-950/90 p-6 sm:p-8">
-                        <div className="mb-7">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300/70">Secure Access</p>
-                            <h2 className="mt-1.5 text-2xl font-black tracking-tight text-white">Sign In</h2>
-                            <p className="mt-1 text-sm text-slate-500">Use your DeployForge account to continue.</p>
-                        </div>
-
-                        {/* OAuth buttons */}
-                        <div className="space-y-2.5">
-                            <button type="button" onClick={() => { setGoogleLoading(true); window.location.href = `${api.baseUrl}/auth/google`; }}
+                            <PasswordInput
+                                ref={passwordRef}
+                                autoComplete="current-password"
+                                value={password}
+                                onChange={e => { setPassword(e.target.value); if (passwordError) setPasswordError(null); }}
+                                className={clsx(INPUT_STYLE, passwordError ? INPUT_ERR : INPUT_OK)}
+                                placeholder="••••••••"
                                 disabled={busy}
-                                className="inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-white/[0.1] bg-white px-5 text-sm font-black text-slate-950 shadow-lg shadow-white/5 transition-all hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50">
-                                {googleLoading ? <Loader2 size={16} className="animate-spin" /> : <Chrome size={16} />}
-                                Continue with Google
-                            </button>
-                            <button type="button" onClick={() => { setGithubLoading(true); window.location.href = `${api.baseUrl}/auth/github`; }}
-                                disabled={busy}
-                                className="inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-white/[0.1] bg-white/[0.07] px-5 text-sm font-black text-white transition-colors hover:bg-white/[0.11] disabled:cursor-not-allowed disabled:opacity-50">
-                                {githubLoading ? <Loader2 size={16} className="animate-spin" /> : <Github size={16} />}
-                                Continue with GitHub
-                            </button>
+                            />
+                            {passwordError && <p className="mt-1 text-xs font-mono text-rose-400">{passwordError}</p>}
                         </div>
 
-                        {/* Divider */}
-                        <div className="my-6 flex items-center gap-3">
-                            <div className="h-px flex-1 bg-white/[0.07]" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">or</span>
-                            <div className="h-px flex-1 bg-white/[0.07]" />
-                        </div>
+                        {error && (
+                            <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-2.5 text-xs font-mono text-rose-300">
+                                {error}
+                            </div>
+                        )}
 
-                        {/* Credentials form */}
-                        <form onSubmit={handleLogin} className="space-y-4">
-                            <label className="block">
-                                <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Email address</span>
-                                <input ref={emailRef} type="email" autoComplete="email" value={email}
-                                    onChange={e => { setEmail(e.target.value); if (emailError) setEmailError(null); }}
-                                    placeholder="name@company.com" disabled={busy}
-                                    className={clsx('mt-2', FIELD, emailError ? FIELD_ERR : FIELD_OK)}
-                                />
-                                {emailError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{emailError}</p>}
-                            </label>
-
-                            <label className="block">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Password</span>
-                                    <Link href="/forgot-password" className="text-[11px] font-bold text-cyan-400 transition-colors hover:text-cyan-300">
-                                        Forgot Password?
-                                    </Link>
-                                </div>
-                                <PasswordInput ref={passwordRef} autoComplete="current-password" value={password}
-                                    onChange={e => { setPassword(e.target.value); if (passwordError) setPasswordError(null); }}
-                                    wrapperClassName="mt-2"
-                                    className={clsx(FIELD, passwordError ? FIELD_ERR : FIELD_OK)}
-                                    placeholder="Password" disabled={busy}
-                                />
-                                {passwordError && <p className="mt-1.5 text-xs font-semibold text-rose-400">{passwordError}</p>}
-                            </label>
-
-                            {error && (
-                                <div className="rounded-xl border border-rose-400/25 bg-rose-500/8 p-3 text-sm text-rose-200">{error}</div>
+                        <button
+                            type="submit"
+                            disabled={busy}
+                            className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-white text-xs font-semibold text-black transition-colors hover:bg-[#E5E5E5] disabled:opacity-50"
+                        >
+                            {loading ? (
+                                <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                                <>
+                                    <span>Sign in</span>
+                                    <ArrowRight size={13} />
+                                </>
                             )}
-
-                            <button type="submit" disabled={busy}
-                                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-slate-950 shadow-lg shadow-white/10 transition-all hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60">
-                                {loading ? <Loader2 size={16} className="animate-spin" /> : <>Sign In <ArrowRight size={16} /></>}
-                            </button>
-                        </form>
-
-                        <p className="mt-6 text-center text-sm text-slate-500">
-                            Don&apos;t have an account?{' '}
-                            <Link href="/register" className="font-black text-cyan-300 transition-colors hover:text-cyan-200">
-                                Create one
-                            </Link>
-                        </p>
-                    </div>
+                        </button>
+                    </form>
                 </div>
-            </section>
-        </main>
-    );
-}
 
-function AuthAurora() {
-    return (
-        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-            <div className="absolute left-[-8rem] top-8 h-[30rem] w-[30rem] rounded-full bg-cyan-400/10 blur-3xl" />
-            <div className="absolute bottom-0 right-[-8rem] h-[26rem] w-[26rem] rounded-full bg-emerald-400/8 blur-3xl" />
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/20 to-transparent" />
-        </div>
+                {/* Footer Link */}
+                <p className="text-center text-xs text-[#A1A1A1]">
+                    Don&apos;t have an account?{' '}
+                    <Link href="/register" className="font-semibold text-white hover:underline">
+                        Sign up
+                    </Link>
+                </p>
+            </div>
+        </main>
     );
 }
