@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { ParsedError } from '@/lib/utils/errorParser';
 
-export type ToastSeverity = 'info' | 'success' | 'warning' | 'error';
+export type ToastSeverity = 'info' | 'success' | 'warning' | 'error' | 'loading';
 
 export interface ToastAction {
     label: string;

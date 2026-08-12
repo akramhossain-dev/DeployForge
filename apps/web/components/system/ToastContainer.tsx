@@ -1,7 +1,7 @@
 'use client';
 
 import { useToastStore, Toast } from '@/lib/store/useToastStore';
-import { AlertCircle, CheckCircle2, Info, AlertTriangle, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Info, AlertTriangle, X, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 
 export function ToastContainer() {
@@ -9,7 +9,19 @@ export function ToastContainer() {
     if (toasts.length === 0) return null;
 
     return (
-        <div className="fixed bottom-5 right-5 z-[9999] flex w-full max-w-sm flex-col gap-2.5 pointer-events-none">
+        <div className="fixed bottom-4 right-4 z-[9999] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 pointer-events-none">
+            <style>{`
+                @keyframes toastSlideIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(4px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+            `}</style>
             {toasts.map(toast => (
                 <ToastItem key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
             ))}
@@ -18,24 +30,11 @@ export function ToastContainer() {
 }
 
 const ICONS: Record<string, React.ReactNode> = {
-    info:    <Info     size={16} className="text-cyan-300"    />,
-    success: <CheckCircle2 size={16} className="text-emerald-300" />,
-    warning: <AlertTriangle size={16} className="text-amber-300" />,
-    error:   <AlertCircle size={16} className="text-rose-300" />,
-};
-
-const STRIPES: Record<string, string> = {
-    info:    'from-cyan-400/50',
-    success: 'from-emerald-400/50',
-    warning: 'from-amber-400/50',
-    error:   'from-rose-400/50',
-};
-
-const BORDERS: Record<string, string> = {
-    info:    'border-cyan-400/20',
-    success: 'border-emerald-400/20',
-    warning: 'border-amber-400/15',
-    error:   'border-rose-400/25',
+    info:    <Info size={14} className="text-[#A1A1A1]" />,
+    success: <CheckCircle2 size={14} className="text-emerald-400" />,
+    warning: <AlertTriangle size={14} className="text-amber-400" />,
+    error:   <AlertCircle size={14} className="text-rose-400" />,
+    loading: <Loader2 size={14} className="animate-spin text-[#A1A1A1]" />,
 };
 
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
@@ -43,43 +42,40 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 
     return (
         <div
-            className={clsx(
-                'pointer-events-auto relative w-full overflow-hidden rounded-2xl border bg-slate-900/95 shadow-2xl shadow-slate-950/60 backdrop-blur-xl',
-                BORDERS[severity]
-            )}
-            style={{ animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}
+            className="pointer-events-auto relative w-full rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3 shadow-md shadow-black/80 transition-all duration-150 ease-out"
+            style={{ animation: 'toastSlideIn 0.15s ease-out forwards' }}
         >
-            {/* Accent top stripe */}
-            <div className={clsx('absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r to-transparent', STRIPES[severity])} />
-
-            <div className="p-4">
-                <div className="flex items-start gap-3">
-                    <div className="mt-0.5 shrink-0">{ICONS[severity]}</div>
-                    <div className="min-w-0 flex-1">
-                        <p className="text-sm font-black leading-tight text-white">{title}</p>
-                        {description && <p className="mt-1 text-xs leading-5 text-slate-400">{description}</p>}
-                    </div>
+            <div className="flex items-start gap-2.5">
+                <div className="mt-0.5 shrink-0">{ICONS[severity] || ICONS.info}</div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold leading-tight text-white">{title}</p>
+                    {description && (
+                        <p className="mt-1 text-xs leading-normal text-[#A1A1A1]">{description}</p>
+                    )}
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#666666] transition-colors hover:bg-[#111111] hover:text-white"
+                    aria-label="Dismiss"
+                >
+                    <X size={12} />
+                </button>
+            </div>
+            {action && (
+                <div className="mt-2.5 flex justify-end border-t border-[#1F1F1F] pt-2">
                     <button
                         type="button"
-                        onClick={onClose}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-white"
-                        aria-label="Dismiss"
+                        onClick={() => {
+                            action.onClick();
+                            onClose();
+                        }}
+                        className="rounded border border-[#1F1F1F] bg-[#111111] px-2.5 py-1 text-[11px] font-mono font-medium text-white transition-colors hover:bg-[#1F1F1F]"
                     >
-                        <X size={13} />
+                        {action.label}
                     </button>
                 </div>
-                {action && (
-                    <div className="mt-3 flex justify-end border-t border-white/[0.06] pt-3">
-                        <button
-                            type="button"
-                            onClick={() => { action.onClick(); onClose(); }}
-                            className="rounded-lg border border-white/[0.08] bg-white/[0.06] px-3 py-1.5 text-xs font-black text-slate-200 transition-colors hover:bg-white/[0.10] hover:text-white"
-                        >
-                            {action.label}
-                        </button>
-                    </div>
-                )}
-            </div>
+            )}
         </div>
     );
 }
