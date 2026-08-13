@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import type { IDisposable } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
 import { Server, Play, Square, Trash2, RefreshCw, ChevronDown, Monitor, Maximize2, Minimize2, Terminal as TerminalIcon } from 'lucide-react';
 import api from '@/lib/api/client';
 import type { Vps } from '@/lib/api/types';
@@ -373,6 +374,7 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
 
                     <button
                         onClick={clearTerminal}
+                        aria-label="Clear terminal output"
                         className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-[#A1A1A1] hover:text-white transition-colors"
                         title="Clear screen"
                     >
@@ -381,6 +383,7 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
 
                     <button
                         onClick={() => setIsFullscreen(!isFullscreen)}
+                        aria-label={isFullscreen ? 'Exit fullscreen mode' : 'Enter fullscreen mode'}
                         className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-[#A1A1A1] hover:text-white transition-colors"
                         title="Toggle Fullscreen"
                     >

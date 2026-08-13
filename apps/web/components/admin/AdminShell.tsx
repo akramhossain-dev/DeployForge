@@ -12,6 +12,7 @@ import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
 import { useAdminMe } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import clsx from 'clsx';
+import { DeployForgeLogo } from '@/components/ui/BrandLogo';
 
 const adminRoles = new Set(['SUPER_ADMIN', 'ADMIN', 'MODERATOR']);
 
@@ -157,14 +158,8 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
         <div className="flex h-full flex-col font-mono text-xs">
             {/* Brand Header */}
             <div className="flex items-center justify-between gap-2 border-b border-[#1F1F1F] px-4 py-4">
-                <Link href="/admin" className="flex items-center gap-2.5 min-w-0">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-white font-bold">
-                        DF
-                    </div>
-                    <div className="min-w-0">
-                        <p className="truncate text-xs font-bold text-white">DeployForge Admin</p>
-                        <p className="text-[10px] text-[#666666] uppercase">{role || 'Control Plane'}</p>
-                    </div>
+                <Link href="/admin">
+                    <DeployForgeLogo variant="secondary" size="md" showBadge badgeText={role || 'ADMIN'} />
                 </Link>
                 {onClose && (
                     <button type="button" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] text-[#A1A1A1] hover:text-white" aria-label="Close">

@@ -12,6 +12,7 @@ import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useMe } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import { NotificationDropdown } from '@/components/layout/NotificationDropdown';
+import { DeployForgeLogo } from '@/components/ui/BrandLogo';
 
 interface DashboardLayoutProps { children: ReactNode; }
 
@@ -161,11 +162,8 @@ function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: strin
         <div className="flex h-full flex-col font-mono text-xs">
             {/* Brand Header */}
             <div className="flex items-center justify-between border-b border-[#1F1F1F] px-4 py-3">
-                <Link href="/dashboard" className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded border border-[#1F1F1F] bg-[#000000] text-white">
-                        <Rocket size={13} />
-                    </div>
-                    <span className="font-semibold tracking-tight text-white">DeployForge</span>
+                <Link href="/dashboard">
+                    <DeployForgeLogo variant="primary" size="md" />
                 </Link>
                 {onClose && (
                     <button
@@ -227,6 +225,7 @@ function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: strin
                     </Link>
                     <button
                         onClick={onLogout}
+                        aria-label="Log out of account"
                         className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#1F1F1F] text-[#666666] hover:bg-[#111111] hover:text-white transition-colors"
                         title="Log out"
                     >

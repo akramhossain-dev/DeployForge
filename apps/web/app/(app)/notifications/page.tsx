@@ -13,7 +13,6 @@ import {
     useMarkAllAsRead,
     useDeleteNotification,
     useDeleteAllNotifications,
-    useNotificationStream,
 } from '@/hooks/useNotifications';
 import type { AlertLevel, AlertType, AppNotification } from '@/lib/api/types';
 import { formatDate } from '@/components/ui';
@@ -68,8 +67,6 @@ export default function NotificationsPage() {
     const markAllAsRead = useMarkAllAsRead();
     const deleteNotification = useDeleteNotification();
     const deleteAll = useDeleteAllNotifications();
-
-    useNotificationStream(true);
 
     const notifications = data?.notifications || [];
     const pagination = data?.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 };
