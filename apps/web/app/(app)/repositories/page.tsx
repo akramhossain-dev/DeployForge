@@ -85,7 +85,7 @@ export default function RepositoriesPage() {
                     <div className="flex items-center gap-3">
                         {profile.data.avatarUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={profile.data.avatarUrl} alt="" className="h-8 w-8 rounded-full border border-[#1F1F1F]" />
+                            <img src={profile.data.avatarUrl} alt="GitHub User Profile Avatar" className="h-8 w-8 rounded-full border border-[#1F1F1F]" />
                         ) : (
                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-white">
                                 <Github size={15} />

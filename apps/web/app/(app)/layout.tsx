@@ -214,7 +214,7 @@ function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: strin
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-[#1F1F1F] bg-[#111111] font-bold text-white">
                         {user?.avatarUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                            <img src={user.avatarUrl} alt="User Profile Avatar" className="h-full w-full object-cover" />
                         ) : (
                             user?.name?.[0] || user?.email?.[0]?.toUpperCase() || 'D'
                         )}
