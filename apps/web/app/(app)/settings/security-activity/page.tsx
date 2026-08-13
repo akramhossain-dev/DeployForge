@@ -20,18 +20,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
-
-interface AuditLog {
-    id: string;
-    action: string;
-    details: string;
-    ipAddress?: string;
-    userAgent?: string;
-    device?: string;
-    browser?: string;
-    os?: string;
-    createdAt: string;
-}
+import type { AuditLog } from '@/lib/api/types';
 
 interface Pagination {
     page: number;

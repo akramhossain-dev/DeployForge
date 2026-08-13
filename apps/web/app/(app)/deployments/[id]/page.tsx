@@ -43,7 +43,7 @@ import {
     Eye,
     EyeOff
 } from 'lucide-react';
-import { formatDate, StatusBadge } from '@/components/ui';
+import { formatDate, StatusBadge, PasswordInput, INPUT_STYLE } from '@/components/ui';
 import {
     useDeleteDeployment,
     useDeployment,
@@ -67,8 +67,6 @@ import { parseError } from '@/lib/utils/errorParser';
 import { useToastStore } from '@/lib/store/useToastStore';
 
 const TIMELINE = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'RUNNING'] as const;
-const INPUT_STYLE =
-    'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 function getSourceType(d?: { sourceType?: string; project?: { repositoryUrl?: string | null } | null }) {
     return d?.sourceType || (d?.project?.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
@@ -341,39 +339,7 @@ function TimelineStep({ state, current, failedIndex }: { state: string; current?
     );
 }
 
-function PasswordInput({
-    value,
-    onChange,
-    placeholder,
-    className
-}: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    placeholder?: string;
-    className?: string;
-}) {
-    const [show, setShow] = useState(false);
 
-    return (
-        <div className="relative w-full">
-            <input
-                type={show ? 'text' : 'password'}
-                value={value}
-                onChange={onChange}
-                placeholder={placeholder}
-                className={className || INPUT_STYLE}
-            />
-            <button
-                type="button"
-                onClick={() => setShow(!show)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#666666] hover:text-white transition-colors"
-                title={show ? 'Hide value' : 'Show value'}
-            >
-                {show ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-        </div>
-    );
-}
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
     return (

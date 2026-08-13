@@ -4,28 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { KeyRound, Shield, RefreshCw, Monitor, Smartphone, Tablet, XCircle, LogOut, Loader2 } from 'lucide-react';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
-
-interface AuditLog {
-    id: string;
-    action: string;
-    details: string;
-    ipAddress?: string;
-    userAgent?: string;
-    createdAt: string;
-}
-
-interface Session {
-    id: string;
-    browser: string;
-    device: string;
-    os?: string;
-    ip: string;
-    lastActivity: string;
-    createdAt: string;
-    isCurrent?: boolean;
-}
-
-const INPUT_STYLE = 'w-full rounded-md border bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
+import type { AuditLog, UserSession as Session } from '@/lib/api/types';
+import { INPUT_STYLE } from '@/components/ui';
 
 export default function SecurityPage() {
     const addToast = useToastStore((state) => state.addToast);

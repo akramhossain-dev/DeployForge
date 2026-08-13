@@ -33,53 +33,17 @@ import {
     type EnvFile
 } from '@/hooks/useDeployForgeData';
 import { useToastStore } from '@/lib/store/useToastStore';
-import { StatusBadge } from '@/components/ui';
+import { StatusBadge, PasswordInput, INPUT_STYLE } from '@/components/ui';
+import { validateEnvFiles } from '@/lib/utils/envValidation';
 
 type EnvName = 'production' | 'development';
 type ExecutionMode = 'production' | 'sandbox';
-
-const INPUT_STYLE =
-    'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 function isValidDomainInput(input: string): boolean {
     if (!input || input.trim().length === 0) return false;
     const clean = input.trim().toLowerCase();
     if (clean.includes('://') || clean.includes('/') || clean.includes(' ') || clean.includes(':')) return false;
     return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/i.test(clean);
-}
-
-function PasswordInput({
-    value,
-    onChange,
-    placeholder,
-    className
-}: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    placeholder?: string;
-    className?: string;
-}) {
-    const [show, setShow] = useState(false);
-
-    return (
-        <div className="relative w-full">
-            <input
-                type={show ? 'text' : 'password'}
-                value={value}
-                onChange={onChange}
-                placeholder={placeholder}
-                className={className || INPUT_STYLE}
-            />
-            <button
-                type="button"
-                onClick={() => setShow(!show)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#666666] hover:text-white transition-colors"
-                title={show ? 'Hide value' : 'Show value'}
-            >
-                {show ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-        </div>
-    );
 }
 
 export default function NewDeploymentPage() {
@@ -231,37 +195,10 @@ function GithubDeployForm() {
         }
 
         if (useEnv) {
-            const totalVars = envFiles.reduce((sum, f) => sum + Object.keys(f.variables || {}).length, 0);
-            if (envFiles.length > 20) {
-                newErrors.env = 'Maximum limit of 20 environment files exceeded';
+            const check = validateEnvFiles(envFiles);
+            if (!check.valid && check.error) {
+                newErrors.env = check.error;
                 isValid = false;
-            } else if (totalVars > 200) {
-                newErrors.env = 'Maximum limit of 200 environment variables exceeded';
-                isValid = false;
-            } else {
-                const validateKey = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
-                const validatePath = (path: string) => {
-                    if (!path.trim()) return false;
-                    if (path.startsWith('/') || path.startsWith('\\') || /^[a-zA-Z]:/.test(path)) return false;
-                    if (path.split(/[/\\]/).some((p) => p === '..')) return false;
-                    const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
-                    const fileName = normalized.split('/').pop() || '';
-                    return fileName.startsWith('.env');
-                };
-                for (const file of envFiles) {
-                    if (!validatePath(file.path)) {
-                        newErrors.env = `Invalid path: ${file.path}. Must end with a file starting with .env and contain no traversal.`;
-                        isValid = false;
-                        break;
-                    }
-                    const keys = Object.keys(file.variables || {});
-                    const invalidKey = keys.find((k) => !validateKey(k));
-                    if (invalidKey) {
-                        newErrors.env = `Invalid variable key "${invalidKey}" in ${file.path}. Must start with a letter/underscore and contain only A-Z, 0-9, _.`;
-                        isValid = false;
-                        break;
-                    }
-                }
             }
         }
 
@@ -581,37 +518,10 @@ function UploadDeployForm() {
         }
 
         if (useEnv) {
-            const totalVars = envFiles.reduce((sum, f) => sum + Object.keys(f.variables || {}).length, 0);
-            if (envFiles.length > 20) {
-                newErrors.env = 'Maximum limit of 20 environment files exceeded';
+            const check = validateEnvFiles(envFiles);
+            if (!check.valid && check.error) {
+                newErrors.env = check.error;
                 isValidForm = false;
-            } else if (totalVars > 200) {
-                newErrors.env = 'Maximum limit of 200 environment variables exceeded';
-                isValidForm = false;
-            } else {
-                const validateKey = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
-                const validatePath = (path: string) => {
-                    if (!path.trim()) return false;
-                    if (path.startsWith('/') || path.startsWith('\\') || /^[a-zA-Z]:/.test(path)) return false;
-                    if (path.split(/[/\\]/).some((p) => p === '..')) return false;
-                    const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
-                    const fileName = normalized.split('/').pop() || '';
-                    return fileName.startsWith('.env');
-                };
-                for (const file of envFiles) {
-                    if (!validatePath(file.path)) {
-                        newErrors.env = `Invalid path: ${file.path}. Must end with a file starting with .env and contain no traversal.`;
-                        isValidForm = false;
-                        break;
-                    }
-                    const keys = Object.keys(file.variables || {});
-                    const invalidKey = keys.find((k) => !validateKey(k));
-                    if (invalidKey) {
-                        newErrors.env = `Invalid variable key "${invalidKey}" in ${file.path}. Must start with a letter/underscore and contain only A-Z, 0-9, _.`;
-                        isValidForm = false;
-                        break;
-                    }
-                }
             }
         }
 

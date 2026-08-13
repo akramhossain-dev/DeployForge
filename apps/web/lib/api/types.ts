@@ -417,3 +417,27 @@ export type ProjectAnalytics = {
         createdAt: string;
     } | null;
 };
+
+export type AuditLog = {
+    id: string;
+    action: string;
+    details: string;
+    ipAddress?: string;
+    userAgent?: string;
+    device?: string;
+    browser?: string;
+    os?: string;
+    createdAt: string;
+};
+
+export type UserSession = {
+    id: string;
+    browser: string;
+    device: string;
+    os?: string;
+    ip: string;
+    lastActivity: string;
+    createdAt: string;
+    isCurrent?: boolean;
+};
+

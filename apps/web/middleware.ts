@@ -48,11 +48,16 @@ export function middleware(request: NextRequest) {
     const userProtectedPaths = [
         '/dashboard',
         '/deployments',
+        '/domains',
+        '/file-manager',
+        '/notifications',
+        '/profile',
         '/repositories',
-        '/vps',
-        '/terminal',
-        '/monitoring',
         '/settings',
+        '/team',
+        '/terminal',
+        '/vps',
+        '/monitoring',
     ];
     const isUserProtected = userProtectedPaths.some(p => pathname.startsWith(p));
     if (isUserProtected) {
