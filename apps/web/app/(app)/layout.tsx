@@ -210,19 +210,21 @@ function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: strin
 
             {/* User Profile Footer */}
             <div className="border-t border-[#1F1F1F] p-3">
-                <div className="flex items-center gap-2.5 rounded border border-[#1F1F1F] bg-[#000000] p-2">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-[#1F1F1F] bg-[#111111] font-bold text-white">
-                        {user?.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={user.avatarUrl} alt="User Profile Avatar" className="h-full w-full object-cover" />
-                        ) : (
-                            user?.name?.[0] || user?.email?.[0]?.toUpperCase() || 'D'
-                        )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold text-white">{user?.name || 'Developer'}</p>
-                        <p className="truncate text-[10px] text-[#666666]">{user?.email || 'Signed in'}</p>
-                    </div>
+                <div className="flex items-center justify-between gap-2 rounded border border-[#1F1F1F] bg-[#000000] p-2">
+                    <Link href="/profile" className="flex items-center gap-2.5 min-w-0 flex-1 group" title="View Profile">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-[#1F1F1F] bg-[#111111] font-bold text-white group-hover:border-[#333333] transition-colors">
+                            {user?.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={user.avatarUrl} alt="User Profile Avatar" className="h-full w-full object-cover" />
+                            ) : (
+                                user?.name?.[0] || user?.email?.[0]?.toUpperCase() || 'D'
+                            )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-semibold text-white group-hover:underline">{user?.name || 'Developer'}</p>
+                            <p className="truncate text-[10px] text-[#666666]">{user?.email || 'Signed in'}</p>
+                        </div>
+                    </Link>
                     <button
                         onClick={onLogout}
                         className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#1F1F1F] text-[#666666] hover:bg-[#111111] hover:text-white transition-colors"

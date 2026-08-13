@@ -17,9 +17,9 @@ import {
     useAdminTestVpsConnection,
     useAdminVpsHealthHistory,
 } from '@/hooks/useDeployForgeData';
-import LiveMonitorTab from '@/app/(app)/vps/LiveMonitorTab';
-import ServerInfoTab from '@/app/(app)/vps/ServerInfoTab';
-import HistoryMonitorTab from '@/app/(app)/vps/HistoryMonitorTab';
+import LiveMonitorTab from '@/components/vps/LiveMonitorTab';
+import ServerInfoTab from '@/components/vps/ServerInfoTab';
+import HistoryMonitorTab from '@/components/vps/HistoryMonitorTab';
 
 export default function AdminVpsPage() {
     const vps = useAdminVps();

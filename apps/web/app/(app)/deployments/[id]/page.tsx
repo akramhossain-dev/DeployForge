@@ -44,6 +44,9 @@ import {
     EyeOff
 } from 'lucide-react';
 import { formatDate, StatusBadge, PasswordInput, INPUT_STYLE } from '@/components/ui';
+import { AnsiText } from '@/components/deployments/detail/AnsiLogViewer';
+import { DeploymentErrorBanner } from '@/components/deployments/detail/DeploymentErrorBanner';
+import { DeploymentTimeline } from '@/components/deployments/detail/DeploymentTimeline';
 import {
     useDeleteDeployment,
     useDeployment,
@@ -66,8 +69,6 @@ import type { DeploymentLog } from '@/lib/api/types';
 import { parseError } from '@/lib/utils/errorParser';
 import { useToastStore } from '@/lib/store/useToastStore';
 
-const TIMELINE = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'RUNNING'] as const;
-
 function getSourceType(d?: { sourceType?: string; project?: { repositoryUrl?: string | null } | null }) {
     return d?.sourceType || (d?.project?.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
 }
@@ -77,183 +78,6 @@ function mergeLogs(a: DeploymentLog[], b: DeploymentLog[]) {
     [...a, ...b].forEach((l) => map.set(l.id, l));
     return Array.from(map.values()).sort(
         (x, y) => new Date(x.createdAt || x.timestamp || 0).getTime() - new Date(y.createdAt || y.timestamp || 0).getTime()
-    );
-}
-
-function getProgressMessage(status: string, logs: DeploymentLog[]): string {
-    const s = (status || '').toUpperCase();
-    if (s === 'PENDING') return 'Queued for execution';
-    if (s === 'CLONING') return 'Cloning repository…';
-    if (s === 'UPLOADING') return 'Uploading archive…';
-    if (s === 'EXTRACTING') return 'Extracting archive…';
-    if (s === 'BUILDING') {
-        const hasInstall = logs.some((l) => /(install|npm ci|yarn|pnpm|bun)/i.test(l.message || l.output || ''));
-        return hasInstall ? 'Installing dependencies…' : 'Building application…';
-    }
-    if (s === 'DEPLOYING') {
-        const txt = logs.map((l) => l.message || l.output || '').join('\n').toLowerCase();
-        if (/(health.?check|probe)/i.test(txt)) return 'Health check…';
-        if (/(container started|starting)/i.test(txt)) return 'Starting container…';
-        return 'Creating container…';
-    }
-    if (s === 'RUNNING') return 'Deployment successful';
-    if (s === 'FAILED') return 'Deployment failed';
-    if (s === 'STOPPED') return 'Stopped';
-    if (s === 'PAUSED') return 'Paused';
-    return s;
-}
-
-// ── ANSI Log Text Parser ───────────────────────────────────────────────────
-type AnsiSegment = {
-    text: string;
-    bold?: boolean;
-    underline?: boolean;
-    colorClass?: string;
-};
-
-function parseAnsiText(text: string): AnsiSegment[] {
-    const ansiRegex = /\x1B\[[0-9;]*m/g;
-    let match;
-    let lastIndex = 0;
-    const segments: AnsiSegment[] = [];
-
-    let isBold = false;
-    let isUnderline = false;
-    let currentColorClass = '';
-
-    const getStylesFromCodes = (codesStr: string) => {
-        if (!codesStr || codesStr === '0') {
-            isBold = false;
-            isUnderline = false;
-            currentColorClass = '';
-            return;
-        }
-
-        const codes = codesStr.split(';').map(Number);
-        for (const code of codes) {
-            if (code === 0) {
-                isBold = false;
-                isUnderline = false;
-                currentColorClass = '';
-            } else if (code === 1) {
-                isBold = true;
-            } else if (code === 4) {
-                isUnderline = true;
-            } else if (code >= 30 && code <= 37) {
-                const colors = [
-                    'text-[#000000]',
-                    'text-rose-400 font-semibold',
-                    'text-emerald-400',
-                    'text-amber-400',
-                    'text-sky-400',
-                    'text-fuchsia-400',
-                    'text-cyan-400',
-                    'text-[#FFFFFF]'
-                ];
-                currentColorClass = colors[code - 30] || '';
-            } else if (code >= 90 && code <= 97) {
-                const brightColors = [
-                    'text-[#666666]',
-                    'text-rose-300 font-bold',
-                    'text-emerald-300 font-bold',
-                    'text-amber-300 font-bold',
-                    'text-sky-300 font-bold',
-                    'text-fuchsia-300 font-bold',
-                    'text-cyan-300 font-bold',
-                    'text-white font-bold'
-                ];
-                currentColorClass = brightColors[code - 90] || '';
-            } else if (code === 39) {
-                currentColorClass = '';
-            }
-        }
-    };
-
-    while ((match = ansiRegex.exec(text)) !== null) {
-        const textSegment = text.substring(lastIndex, match.index);
-        if (textSegment) {
-            segments.push({
-                text: textSegment,
-                bold: isBold,
-                underline: isUnderline,
-                colorClass: currentColorClass
-            });
-        }
-        const rawCode = match[0].substring(2, match[0].length - 1);
-        getStylesFromCodes(rawCode);
-        lastIndex = ansiRegex.lastIndex;
-    }
-
-    const remainingText = text.substring(lastIndex);
-    if (remainingText) {
-        segments.push({
-            text: remainingText,
-            bold: isBold,
-            underline: isUnderline,
-            colorClass: currentColorClass
-        });
-    }
-
-    return segments;
-}
-
-function AnsiText({ text, searchQuery }: { text: string; searchQuery: string }) {
-    const segments = useMemo(() => parseAnsiText(text), [text]);
-
-    if (!searchQuery) {
-        return (
-            <span className="break-all whitespace-pre-wrap font-mono">
-                {segments.map((seg, idx) => (
-                    <span
-                        key={idx}
-                        className={clsx(
-                            seg.bold && 'font-bold',
-                            seg.underline && 'underline',
-                            seg.colorClass
-                        )}
-                    >
-                        {seg.text}
-                    </span>
-                ))}
-            </span>
-        );
-    }
-
-    return (
-        <span className="break-all whitespace-pre-wrap font-mono">
-            {segments.map((seg, idx) => {
-                const classes = clsx(
-                    seg.bold && 'font-bold',
-                    seg.underline && 'underline',
-                    seg.colorClass
-                );
-
-                if (seg.text.toLowerCase().includes(searchQuery.toLowerCase())) {
-                    const queryRegex = new RegExp(`(${searchQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-                    const parts = seg.text.split(queryRegex);
-
-                    return (
-                        <span key={idx} className={classes}>
-                            {parts.map((part, pIdx) =>
-                                part.toLowerCase() === searchQuery.toLowerCase() ? (
-                                    <mark key={pIdx} className="bg-amber-400/30 text-amber-200 px-0.5 rounded font-bold">
-                                        {part}
-                                    </mark>
-                                ) : (
-                                    part
-                                )
-                            )}
-                        </span>
-                    );
-                }
-
-                return (
-                    <span key={idx} className={classes}>
-                        {seg.text}
-                    </span>
-                );
-            })}
-        </span>
     );
 }
 
@@ -282,62 +106,7 @@ function LogLine({ log, searchQuery }: { log: DeploymentLog; searchQuery: string
     );
 }
 
-function TimelineStep({ state, current, failedIndex }: { state: string; current?: string; failedIndex: number }) {
-    const ci = TIMELINE.indexOf(current as typeof TIMELINE[number]);
-    const oi = TIMELINE.indexOf(state as typeof TIMELINE[number]);
-    const isActive = current === state && current !== 'RUNNING';
-    let complete = false, failed = false;
 
-    if (current === 'FAILED') {
-        if (oi < failedIndex) complete = true;
-        else if (oi === failedIndex) failed = true;
-    } else {
-        complete = current === 'RUNNING' || (ci >= oi && oi >= 0);
-    }
-
-    return (
-        <div
-            className={clsx(
-                'relative flex flex-col items-center gap-1.5 p-2 rounded-md border text-center font-mono transition-all',
-                complete && 'border-emerald-500/30 bg-emerald-500/5',
-                failed && 'border-rose-500/30 bg-rose-500/5',
-                isActive && 'border-cyan-500/40 bg-cyan-500/10',
-                !complete && !failed && !isActive && 'border-[#1F1F1F] bg-[#000000]'
-            )}
-        >
-            <div
-                className={clsx(
-                    'flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full',
-                    complete && 'bg-emerald-500/20 text-emerald-400',
-                    failed && 'bg-rose-500/20 text-rose-400',
-                    isActive && 'bg-cyan-500/20 text-cyan-300',
-                    !complete && !failed && !isActive && 'bg-[#111111] text-[#666666]'
-                )}
-            >
-                {complete ? (
-                    <CheckCircle2 size={13} />
-                ) : failed ? (
-                    <XCircle size={13} />
-                ) : isActive ? (
-                    <Loader2 size={12} className="animate-spin" />
-                ) : (
-                    <Circle size={11} />
-                )}
-            </div>
-            <p
-                className={clsx(
-                    'text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider truncate w-full',
-                    complete && 'text-emerald-300',
-                    failed && 'text-rose-300',
-                    isActive && 'text-cyan-300',
-                    !complete && !failed && !isActive && 'text-[#666666]'
-                )}
-            >
-                {state.toLowerCase().replace('_', ' ')}
-            </p>
-        </div>
-    );
-}
 
 
 
@@ -859,123 +628,19 @@ export default function DeploymentDetailsPage() {
 
             {/* ── 2. Structured Error Diagnostic Banner ── */}
             {current.status === 'FAILED' && parsedError ? (
-                <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-4 space-y-3">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex gap-3">
-                            <AlertCircle className="mt-0.5 shrink-0 text-rose-400" size={18} />
-                            <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-rose-300 uppercase">{parsedError.category}</span>
-                                    <span className="rounded bg-rose-950 border border-rose-800/50 px-2 py-0.5 text-[10px] text-rose-300 font-mono">
-                                        {parsedError.code}
-                                    </span>
-                                </div>
-                                <p className="mt-1.5 text-xs leading-relaxed text-white font-sans whitespace-pre-line">{parsedError.explanation}</p>
-                                {parsedError.suggestions?.length ? (
-                                    <ul className="mt-2.5 space-y-1">
-                                        {parsedError.suggestions.map((s, i) => (
-                                            <li key={i} className="flex items-center gap-2 text-xs text-rose-200">
-                                                <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
-                                                <span>{s}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : null}
-                            </div>
-                        </div>
-                        <div className="flex gap-2 sm:flex-col sm:items-end shrink-0">
-                            <button
-                                onClick={() => openErrorDrawer({ ...parsedError, timestamp: current.updatedAt, deploymentId: current.id })}
-                                className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A]"
-                            >
-                                Details
-                            </button>
-                            <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText(`Deployment: ${current.id}\nError: ${parsedError.code}\n${parsedError.explanation}`);
-                                    addToast({ title: 'Copied Report', description: 'Error report copied to clipboard.', severity: 'success' });
-                                }}
-                                className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A]"
-                            >
-                                <Copy size={12} /> Copy
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <DeploymentErrorBanner
+                    parsedError={parsedError}
+                    deploymentId={current.id}
+                    updatedAt={current.updatedAt}
+                />
             ) : null}
 
-            {/* ── 3. Metadata Chips Grid ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
-                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
-                    <p className="text-[10px] uppercase text-[#666666] truncate">EXECUTION MODE</p>
-                    <p className="font-bold text-white uppercase truncate">{current.mode || 'PRODUCTION'}</p>
-                </div>
-                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
-                    <p className="text-[10px] uppercase text-[#666666] truncate">TARGET VPS</p>
-                    <p className="font-bold text-white truncate">{current.vps?.name || 'Local Node'}</p>
-                </div>
-                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
-                    <p className="text-[10px] uppercase text-[#666666] truncate">BRANCH</p>
-                    <p className="font-bold text-white truncate">{current.branch || 'main'}</p>
-                </div>
-                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
-                    <p className="text-[10px] uppercase text-[#666666] truncate">COMMIT HASH</p>
-                    <p className="font-bold text-white truncate">{current.commitHash ? current.commitHash.slice(0, 7) : 'head'}</p>
-                </div>
-                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
-                    <p className="text-[10px] uppercase text-[#666666] truncate">HOST PORT</p>
-                    <p className="font-bold text-white truncate">{isStatic ? 'Static' : current.port ? `:${current.port}` : '—'}</p>
-                </div>
-                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
-                    <p className="text-[10px] uppercase text-[#666666] truncate">CREATED</p>
-                    <p className="font-bold text-white truncate">{formatDate(current.createdAt)}</p>
-                </div>
-            </div>
-
-            {/* ── 4. Active URL Banner ── */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3">
-                <div className="min-w-0 flex-1">
-                    <p className="text-[10px] uppercase text-[#666666]">ACTIVE URL</p>
-                    <p className="mt-0.5 font-bold text-white truncate font-mono text-xs">{activeUrl || 'Pending host assignment…'}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    {activeUrl && (
-                        <a href={activeUrl} target="_blank" rel="noreferrer">
-                            <button className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A]">
-                                <ExternalLink size={12} /> Open
-                            </button>
-                        </a>
-                    )}
-                    <button
-                        disabled={!activeUrl}
-                        onClick={() => {
-                            if (activeUrl) {
-                                navigator.clipboard.writeText(activeUrl);
-                                addToast({ title: 'Copied URL', description: activeUrl, severity: 'success' });
-                            }
-                        }}
-                        className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
-                    >
-                        <Copy size={12} /> Copy
-                    </button>
-                </div>
-            </div>
-
-            {/* ── 5. Deployment Pipeline Timeline ── */}
-            <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3.5 sm:p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-2">
-                        <Zap size={14} className="text-white" />
-                        <h2 className="font-semibold text-white">Deployment Pipeline</h2>
-                    </div>
-                    <span className="text-xs text-[#A1A1A1] font-mono truncate">{getProgressMessage(current.status || '', logs)}</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-                    {TIMELINE.map((state) => (
-                        <TimelineStep key={state} state={state} current={current.status} failedIndex={failedStepIndex} />
-                    ))}
-                </div>
-            </div>
+            <DeploymentTimeline
+                current={current}
+                activeUrl={activeUrl}
+                isStatic={isStatic}
+                failedStepIndex={failedStepIndex}
+            />
 
             {/* ── 6. Console Main Column & Sidebar Grid ── */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">

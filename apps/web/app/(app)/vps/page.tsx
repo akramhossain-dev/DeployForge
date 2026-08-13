@@ -10,11 +10,11 @@ import {
     useDeleteVps,
 } from '@/hooks/useDeployForgeData';
 import type { Vps } from '@/lib/api/types';
-import VpsListTab from './VpsListTab';
-import AddVpsTab from './AddVpsTab';
-import ServerInfoTab from './ServerInfoTab';
-import LiveMonitorTab from './LiveMonitorTab';
-import HistoryMonitorTab from './HistoryMonitorTab';
+import VpsListTab from '@/components/vps/VpsListTab';
+import AddVpsTab from '@/components/vps/AddVpsTab';
+import ServerInfoTab from '@/components/vps/ServerInfoTab';
+import LiveMonitorTab from '@/components/vps/LiveMonitorTab';
+import HistoryMonitorTab from '@/components/vps/HistoryMonitorTab';
 
 type TabId = 'list' | 'add' | 'info' | 'monitor' | 'history';
 
