@@ -142,5 +142,55 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* Selective Glassmorphism for Overlays (Modals, Dropdowns, Toasts, Search Panels, Command Menus, Popovers) */
+  .glass-modal {
+    background-color: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid #1F1F1F;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7);
+  }
+
+  .glass-dropdown {
+    background-color: rgba(10, 10, 10, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid #1F1F1F;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.6);
+  }
+
+  .glass-toast {
+    background-color: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid #1F1F1F;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
+  }
+
+  .glass-popover {
+    background-color: rgba(17, 17, 17, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid #1F1F1F;
+    box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.6);
+  }
+
+  .glass-search-panel {
+    background-color: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid #1F1F1F;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  }
+
+  .glass-command-menu {
+    background-color: rgba(10, 10, 10, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid #1F1F1F;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+  }
 }
+
 

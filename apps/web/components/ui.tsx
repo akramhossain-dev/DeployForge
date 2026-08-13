@@ -53,7 +53,7 @@ export function Button({
 }
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
-    return <section className={clsx('rounded-lg border border-white/10 bg-white/[0.07] p-5 shadow-2xl shadow-slate-950/30 backdrop-blur-xl', className)}>{children}</section>;
+    return <section className={clsx('rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 shadow-sm', className)}>{children}</section>;
 }
 
 export function SkeletonBlock({ className }: { className?: string }) {
@@ -249,30 +249,30 @@ export function AppModal({
     if (!open) return null;
     return (
         <div
-            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 p-4 pt-[5vh] backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-4 pt-[5vh] backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div className={clsx('relative w-full my-auto', maxWidthMap[size])}>
-                <Panel className="flex flex-col">
+                <div className="glass-modal flex flex-col rounded-md p-5 text-white">
                     {/* Modal header */}
                     <div className="mb-5 flex shrink-0 items-center justify-between gap-4">
-                        <h2 className="text-base font-black text-white sm:text-lg">{title}</h2>
+                        <h2 className="text-base font-bold text-white sm:text-lg">{title}</h2>
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.07] text-slate-300 transition-colors hover:bg-white/[0.12] hover:text-white"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] transition-colors hover:bg-[#1F1F1F] hover:text-white"
                             aria-label="Close modal"
                         >
-                            <X size={16} />
+                            <X size={15} />
                         </button>
                     </div>
                     {/* Modal body */}
                     <div className="min-h-0">
                         {children}
                     </div>
-                </Panel>
+                </div>
             </div>
         </div>
     );

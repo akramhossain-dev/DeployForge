@@ -29,8 +29,8 @@ export function PropertiesDialog({ vpsId, path, name, onClose }: PropertiesDialo
         : [];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-            <div className="w-full max-w-md rounded-xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+            <div className="glass-modal w-full max-w-md rounded-md">
                 {}
                 <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
                     <h2 className="text-base font-black text-white">Properties</h2>

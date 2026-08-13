@@ -38,12 +38,12 @@ ${rawError}
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/80">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/80 backdrop-blur-sm">
             {/* Backdrop */}
             <div className="absolute inset-0" onClick={closeErrorDrawer} />
 
             {/* Drawer */}
-            <div className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-[#1F1F1F] bg-[#0A0A0A] p-5 shadow-xl overflow-y-auto">
+            <div className="glass-modal relative z-10 flex h-full w-full max-w-xl flex-col border-l border-[#1F1F1F] p-5 overflow-y-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-4">
                     <div className="flex items-center gap-2.5">

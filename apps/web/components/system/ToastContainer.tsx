@@ -42,7 +42,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 
     return (
         <div
-            className="pointer-events-auto relative w-full rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3 shadow-md shadow-black/80 transition-all duration-150 ease-out"
+            className="glass-toast pointer-events-auto relative w-full rounded-md p-3 transition-all duration-150 ease-out"
             style={{ animation: 'toastSlideIn 0.15s ease-out forwards' }}
         >
             <div className="flex items-start gap-2.5">

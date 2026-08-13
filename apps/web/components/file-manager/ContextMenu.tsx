@@ -48,7 +48,7 @@ export function ContextMenu({ x, y, onClose, items }: ContextMenuProps) {
         <div
             ref={ref}
             style={style}
-            className="w-52 overflow-hidden rounded-xl border border-white/10 bg-slate-900/95 py-1 shadow-2xl shadow-slate-950 backdrop-blur-xl"
+            className="glass-popover w-52 overflow-hidden rounded-md py-1"
             role="menu"
         >
             {items.map((item, idx) => (

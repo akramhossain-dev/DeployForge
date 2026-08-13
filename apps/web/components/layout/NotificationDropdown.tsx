@@ -76,7 +76,7 @@ export function NotificationDropdown() {
 
             {/* Dropdown Panel */}
             {open && (
-                <div className="absolute right-0 top-10 z-50 w-[340px] rounded-md border border-[#1F1F1F] bg-[#0A0A0A] shadow-xl">
+                <div className="glass-dropdown absolute right-0 top-10 z-50 w-[340px] rounded-md">
                     {/* Header */}
                     <div className="flex items-center justify-between border-b border-[#1F1F1F] px-3.5 py-2.5">
                         <div className="flex items-center gap-2">

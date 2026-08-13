@@ -518,8 +518,8 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
 
                     {}
                     {rename && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-                            <div className="w-80 rounded-xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                            <div className="glass-modal w-80 rounded-md p-5">
                                 <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500">Rename</p>
                                 <p className="mb-3 truncate font-mono text-[11px] text-slate-600">{rename.entry.path}</p>
                                 <input
@@ -551,8 +551,8 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
 
             {}
             {showUpload && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-lg rounded-xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                    <div className="glass-modal w-full max-w-lg rounded-md p-5">
                         <div className="mb-4 flex items-center justify-between">
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Upload Files</p>
@@ -577,8 +577,8 @@ export function FileManager({ vpsId, vpsName }: FileManagerProps) {
 
             {}
             {confirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-sm rounded-xl border border-rose-400/20 bg-slate-900 p-5 shadow-2xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                    <div className="glass-modal w-full max-w-sm rounded-md border-rose-500/30 p-5">
                         <div className="mb-3 flex items-center gap-3">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-400/20 bg-rose-500/10">
                                 <AlertTriangle size={16} className="text-rose-400" />
