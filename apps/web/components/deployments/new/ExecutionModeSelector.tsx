@@ -33,7 +33,7 @@ export function ExecutionModeSelector({
                         <span>Production Release</span>
                     </div>
                     <p className="text-[11px] text-[#A1A1A1] leading-relaxed">
-                        Persistent container release with zero-downtime Nginx proxying, custom domain support, and rollback history.
+                        Persistent container release with zero-downtime Traefik Ingress routing, instant .sslip.io / custom domain TLS, and rollback history.
                     </p>
                 </button>
 

@@ -63,11 +63,26 @@ export class ValidationService {
         });
     }
 
-    static async healthCheck(ssh: SSHService, deploymentId: string, port: number) {
-        await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/health >/dev/null 2>&1 || wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/ >/dev/null 2>&1; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
+    static async healthCheck(ssh: SSHService, deploymentId: string, containerIdOrPort: string | number, port = 3000) {
+        if (typeof containerIdOrPort === 'string' && containerIdOrPort.startsWith('compose:')) {
+            const projectName = containerIdOrPort.replace('compose:', '');
+            await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if [ "$(docker ps --filter "label=com.docker.compose.project=${projectName}" --filter "status=running" -q | wc -l)" -gt 0 ]; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
+            return;
+        }
+        if (typeof containerIdOrPort === 'string') {
+            await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if docker exec ${shellQuote(containerIdOrPort)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/health >/dev/null 2>&1 || docker exec ${shellQuote(containerIdOrPort)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/ >/dev/null 2>&1 || docker exec ${shellQuote(containerIdOrPort)} curl -fs http://127.0.0.1:${port}/ >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' ${shellQuote(containerIdOrPort)} 2>/dev/null)" = "true" ]; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
+            return;
+        }
+        const numericPort = containerIdOrPort;
+        await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${numericPort}/health >/dev/null 2>&1 || wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${numericPort}/ >/dev/null 2>&1; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
     }
 
-    static async healthCheckStatic(ssh: SSHService, deploymentId: string, hosting: StaticHostingResult) {
+    static async healthCheckStatic(ssh: SSHService, deploymentId: string, hostingOrContainer: StaticHostingResult | string) {
+        if (typeof hostingOrContainer === 'string') {
+            await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 10); do if docker exec ${shellQuote(hostingOrContainer)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:80/ >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' ${shellQuote(hostingOrContainer)} 2>/dev/null)" = "true" ]; then exit 0; fi; sleep 1; done; exit 1`, 'static_hosting', 'STATIC_HEALTH_CHECK_FAILED');
+            return;
+        }
+        const hosting = hostingOrContainer;
         const url = hosting.port
             ? `http://127.0.0.1:${hosting.port}/site/${deploymentId}/index.html`
             : hosting.hostType === 'domain'

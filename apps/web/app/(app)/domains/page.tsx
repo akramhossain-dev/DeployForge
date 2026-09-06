@@ -2,8 +2,11 @@
 
 import {
     AlertTriangle,
+    Check,
     CheckCircle2,
     ChevronRight,
+    Copy,
+    ExternalLink,
     Globe,
     Lock,
     PlusCircle,
@@ -132,85 +135,222 @@ function AddDomainModal({
     );
 }
 
-function DomainCard({ domain, vpsIp }: { domain: Domain & { deployment?: any }; vpsIp?: string }) {
+function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
     const remove = useRemoveDomain();
     const issueSSL = useIssueSSL();
     const toggleHttps = useToggleAutoHttps();
     const [expanded, setExpanded] = useState(false);
+    const [copiedA, setCopiedA] = useState(false);
+    const [copiedCname, setCopiedCname] = useState(false);
     const [autoHttpsEnabled, setAutoHttpsEnabled] = useState(domain.autoHttps ?? false);
+
+    const vpsIp = domain.deployment?.vps?.ipAddress;
+    const dnsQuery = useVerifyDns(domain.domainName, vpsIp, expanded && !!vpsIp);
 
     const isDeleted = domain.status === 'DELETED';
     const sslIssued = domain.sslStatus === 'ISSUED';
-    const sslFailed = domain.sslStatus === 'FAILED';
+
+    function copyToClipboard(text: string, type: 'a' | 'cname') {
+        navigator.clipboard.writeText(text);
+        if (type === 'a') {
+            setCopiedA(true);
+            setTimeout(() => setCopiedA(false), 2000);
+        } else {
+            setCopiedCname(true);
+            setTimeout(() => setCopiedCname(false), 2000);
+        }
+    }
 
     return (
-        <div className={clsx('rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4 font-mono text-xs', isDeleted && 'opacity-50')}>
+        <div className={clsx('rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4 font-mono text-xs transition-colors hover:border-[#333333]', isDeleted && 'opacity-50')}>
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-[#1F1F1F] pb-3">
-                <div className="flex items-center gap-2 min-w-0">
-                    <Globe size={14} className={sslIssued ? 'text-emerald-400 shrink-0' : 'text-[#666666] shrink-0'} />
-                    <p className="font-bold text-white text-sm truncate">{domain.domainName}</p>
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <Globe size={15} className={sslIssued ? 'text-emerald-400 shrink-0' : 'text-[#666666] shrink-0'} />
+                    <div className="min-w-0">
+                        <a
+                            href={`https://${domain.domainName}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-bold text-white text-sm hover:underline inline-flex items-center gap-1.5 truncate group"
+                        >
+                            <span className="truncate">{domain.domainName}</span>
+                            <ExternalLink size={12} className="text-[#666666] group-hover:text-white shrink-0" />
+                        </a>
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#666666]">
+                            <span>Traefik Gateway Ingress</span>
+                            <span>•</span>
+                            <span>Port :443</span>
+                        </div>
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className={clsx(
-                        'inline-flex items-center rounded border px-2 py-0.5 text-[10px] uppercase font-bold',
-                        sslIssued ? 'border-[#1F1F1F] bg-[#000000] text-emerald-400' : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]'
+                        'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] uppercase font-bold',
+                        sslIssued ? 'border-emerald-900/50 bg-emerald-950/20 text-emerald-400' : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]'
                     )}>
-                        {sslIssued ? 'SSL Active' : 'No SSL'}
+                        {sslIssued ? <ShieldCheck size={11} /> : <Lock size={11} />}
+                        {sslIssued ? 'TLS Active' : 'No TLS'}
                     </span>
                     <button
                         onClick={() => setExpanded(!expanded)}
-                        className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white"
+                        className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white transition-colors"
+                        title={expanded ? 'Collapse details' : 'Expand details'}
                     >
                         <ChevronRight size={13} className={clsx('transition-transform', expanded && 'rotate-90')} />
                     </button>
                 </div>
             </div>
 
-            {/* Subtext info */}
-            <div className="flex flex-wrap items-center justify-between text-[11px] text-[#A1A1A1]">
-                <span>Deployment: {domain.deployment?.name || domain.deploymentId.slice(0, 8)}</span>
-                <span>{formatDate(domain.createdAt)}</span>
+            {/* Target & Created Info */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-[#A1A1A1] border-b border-[#1F1F1F] pb-3">
+                <div>
+                    <span className="text-[10px] text-[#666666] block uppercase">Deployment</span>
+                    <span className="text-white truncate block font-semibold">
+                        {domain.deployment?.name || domain.deploymentId.slice(0, 8)}
+                    </span>
+                </div>
+                <div>
+                    <span className="text-[10px] text-[#666666] block uppercase">Target Node</span>
+                    <span className="text-white truncate block">
+                        {vpsIp ? `${domain.deployment?.vps?.name || 'VPS'} (${vpsIp})` : 'Node unassigned'}
+                    </span>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                    <span className="text-[10px] text-[#666666] block uppercase">Bound Date</span>
+                    <span className="text-[#A1A1A1]">{formatDate(domain.createdAt)}</span>
+                </div>
             </div>
 
-            {/* Expanded panel */}
+            {/* Expanded details */}
             {expanded && !isDeleted && (
-                <div className="space-y-3 border-t border-[#1F1F1F] pt-3">
+                <div className="space-y-4 pt-1">
+                    {/* DNS Setup Guide */}
+                    {vpsIp && (
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#000000] p-3 space-y-2.5">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#666666]">
+                                DNS Configuration Records
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                <div className="rounded border border-[#1F1F1F] bg-[#0A0A0A] p-2 flex items-center justify-between">
+                                    <div>
+                                        <span className="text-[10px] text-[#666666] block">A RECORD</span>
+                                        <code className="text-white font-mono text-[11px]">{domain.domainName} &rarr; {vpsIp}</code>
+                                    </div>
+                                    <button
+                                        onClick={() => copyToClipboard(vpsIp, 'a')}
+                                        className="h-6 w-6 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white"
+                                        title="Copy IP"
+                                    >
+                                        {copiedA ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                                    </button>
+                                </div>
+                                <div className="rounded border border-[#1F1F1F] bg-[#0A0A0A] p-2 flex items-center justify-between">
+                                    <div>
+                                        <span className="text-[10px] text-[#666666] block">CNAME (OPTIONAL)</span>
+                                        <code className="text-white font-mono text-[11px]">{domain.domainName} &rarr; {vpsIp}.sslip.io</code>
+                                    </div>
+                                    <button
+                                        onClick={() => copyToClipboard(`${vpsIp}.sslip.io`, 'cname')}
+                                        className="h-6 w-6 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white"
+                                        title="Copy CNAME"
+                                    >
+                                        {copiedCname ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Live DNS Propagation Verification */}
+                    {vpsIp && (
+                        <div className="rounded-md border border-[#1F1F1F] bg-[#050505] p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-semibold uppercase text-[#666666]">
+                                    Live DNS Propagation Status
+                                </span>
+                                <button
+                                    onClick={() => dnsQuery.refetch()}
+                                    disabled={dnsQuery.isFetching}
+                                    className="flex items-center gap-1 text-[10px] text-[#A1A1A1] hover:text-white disabled:opacity-50"
+                                >
+                                    <RefreshCw size={10} className={dnsQuery.isFetching ? 'animate-spin' : ''} />
+                                    <span>Re-check DNS</span>
+                                </button>
+                            </div>
+
+                            {dnsQuery.isLoading ? (
+                                <div className="flex items-center gap-2 text-[11px] text-[#666666] py-1">
+                                    <Loader2 size={12} className="animate-spin text-[#A1A1A1]" />
+                                    <span>Querying edge DNS resolvers...</span>
+                                </div>
+                            ) : dnsQuery.data?.propagated ? (
+                                <div className="flex items-center gap-2 rounded border border-emerald-900/40 bg-emerald-950/20 p-2 text-[11px] text-emerald-300">
+                                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                                    <span>
+                                        DNS verified: domain points to <strong>{dnsQuery.data.resolvedIps?.join(', ')}</strong> matching server IP ({vpsIp}).
+                                    </span>
+                                </div>
+                            ) : dnsQuery.data ? (
+                                <div className="flex items-center gap-2 rounded border border-amber-900/40 bg-amber-950/20 p-2 text-[11px] text-amber-300">
+                                    <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                                    <span>
+                                        DNS pending propagation: resolves to {dnsQuery.data.resolvedIps?.length ? <strong>{dnsQuery.data.resolvedIps.join(', ')}</strong> : 'none'} (expected: <strong>{vpsIp}</strong>).
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="text-[11px] text-[#666666]">
+                                    Click Re-check DNS to verify whether your domain records have propagated.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Traefik ACME Automated SSL Note */}
+                    <div className="rounded border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 text-[11px] text-[#A1A1A1] flex items-center gap-2">
+                        <ShieldCheck size={14} className="text-cyan-400 shrink-0" />
+                        <span>
+                            Traefik Ingress automatically detects HTTP TLS challenges and manages Let&apos;s Encrypt certificate issuance and renewal on port 443.
+                        </span>
+                    </div>
+
                     {/* Controls */}
-                    <div className="flex flex-wrap gap-2">
-                        {!sslIssued && (
-                            <button
-                                onClick={() => issueSSL.mutate(domain.id)}
-                                disabled={issueSSL.isPending}
-                                className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
-                            >
-                                {issueSSL.isPending ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />}
-                                <span>Issue SSL</span>
-                            </button>
-                        )}
-                        {sslIssued && (
-                            <button
-                                onClick={() => {
-                                    const next = !autoHttpsEnabled;
-                                    toggleHttps.mutate(
-                                        { domainId: domain.id, enabled: next },
-                                        { onSuccess: () => setAutoHttpsEnabled(next) }
-                                    );
-                                }}
-                                disabled={toggleHttps.isPending}
-                                className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
-                            >
-                                <Zap size={12} />
-                                <span>{autoHttpsEnabled ? 'Disable Auto-HTTPS' : 'Enable Auto-HTTPS'}</span>
-                            </button>
-                        )}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#1F1F1F] pt-3">
+                        <div className="flex flex-wrap gap-2">
+                            {!sslIssued && (
+                                <button
+                                    onClick={() => issueSSL.mutate(domain.id)}
+                                    disabled={issueSSL.isPending}
+                                    className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                                >
+                                    {issueSSL.isPending ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />}
+                                    <span>Trigger ACME SSL Issue</span>
+                                </button>
+                            )}
+                            {sslIssued && (
+                                <button
+                                    onClick={() => {
+                                        const next = !autoHttpsEnabled;
+                                        toggleHttps.mutate(
+                                            { domainId: domain.id, enabled: next },
+                                            { onSuccess: () => setAutoHttpsEnabled(next) }
+                                        );
+                                    }}
+                                    disabled={toggleHttps.isPending}
+                                    className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
+                                >
+                                    <Zap size={12} className="text-amber-400" />
+                                    <span>{autoHttpsEnabled ? 'Disable Auto-HTTPS' : 'Enable Auto-HTTPS'}</span>
+                                </button>
+                            )}
+                        </div>
                         <button
                             onClick={() => remove.mutate(domain.id)}
                             disabled={remove.isPending}
                             className="flex h-7 items-center gap-1 rounded border border-rose-900/40 bg-rose-950/20 px-2.5 text-xs text-rose-300 hover:bg-rose-900/30 disabled:opacity-50"
                         >
                             <Trash2 size={12} />
-                            <span>Remove</span>
+                            <span>Detach Domain</span>
                         </button>
                     </div>
                 </div>

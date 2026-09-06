@@ -143,29 +143,37 @@ export default function DashboardPage() {
                                 <thead className="border-b border-[#1F1F1F] bg-[#111111] text-[#666666]">
                                     <tr>
                                         <th className="px-3.5 py-2.5 font-semibold">NAME / REPOSITORY</th>
-                                        <th className="px-3.5 py-2.5 font-semibold">PORT</th>
+                                        <th className="px-3.5 py-2.5 font-semibold">INGRESS / DOMAIN</th>
                                         <th className="px-3.5 py-2.5 font-semibold">UPDATED</th>
                                         <th className="px-3.5 py-2.5 font-semibold text-right">STATUS</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#1F1F1F] text-[#A1A1A1]">
-                                    {deploymentList.slice(0, 8).map(d => (
-                                        <tr key={d.id} className="hover:bg-[#111111]/50 transition-colors">
-                                            <td className="px-3.5 py-3">
-                                                <Link href={`/deployments/${d.id}`} className="font-semibold text-white hover:underline">
-                                                    {d.name || d.project?.name || 'Untitled'}
-                                                </Link>
-                                                <p className="text-[10px] text-[#666666] truncate max-w-sm">
-                                                    {d.project?.repositoryUrl?.replace('upload://', '') || 'Direct Upload'}
-                                                </p>
-                                            </td>
-                                            <td className="px-3.5 py-3 text-[#A1A1A1]">{d.port ? `:${d.port}` : '—'}</td>
-                                            <td className="px-3.5 py-3 text-[#666666]">{formatDate(d.updatedAt)}</td>
-                                            <td className="px-3.5 py-3 text-right">
-                                                <StatusTag status={d.status} />
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {deploymentList.slice(0, 8).map(d => {
+                                        const safeName = d.project?.name ? d.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : d.name ? d.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : 'app';
+                                        const shortId = d.id.slice(0, 8);
+                                        const effectiveDomain = d.domain || (d.vps?.ipAddress ? `${safeName}-${shortId}.${d.vps.ipAddress}.sslip.io` : null);
+
+                                        return (
+                                            <tr key={d.id} className="hover:bg-[#111111]/50 transition-colors">
+                                                <td className="px-3.5 py-3">
+                                                    <Link href={`/deployments/${d.id}`} className="font-semibold text-white hover:underline">
+                                                        {d.name || d.project?.name || 'Untitled'}
+                                                    </Link>
+                                                    <p className="text-[10px] text-[#666666] truncate max-w-sm">
+                                                        {d.project?.repositoryUrl?.replace('upload://', '') || 'Direct Upload'}
+                                                    </p>
+                                                </td>
+                                                <td className="px-3.5 py-3 text-emerald-400 font-mono text-[11px] truncate max-w-xs">
+                                                    {effectiveDomain ? `https://${effectiveDomain}` : 'Traefik Ingress'}
+                                                </td>
+                                                <td className="px-3.5 py-3 text-[#666666]">{formatDate(d.updatedAt)}</td>
+                                                <td className="px-3.5 py-3 text-right">
+                                                    <StatusTag status={d.status} />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

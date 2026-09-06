@@ -1,9 +1,10 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { Activity, CheckCircle2, Info, KeyRound, LockKeyhole, RefreshCw, Server, Trash2, WifiOff, XCircle } from 'lucide-react';
+import { Activity, CheckCircle2, Info, KeyRound, LockKeyhole, RefreshCw, Server, Trash2, WifiOff, XCircle, ShieldCheck, Network, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
+import { useBootstrapVps } from '@/hooks/useDeployForgeData';
 import type { Vps } from '@/lib/api/types';
 
 interface VpsListTabProps {
@@ -51,6 +52,8 @@ function StatusTag({ status }: { status?: string }) {
 }
 
 export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, onRetry, testingId, deletingId, onTest, onDelete, onViewInfo, onMonitor }: VpsListTabProps) {
+    const bootstrapVps = useBootstrapVps();
+
     if (isError) {
         return (
             <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-6 font-mono text-xs text-rose-300 space-y-2">
@@ -89,6 +92,7 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                 const ram = Math.round(health?.memoryUsage || 0);
                 const disk = Math.round(health?.diskUsage || 0);
                 const lastSeen = server.lastCheckedAt || health?.checkedAt || server.updatedAt;
+                const isBootstrapping = bootstrapVps.isPending && bootstrapVps.variables?.id === server.id;
 
                 return (
                     <div key={server.id} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 flex flex-col justify-between space-y-4 hover:border-[#333333] transition-colors">
@@ -102,6 +106,15 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                                 <p className="mt-0.5 text-xs text-[#A1A1A1] truncate">{server.ipAddress}:{server.port}</p>
                             </div>
                             <StatusTag status={server.status} />
+                        </div>
+
+                        {/* Ingress Gateway Chip */}
+                        <div className="rounded border border-[#1F1F1F] bg-[#000000] p-2 flex items-center justify-between text-[10px]">
+                            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                                <ShieldCheck size={12} className="shrink-0" />
+                                <span>Traefik Gateway Ready</span>
+                            </div>
+                            <span className="text-[#666666] font-mono">deployforge-net</span>
                         </div>
 
                         {/* Resource Health Metrics */}
@@ -125,8 +138,8 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                                 <span className="text-white">{server.username}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-[#666666]">AUTH TYPE</span>
-                                <span className="text-white uppercase">{server.authType}</span>
+                                <span className="text-[#666666]">MULTI-TENANT</span>
+                                <span className="text-emerald-400 font-semibold">ENABLED</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-[#666666]">LAST PROBE</span>
@@ -135,7 +148,7 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[#1F1F1F]">
+                        <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-[#1F1F1F]">
                             <button
                                 onClick={() => onViewInfo(server)}
                                 title="Server Info"
@@ -151,9 +164,17 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                                 <Activity size={13} />
                             </button>
                             <button
+                                onClick={() => bootstrapVps.mutate({ id: server.id })}
+                                disabled={isBootstrapping}
+                                title="Bootstrap / Repair Ingress Gateway"
+                                className="flex h-8 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-cyan-400 hover:text-cyan-300 hover:bg-[#1A1A1A] disabled:opacity-50"
+                            >
+                                <Zap size={13} className={isBootstrapping ? 'animate-spin' : ''} />
+                            </button>
+                            <button
                                 onClick={() => onTest(server.id)}
                                 disabled={testingId === server.id}
-                                title="Test Connection"
+                                title="Test SSH Connection"
                                 className="flex h-8 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white hover:bg-[#1A1A1A] disabled:opacity-50"
                             >
                                 <RefreshCw size={13} className={testingId === server.id ? 'animate-spin' : ''} />

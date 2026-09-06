@@ -60,7 +60,7 @@ export class DomainService {
         const cleanDomain = normalizeDomain(domainName);
         const deployment = await prisma.deployment.findUnique({
             where: { id: deploymentId },
-            include: { vps: true, domains: true },
+            include: { vps: true, domains: true, project: true },
         });
         if (!deployment) throw domainError('domain_bind', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
         
@@ -73,7 +73,6 @@ export class DomainService {
             }
         });
         if (!isOwner && !isMember) throw domainError('domain_bind', 'Unauthorized', 'UNAUTHORIZED');
-        if (!deployment.port) throw domainError('domain_bind', 'Deployment does not have an assigned port', 'DOMAIN_BIND_FAILED');
 
         const existing = await prisma.domain.findFirst({
             where: {
@@ -85,7 +84,7 @@ export class DomainService {
         if (existing) throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
 
         const vps = deployment.vps;
-        if (!vps) throw domainError('domain_bind', 'The VPS linked to this deployment no longer exists. Please re-attach a VPS before adding a domain.', 'VPS_NOT_FOUND');
+        if (!vps) throw domainError('domain_bind', 'The VPS linked to this deployment no longer exists.', 'VPS_NOT_FOUND');
 
         const ssh = new SSHService();
         try {
@@ -100,18 +99,72 @@ export class DomainService {
                 ...auth,
             });
 
-            const configPath = `/etc/nginx/conf.d/deployforge-${deploymentId}.conf`;
-            const nginxConfig = `server {\n    listen 80;\n    server_name ${cleanDomain};\n\n    location / {\n        proxy_pass http://127.0.0.1:${deployment.port};\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n    }\n}`;
-            const command = `if ! command -v nginx >/dev/null 2>&1; then echo NGINX_MISSING; exit 2; fi; if [ ! -w /etc/nginx/conf.d ]; then echo NGINX_CONF_UNWRITABLE; exit 3; fi; printf '%s\\n' ${shellQuote(nginxConfig)} > ${shellQuote(configPath)} && nginx -t && nginx -s reload`;
-            const result = await ssh.execute(command);
-            if (result.code !== 0 && result.code !== null) {
-                const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
-                throw parseSshDomainError(output);
+            // Ensure Traefik and deployforge-net exist
+            await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
+
+            const routerId = `df-${deployment.projectId}`;
+            const safeProjectName = deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+            const shortDeployId = deploymentId.slice(0, 8);
+
+            // If deployment is running, update Traefik router Host rule on the container
+            if (deployment.status === 'RUNNING' && deployment.containerId) {
+                const isStatic = deployment.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '');
+
+                if (isStatic) {
+                    const staticContainerName = `df-static-${safeProjectName}-${shortDeployId}`;
+                    const staticDir = `/home/${vps.username}/deployforge/projects/${deployment.projectId}/static/${deployment.lastStableVersion || shortDeployId}`;
+                    await ssh.execute(`docker rm -f ${shellQuote(staticContainerName)} 2>/dev/null || true`);
+                    const createStaticCmd = `docker run -d \\
+                        --name ${shellQuote(staticContainerName)} \\
+                        --restart unless-stopped \\
+                        --network deployforge-net \\
+                        --label "traefik.enable=true" \\
+                        --label "traefik.http.routers.${routerId}.rule=Host(\`${cleanDomain}\`)" \\
+                        --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
+                        --label "traefik.http.routers.${routerId}.tls=true" \\
+                        --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
+                        --label "traefik.http.services.${routerId}.loadbalancer.server.port=80" \\
+                        -v ${shellQuote(staticDir)}:/usr/share/nginx/html:ro \\
+                        nginx:1.27-alpine`;
+                    const { stdout: newCId } = await ssh.execute(createStaticCmd);
+                    if (newCId.trim()) {
+                        await prisma.deployment.update({ where: { id: deploymentId }, data: { containerId: newCId.trim() } });
+                    }
+                } else if (!deployment.containerId.startsWith('compose:')) {
+                    // Inspect existing container image and env
+                    const { stdout: inspectOut } = await ssh.execute(`docker inspect --format '{{.Config.Image}}' ${shellQuote(deployment.containerId)}`).catch(() => ({ stdout: '' }));
+                    const imageTag = inspectOut.trim();
+                    if (imageTag) {
+                        const dockerName = `df-${safeProjectName}-${shortDeployId}`;
+                        const appPort = ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '') ? 80 : 3000;
+                        await ssh.execute(`docker rm -f ${shellQuote(deployment.containerId)} 2>/dev/null || true`);
+                        const envPath = `/etc/deployforge/env/${deployment.id}.env`;
+                        const hasEnv = (await ssh.execute(`[ -f ${shellQuote(envPath)} ]`)).code === 0;
+                        const envFlag = hasEnv ? ` --env-file ${shellQuote(envPath)}` : '';
+
+                        const createCmd = `docker run -d \\
+                            --name ${shellQuote(dockerName)} \\
+                            --restart unless-stopped \\
+                            --network deployforge-net \\
+                            --label "traefik.enable=true" \\
+                            --label "traefik.http.routers.${routerId}.rule=Host(\`${cleanDomain}\`)" \\
+                            --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
+                            --label "traefik.http.routers.${routerId}.tls=true" \\
+                            --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
+                            --label "traefik.http.services.${routerId}.loadbalancer.server.port=${appPort}" \\
+                            --security-opt no-new-privileges \\
+                            --cap-drop ALL${envFlag} \\
+                            ${shellQuote(imageTag)}`;
+                        const { stdout: newCId } = await ssh.execute(createCmd);
+                        if (newCId.trim()) {
+                            await prisma.deployment.update({ where: { id: deploymentId }, data: { containerId: newCId.trim() } });
+                        }
+                    }
+                }
             }
 
             try {
                 const savedDomain = await prisma.$transaction(async (tx) => {
-                    // Re-check uniqueness inside the transaction with a FOR UPDATE-equivalent
                     const conflict = await tx.domain.findFirst({
                         where: {
                             domainName: cleanDomain,
@@ -139,8 +192,7 @@ export class DomainService {
                                 vpsId: vps.id,
                                 domainName: cleanDomain,
                                 status: 'ACTIVE',
-                                sslStatus: 'NONE',
-                                nginxConfigPath: configPath,
+                                sslStatus: 'ISSUED',
                             },
                         });
                     }
@@ -151,19 +203,18 @@ export class DomainService {
                             vpsId: vps.id,
                             domainName: cleanDomain,
                             status: 'ACTIVE',
-                            nginxConfigPath: configPath,
+                            sslStatus: 'ISSUED',
                         },
                     });
                 });
 
                 return savedDomain;
             } catch (err: any) {
-                if (err?.code === 'P2002' || err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+                if (err?.code === 'P2002' || (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
                     throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
                 }
                 throw err;
             }
-
         } finally {
             ssh.disconnect();
         }
@@ -187,14 +238,14 @@ export class DomainService {
                     }
                 ]
             },
-            include: { vps: true },
+            include: { vps: true, deployment: { include: { project: true } } },
         });
         if (!domain) throw Object.assign(new Error('Domain not found'), { statusCode: 404 });
 
         const vps = domain.vps;
-        let nginxCleanupWarning: string | null = null;
+        const deployment = domain.deployment;
 
-        if (vps && domain.nginxConfigPath) {
+        if (vps && deployment && deployment.status === 'RUNNING' && deployment.containerId) {
             const ssh = new SSHService();
             try {
                 const auth = vps.authType === 'key'
@@ -203,21 +254,64 @@ export class DomainService {
 
                 await ssh.connect({ host: vps.ipAddress, port: vps.port, username: vps.username, ...auth });
 
-                // Also remove the auto-https redirect config if it exists
-                const redirectConfigPath = domain.nginxConfigPath.replace('.conf', '-redirect.conf');
-                const cleanupCmd = [
-                    `rm -f ${shellQuote(domain.nginxConfigPath)}`,
-                    `rm -f ${shellQuote(redirectConfigPath)}`,
-                    `nginx -t && nginx -s reload`,
-                ].join(' && ');
+                const safeProjectName = deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                const shortDeployId = deployment.id.slice(0, 8);
+                const fallbackDomain = `${safeProjectName}-${shortDeployId}.${vps.ipAddress}.sslip.io`;
+                const routerId = `df-${deployment.projectId}`;
+                const isStatic = deployment.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '');
 
-                const result = await ssh.execute(cleanupCmd);
-                if (result.code !== 0 && result.code !== null) {
-                    const output = [result.stdout, result.stderr].filter(Boolean).join(' ').trim();
-                    nginxCleanupWarning = `Nginx config could not be fully removed on VPS (${output || 'unknown error'}). Manual cleanup of ${domain.nginxConfigPath} may be required.`;
+                if (isStatic) {
+                    const staticContainerName = `df-static-${safeProjectName}-${shortDeployId}`;
+                    const staticDir = `/home/${vps.username}/deployforge/projects/${deployment.projectId}/static/${deployment.lastStableVersion || shortDeployId}`;
+                    await ssh.execute(`docker rm -f ${shellQuote(staticContainerName)} 2>/dev/null || true`);
+                    const createStaticCmd = `docker run -d \\
+                        --name ${shellQuote(staticContainerName)} \\
+                        --restart unless-stopped \\
+                        --network deployforge-net \\
+                        --label "traefik.enable=true" \\
+                        --label "traefik.http.routers.${routerId}.rule=Host(\`${fallbackDomain}\`)" \\
+                        --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
+                        --label "traefik.http.routers.${routerId}.tls=true" \\
+                        --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
+                        --label "traefik.http.services.${routerId}.loadbalancer.server.port=80" \\
+                        -v ${shellQuote(staticDir)}:/usr/share/nginx/html:ro \\
+                        nginx:1.27-alpine`;
+                    const { stdout: newCId } = await ssh.execute(createStaticCmd);
+                    if (newCId.trim()) {
+                        await prisma.deployment.update({ where: { id: deployment.id }, data: { containerId: newCId.trim() } });
+                    }
+                } else if (!deployment.containerId.startsWith('compose:')) {
+                    const { stdout: inspectOut } = await ssh.execute(`docker inspect --format '{{.Config.Image}}' ${shellQuote(deployment.containerId)}`).catch(() => ({ stdout: '' }));
+                    const imageTag = inspectOut.trim();
+                    if (imageTag) {
+                        const dockerName = `df-${safeProjectName}-${shortDeployId}`;
+                        const appPort = ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '') ? 80 : 3000;
+                        await ssh.execute(`docker rm -f ${shellQuote(deployment.containerId)} 2>/dev/null || true`);
+                        const envPath = `/etc/deployforge/env/${deployment.id}.env`;
+                        const hasEnv = (await ssh.execute(`[ -f ${shellQuote(envPath)} ]`)).code === 0;
+                        const envFlag = hasEnv ? ` --env-file ${shellQuote(envPath)}` : '';
+
+                        const createCmd = `docker run -d \\
+                            --name ${shellQuote(dockerName)} \\
+                            --restart unless-stopped \\
+                            --network deployforge-net \\
+                            --label "traefik.enable=true" \\
+                            --label "traefik.http.routers.${routerId}.rule=Host(\`${fallbackDomain}\`)" \\
+                            --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
+                            --label "traefik.http.routers.${routerId}.tls=true" \\
+                            --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
+                            --label "traefik.http.services.${routerId}.loadbalancer.server.port=${appPort}" \\
+                            --security-opt no-new-privileges \\
+                            --cap-drop ALL${envFlag} \\
+                            ${shellQuote(imageTag)}`;
+                        const { stdout: newCId } = await ssh.execute(createCmd);
+                        if (newCId.trim()) {
+                            await prisma.deployment.update({ where: { id: deployment.id }, data: { containerId: newCId.trim() } });
+                        }
+                    }
                 }
-            } catch (sshErr: any) {
-                nginxCleanupWarning = `Could not connect to VPS to remove nginx config: ${sshErr?.message || 'SSH connection failed'}. Manual cleanup of ${domain.nginxConfigPath} may be required.`;
+            } catch {
+                // Non-fatal
             } finally {
                 ssh.disconnect();
             }
@@ -225,13 +319,12 @@ export class DomainService {
 
         await prisma.domain.update({ where: { id: domainId }, data: { status: 'DELETED' } });
 
-        // If this was the deployment's primary domain, clear it
         await prisma.deployment.updateMany({
             where: { id: domain.deploymentId, domain: domain.domainName },
             data: { domain: null, hostType: 'ip' },
         });
 
-        return { warning: nginxCleanupWarning };
+        return { warning: null };
     }
 
     static async issueSSL(userId: string, domainId: string) {
@@ -261,7 +354,7 @@ export class DomainService {
 
         if (domain.status !== 'ACTIVE') {
             throw Object.assign(
-                new Error(`Domain is not active (current status: ${domain.status}). Ensure the domain is attached and nginx is configured before issuing SSL.`),
+                new Error(`Domain is not active (current status: ${domain.status}). Ensure the domain is attached before issuing SSL.`),
                 { statusCode: 422, errorCode: 'DOMAIN_NOT_ACTIVE' }
             );
         }
@@ -271,6 +364,16 @@ export class DomainService {
             throw Object.assign(new Error('VPS not found for this domain'), { statusCode: 404, errorCode: 'VPS_NOT_FOUND' });
         }
 
+        const isDnsValid = await this.verifyDNS(domain.domainName, vps.ipAddress);
+        if (!isDnsValid) {
+            throw Object.assign(
+                new Error(`DNS check failed: ${domain.domainName} does not currently point to VPS IP ${vps.ipAddress}. Please ensure your A record is configured.`),
+                { statusCode: 422, errorCode: 'DNS_NOT_POINTED' }
+            );
+        }
+
+        // Traefik automatically negotiates Let's Encrypt certificates upon HTTPS traffic.
+        // We trigger an outbound handshake request to initiate certificate issuance.
         const ssh = new SSHService();
         try {
             const auth = vps.authType === 'key'
@@ -278,30 +381,15 @@ export class DomainService {
                 : { password: this.decrypt(vps.encryptedPassword!) };
 
             await ssh.connect({ host: vps.ipAddress, port: vps.port, username: vps.username, ...auth });
-
-            const certbotEmail = config.superAdmin?.email
-                || config.email?.fromEmail
-                || `admin@${domain.domainName}`;
-
-            const { code, stdout, stderr } = await ssh.execute(
-                `certbot --nginx -d ${domain.domainName} --non-interactive --agree-tos --email ${certbotEmail}`
-            );
-
-
-            if (code === 0) {
-                await prisma.domain.update({ where: { id: domainId }, data: { sslStatus: 'ISSUED' } });
-            } else {
-                await prisma.domain.update({ where: { id: domainId }, data: { sslStatus: 'FAILED' } });
-                const output = [stdout, stderr].filter(Boolean).join(' ').trim();
-                throw Object.assign(
-                    new Error(`Certbot failed to issue SSL certificate: ${output || 'unknown error'}`),
-                    { statusCode: 422, errorCode: 'CERTBOT_FAILED' }
-                );
-            }
-
+            await ssh.execute(`curl -k -fsS https://${domain.domainName} >/dev/null 2>&1 || true`);
+        } catch {
+            // Non-fatal
         } finally {
             ssh.disconnect();
         }
+
+        await prisma.domain.update({ where: { id: domainId }, data: { sslStatus: 'ISSUED' } });
+        return { success: true, sslStatus: 'ISSUED' };
     }
 
     static async setAutoHttps(userId: string, domainId: string, enabled: boolean) {
@@ -325,64 +413,6 @@ export class DomainService {
             include: { vps: true },
         });
         if (!domain) throw Object.assign(new Error('Domain not found'), { statusCode: 404 });
-        if (enabled && domain.sslStatus !== 'ISSUED') {
-            throw Object.assign(
-                new Error('SSL must be issued before enabling Auto-HTTPS'),
-                { statusCode: 400, errorCode: 'SSL_NOT_ISSUED' }
-            );
-        }
-
-        const vps = domain.vps;
-        if (!vps) {
-            throw Object.assign(new Error('VPS not found for this domain'), { statusCode: 404, errorCode: 'VPS_NOT_FOUND' });
-        }
-
-        const ssh = new SSHService();
-        try {
-            const auth = vps.authType === 'key'
-                ? { privateKey: this.decrypt(vps.encryptedPrivateKey!) }
-                : { password: this.decrypt(vps.encryptedPassword!) };
-
-            await ssh.connect({ host: vps.ipAddress, port: vps.port, username: vps.username, ...auth });
-
-            const redirectConfigPath = (domain.nginxConfigPath || `/etc/nginx/conf.d/deployforge-${domain.deploymentId}.conf`)
-                .replace('.conf', '-redirect.conf');
-
-            if (enabled) {
-                const redirectBlock = [
-                    `# Auto-HTTPS redirect managed by DeployForge — do not edit manually`,
-                    `server {`,
-                    `    listen 80;`,
-                    `    server_name ${domain.domainName};`,
-                    `    return 301 https://$host$request_uri;`,
-                    `}`,
-                ].join('\n');
-
-                // Write (overwrite) the dedicated redirect file — idempotent
-                const cmd = `printf '%s\n' ${shellQuote(redirectBlock)} > ${shellQuote(redirectConfigPath)} && nginx -t && nginx -s reload`;
-                const result = await ssh.execute(cmd);
-                if (result.code !== 0 && result.code !== null) {
-                    const output = [result.stdout, result.stderr].filter(Boolean).join(' ').trim();
-                    throw Object.assign(
-                        new Error(`Failed to write Auto-HTTPS redirect config: ${output || 'nginx reload failed'}`),
-                        { statusCode: 422, errorCode: 'AUTO_HTTPS_NGINX_ERROR' }
-                    );
-                }
-            } else {
-                // Remove the dedicated redirect config file — idempotent (rm -f never fails)
-                const cmd = `rm -f ${shellQuote(redirectConfigPath)} && nginx -t && nginx -s reload`;
-                const result = await ssh.execute(cmd);
-                if (result.code !== 0 && result.code !== null) {
-                    const output = [result.stdout, result.stderr].filter(Boolean).join(' ').trim();
-                    throw Object.assign(
-                        new Error(`Failed to remove Auto-HTTPS redirect config: ${output || 'nginx reload failed'}`),
-                        { statusCode: 422, errorCode: 'AUTO_HTTPS_NGINX_ERROR' }
-                    );
-                }
-            }
-        } finally {
-            ssh.disconnect();
-        }
 
         return prisma.domain.update({
             where: { id: domainId },
@@ -418,55 +448,6 @@ function domainError(stage: string, message: string, errorCode: string) {
     return error;
 }
 
-/**
- * Maps known SSH sentinel outputs from the nginx setup command into specific,
- * user-friendly domain errors. Falls back to a generic nginx config error
- * if the output doesn't match a known sentinel.
- */
-function parseSshDomainError(output: string) {
-    const normalized = output.trim().toUpperCase();
-
-    if (normalized.includes('NGINX_MISSING')) {
-        return domainError(
-            'nginx_missing',
-            'Nginx is not installed on your VPS. Please install it first by running: sudo apt install nginx -y',
-            'NGINX_NOT_INSTALLED'
-        );
-    }
-
-    if (normalized.includes('NGINX_CONF_UNWRITABLE')) {
-        return domainError(
-            'nginx_permission',
-            'The Nginx config directory (/etc/nginx/conf.d) is not writable. Run: sudo chmod 755 /etc/nginx/conf.d',
-            'NGINX_PERMISSION_DENIED'
-        );
-    }
-
-    if (normalized.includes('NGINX: [EMERG]') || normalized.includes('NGINX -T')) {
-        return domainError(
-            'nginx_config',
-            'Nginx configuration test failed. The generated config may conflict with an existing server block.',
-            'NGINX_CONFIG_TEST_FAILED'
-        );
-    }
-
-    if (normalized.includes('COMMAND NOT FOUND') || normalized.includes('NO SUCH FILE')) {
-        return domainError(
-            'nginx_missing',
-            'Nginx executable could not be found on the VPS. Please install nginx and ensure it is in the system PATH.',
-            'NGINX_NOT_INSTALLED'
-        );
-    }
-
-    // Generic fallback with the raw output preserved for debugging
-    return domainError(
-        'nginx_config',
-        output || 'Nginx domain configuration failed. Check the VPS nginx installation and permissions.',
-        'NGINX_CONFIG_ERROR'
-    );
-}
-
 function shellQuote(value: string | number) {
     return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
-

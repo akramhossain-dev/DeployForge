@@ -545,6 +545,20 @@ export function useDeleteVps() {
     });
 }
 
+export function useBootstrapVps() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, email }: { id: string; email?: string }) =>
+            api.post<{ success: boolean; message: string }>(`/vps/${id}/bootstrap`, { email }),
+        onSuccess: (data) => {
+            handleMutationSuccess('Gateway Ready', data?.message || 'VPS Traefik Ingress Gateway and deployforge-net initialized successfully.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.vps });
+        },
+        onError: (err) => handleMutationError('Gateway Setup Failed', err),
+    });
+}
+
 export function useVpsServerInfo(vpsId?: string) {
     return useQuery({
         queryKey: ['vps', vpsId, 'info'] as const,

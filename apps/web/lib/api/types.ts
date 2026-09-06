@@ -78,8 +78,18 @@ export type Domain = {
     status: string;
     sslStatus?: string;
     nginxConfigPath?: string | null;
-    /** Whether the HTTP → HTTPS Auto-HTTPS redirect is currently active on the VPS nginx config. */
+    /** Whether the HTTP → HTTPS Auto-HTTPS redirect is currently active on the Traefik/nginx config. */
     autoHttps?: boolean;
+    deployment?: {
+        id: string;
+        name?: string | null;
+        port?: number | null;
+        vpsId?: string;
+        vps?: {
+            ipAddress?: string;
+            name?: string;
+        } | null;
+    } | null;
     createdAt: string;
     updatedAt: string;
 };

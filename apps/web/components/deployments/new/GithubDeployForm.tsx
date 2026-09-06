@@ -328,13 +328,13 @@ export function GithubDeployForm() {
                     setHostType={setHostType}
                     domainName={domainName}
                     setDomainName={setDomainName}
-                    ipPreview={selectedVps ? `http://${selectedVps.ipAddress}:auto` : 'Select a VPS to preview IP host binding'}
+                    ipPreview={selectedVps ? `${(selectedRepo?.name || 'app').toLowerCase().replace(/[^a-z0-9-]/g, '-')}-preview.${selectedVps.ipAddress}.sslip.io` : 'Select a VPS node to preview ingress URL'}
                     error={errors.domain}
                 />
             ) : (
                 <div className="rounded-md border border-[#1F1F1F] bg-[#111111] p-4 text-xs text-[#A1A1A1]">
                     <p className="font-semibold text-white">Sandbox Ephemeral Networking</p>
-                    <p className="mt-1">Sandbox runs use direct host port routing and bypass Nginx proxying and domain attachments.</p>
+                    <p className="mt-1">Sandbox runs use direct host port routing and bypass Traefik Ingress gateway and domain attachments.</p>
                 </div>
             )}
 

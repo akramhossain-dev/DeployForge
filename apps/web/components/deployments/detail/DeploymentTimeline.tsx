@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Copy, Check, AlertCircle } from 'lucide-react';
+import { ExternalLink, Copy, Check, AlertCircle, ShieldCheck, Lock } from 'lucide-react';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
 import { useToastStore } from '@/lib/store/useToastStore';
@@ -55,8 +55,11 @@ export function DeploymentTimeline({
                     <p className="font-bold text-white truncate">{current.commitHash ? current.commitHash.slice(0, 7) : 'head'}</p>
                 </div>
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
-                    <p className="text-[10px] uppercase text-[#666666] truncate">HOST PORT</p>
-                    <p className="font-bold text-white truncate">{isStatic ? 'Static' : current.port ? `:${current.port}` : '—'}</p>
+                    <p className="text-[10px] uppercase text-[#666666] truncate">INGRESS GATEWAY</p>
+                    <p className="font-bold text-emerald-400 truncate flex items-center gap-1">
+                        <Lock size={11} className="shrink-0" />
+                        <span>Traefik :443</span>
+                    </p>
                 </div>
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
                     <p className="text-[10px] uppercase text-[#666666] truncate">CREATED</p>
@@ -67,8 +70,16 @@ export function DeploymentTimeline({
             {/* ── Active URL Banner ── */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3">
                 <div className="min-w-0 flex-1">
-                    <p className="text-[10px] uppercase text-[#666666]">ACTIVE URL</p>
-                    <p className="mt-0.5 font-bold text-white truncate font-mono text-xs">{activeUrl || 'Pending host assignment…'}</p>
+                    <div className="flex items-center gap-2">
+                        <p className="text-[10px] uppercase text-[#666666]">PUBLIC INGRESS ENDPOINT</p>
+                        <span className="rounded border border-[#1F1F1F] bg-[#111111] px-1.5 py-0.2 text-[9px] text-emerald-400 font-bold uppercase">
+                            Zero Port Exposure
+                        </span>
+                    </div>
+                    <p className="mt-0.5 font-bold text-white truncate font-mono text-xs flex items-center gap-1.5">
+                        <ShieldCheck size={13} className="text-emerald-400 shrink-0" />
+                        <span>{activeUrl || 'Pending host assignment…'}</span>
+                    </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                     {activeUrl && (

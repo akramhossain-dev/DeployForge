@@ -220,6 +220,21 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
             return sendVpsError(reply, error);
         }
     });
+
+    fastify.post('/:id/bootstrap', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: sshAttemptRateLimit },
+    }, async (request, reply) => {
+        try {
+            const { id } = vpsParamsSchema.parse(request.params);
+            const body = request.body as { email?: string } | undefined;
+            const result = await VPSService.bootstrapVPS(request.user!.id, id, body?.email);
+            await AccountService.logAudit(request.user!.id, 'VPS_BOOTSTRAP', `Bootstrapped Traefik on VPS ID: ${id}`, request.ip, request.headers['user-agent']);
+            return { success: true, data: result };
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
+    });
     fastify.get('/:id/info', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 6, timeWindow: '1 minute' } },

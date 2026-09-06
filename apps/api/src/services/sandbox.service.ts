@@ -8,7 +8,6 @@ const encryptionService = new EncryptionService(config.encryption.key);
 
 export class SandboxService {
     static async analyze(userId: string, deploymentId: string) {
-        
         const deployment = await prisma.deployment.findFirst({
             where: {
                 id: deploymentId,
@@ -18,7 +17,6 @@ export class SandboxService {
         });
 
         if (!deployment) {
-            
             await verifyDeploymentOwnership(userId, deploymentId);
             throw new Error('Deployment not found');
         }
@@ -42,9 +40,9 @@ export class SandboxService {
                 ...auth,
             });
 
-            const workDir = `/home/${vps.username}/deployments/${deployment.project.name}`;
+            const workDir = `/home/${vps.username}/deployforge/projects/${deployment.projectId}/current`;
 
-            const { stdout: fileList } = await ssh.execute(`ls -F ${workDir}`);
+            const { stdout: fileList } = await ssh.execute(`ls -F ${workDir} 2>/dev/null || true`);
             const files = fileList.split('\n').map(f => f.trim().replace('*', '').replace('/', ''));
 
             const hasPackageJson = files.includes('package.json');
@@ -58,7 +56,7 @@ export class SandboxService {
                 score -= 20;
             }
 
-            const { stdout: dangerousCode } = await ssh.execute(`grep -rnE "eval\\(|exec\\(|child_process|rm -rf" ${workDir} --exclude-dir=node_modules || true`);
+            const { stdout: dangerousCode } = await ssh.execute(`grep -rnE "eval\\(|exec\\(|child_process|rm -rf" ${workDir} --exclude-dir=node_modules 2>/dev/null || true`);
             if (dangerousCode.trim()) {
                 issues.push('Dangerous code patterns detected (eval, exec, or rm -rf)');
                 score -= 25;
@@ -68,13 +66,6 @@ export class SandboxService {
             const freeMB = parseInt(memFree.trim());
             if (freeMB < 512) {
                 issues.push('Low VPS memory available (< 512MB)');
-                score -= 10;
-            }
-
-            const port = deployment.port || 3000;
-            const { stdout: portCheck } = await ssh.execute(`netstat -tuln | grep :${port} || true`);
-            if (portCheck.trim()) {
-                issues.push(`Port ${port} is already in use on the VPS`);
                 score -= 10;
             }
 
