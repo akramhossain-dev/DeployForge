@@ -65,7 +65,7 @@ export function InstallRuntimeModal({ vps, open, onClose, onSuccess }: InstallRu
         setLogs([]);
 
         try {
-            const result = await install.mutateAsync([...selected]);
+            const result = await install.mutateAsync(Array.from(selected));
             setLogs(result.logs || []);
             setSuccess(result.verification?.every((v: any) => v.ok) ?? true);
             setPhase('done');
