@@ -80,7 +80,104 @@ export class VPSService {
             logger.warn({ vpsId: vps.id, err: error }, 'Initial VPS health check failed');
         });
 
+        this.bootstrapVPS(userId, vps.id).catch((error) => {
+            logger.warn({ vpsId: vps.id, err: error }, 'Initial VPS Traefik bootstrap failed');
+        });
+
         return this.sanitize(vps);
+    }
+
+    static async bootstrapVPS(userId: string, vpsId: string, email?: string) {
+        const vps = await prisma.vPS.findFirst({
+            where: {
+                id: vpsId,
+                OR: [
+                    { userId },
+                    {
+                        deployments: {
+                            some: {
+                                project: {
+                                    OR: [
+                                        { userId },
+                                        { members: { some: { userId, role: { in: ['OWNER', 'ADMIN'] } } } }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        });
+        if (!vps) throw new VPSConnectionFailure('VPS not found', 'VPS_NOT_FOUND');
+
+        const ssh = new SSHService();
+        try {
+            await ssh.connect({
+                host: vps.ipAddress,
+                port: vps.port,
+                username: vps.username,
+                ...buildStoredAuth(vps),
+            });
+
+            const acmeEmail = email || config.email?.fromEmail || `admin@${vps.ipAddress}.sslip.io`;
+
+            // 1. Ensure Docker Engine & Compose plugin
+            const dockerCheck = await ssh.execute('command -v docker >/dev/null 2>&1');
+            if (dockerCheck.code !== 0) {
+                logger.info({ vpsId }, 'Installing Docker on VPS...');
+                await ssh.execute('export DEBIAN_FRONTEND=noninteractive && curl -fsSL https://get.docker.com | sh && systemctl enable --now docker', 300000);
+            }
+
+            // 2. Create external bridge network
+            await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
+
+            // 3. Prepare ACME persistent storage
+            await ssh.execute('mkdir -p /etc/deployforge/traefik/acme && touch /etc/deployforge/traefik/acme/acme.json && chmod 600 /etc/deployforge/traefik/acme/acme.json');
+
+            // 4. Ensure deployforge-traefik container
+            const traefikRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-traefik 2>/dev/null");
+            if (traefikRunning.stdout.trim() !== 'true') {
+                await ssh.execute('docker rm -f deployforge-traefik 2>/dev/null || true');
+                const runTraefikCmd = `docker run -d \\
+                    --name deployforge-traefik \\
+                    --restart always \\
+                    --network deployforge-net \\
+                    -p 80:80 \\
+                    -p 443:443 \\
+                    -v /var/run/docker.sock:/var/run/docker.sock:ro \\
+                    -v /etc/deployforge/traefik/acme/acme.json:/acme.json \\
+                    traefik:v3.1 \\
+                    --global.sendAnonymousUsage=false \\
+                    --api.dashboard=false \\
+                    --providers.docker=true \\
+                    --providers.docker.exposedbydefault=false \\
+                    --providers.docker.network=deployforge-net \\
+                    --entrypoints.web.address=:80 \\
+                    --entrypoints.web.http.redirections.entrypoint.to=websecure \\
+                    --entrypoints.web.http.redirections.entrypoint.scheme=https \\
+                    --entrypoints.websecure.address=:443 \\
+                    --certificatesresolvers.letsencrypt.acme.httpchallenge=true \\
+                    --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web \\
+                    --certificatesresolvers.letsencrypt.acme.email='${acmeEmail}' \\
+                    --certificatesresolvers.letsencrypt.acme.storage=/acme.json`;
+                const runRes = await ssh.execute(runTraefikCmd);
+                if (runRes.code !== 0) {
+                    logger.warn({ vpsId, err: runRes.stderr }, 'Traefik container start returned non-zero code');
+                }
+            }
+
+            await prisma.vPS.update({
+                where: { id: vpsId },
+                data: { status: 'active', lastCheckedAt: new Date() },
+            });
+
+            return {
+                success: true,
+                message: 'VPS bootstrapped with Docker, deployforge-net, and Traefik ingress gateway',
+            };
+        } finally {
+            ssh.disconnect();
+        }
     }
 
     static async testConnection(data: VpsConnectionInput): Promise<VpsConnectionTestResult> {

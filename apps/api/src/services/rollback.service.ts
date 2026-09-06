@@ -18,7 +18,6 @@ export class RollbackService {
     }
 
     static async rollback(userId: string, deploymentId: string, historyId?: string) {
-
         await verifyDeploymentOwnership(userId, deploymentId);
 
         const deployment = await prisma.deployment.findFirst({
@@ -83,15 +82,37 @@ export class RollbackService {
                     await removeContainerIfExists(ssh, deployment.containerId);
                 }
 
-                const containerName = `df-${deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${deploymentId.slice(0, 8)}`;
+                const safeProjectName = deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                const shortDeployId = deploymentId.slice(0, 8);
+                const containerName = `df-${safeProjectName}-${shortDeployId}`;
                 const appPort = ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '') ? 80 : 3000;
+                const routerId = `df-${deployment.projectId}`;
+                const effectiveDomain = deployment.domain || `${safeProjectName}-${shortDeployId}.${vps.ipAddress}.sslip.io`;
+
                 await removeContainerIfExists(ssh, containerName);
+
+                // Ensure external network
+                await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
 
                 // Inject environment variables from history
                 const hasEnv = await EnvironmentService.injectEnvironment(ssh, vps.username, deploymentId, '', history.env);
                 const envFlag = hasEnv ? ` --env-file ${shellQuote(EnvironmentService.getEnvPath(vps.username, deploymentId))}` : '';
 
-                const { stdout: newContainerId } = await ssh.execute(`docker run -d --name ${shellQuote(containerName)} --restart unless-stopped --security-opt no-new-privileges --cap-drop ALL -p ${deployment.port}:${appPort}${envFlag} ${shellQuote(history.imageTag)}`);
+                const createCmd = `docker run -d \\
+                    --name ${shellQuote(containerName)} \\
+                    --restart unless-stopped \\
+                    --network deployforge-net \\
+                    --label "traefik.enable=true" \\
+                    --label "traefik.http.routers.${routerId}.rule=Host(\`${effectiveDomain}\`)" \\
+                    --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
+                    --label "traefik.http.routers.${routerId}.tls=true" \\
+                    --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
+                    --label "traefik.http.services.${routerId}.loadbalancer.server.port=${appPort}" \\
+                    --security-opt no-new-privileges \\
+                    --cap-drop ALL${envFlag} \\
+                    ${shellQuote(history.imageTag)}`;
+
+                const { stdout: newContainerId } = await ssh.execute(createCmd);
 
                 await prisma.deployment.update({
                     where: { id: deploymentId },

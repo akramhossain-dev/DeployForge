@@ -76,15 +76,16 @@ export function formatDeploymentResponse(deployment: any) {
     const hostType = sanitized.hostType || (activeDomain ? 'domain' : 'ip');
     const sourceType = sanitized.sourceType || (sanitized.project?.repositoryUrl?.startsWith('upload://') ? 'upload' : 'github');
     const domainName = sanitized.domain || activeDomain?.domainName || null;
-    const url = hostType === 'domain' && domainName
-        ? `http://${domainName}`
-        : sanitized.vps?.ipAddress && sanitized.type === 'STATIC'
-          ? sanitized.port
-            ? `http://${sanitized.vps.ipAddress}:${sanitized.port}/site/${sanitized.id}/`
-            : `http://${sanitized.vps.ipAddress}/site/${sanitized.id}/`
-        : sanitized.vps?.ipAddress && sanitized.port
-          ? `http://${sanitized.vps.ipAddress}:${sanitized.port}`
-          : null;
+    const effectiveDomain = domainName || (sanitized.vps?.ipAddress
+        ? `${(sanitized.project?.name || sanitized.name || 'app').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'app'}-${sanitized.id?.slice(0, 8) || 'preview'}.${sanitized.vps.ipAddress}.sslip.io`
+        : null);
+
+    let url: string | null = null;
+    if (sanitized.mode === 'sandbox' && sanitized.vps?.ipAddress && sanitized.port) {
+        url = `http://${sanitized.vps.ipAddress}:${sanitized.port}`;
+    } else if (effectiveDomain) {
+        url = `https://${effectiveDomain}`;
+    }
 
     return {
         ...sanitized,
@@ -95,5 +96,6 @@ export function formatDeploymentResponse(deployment: any) {
         uploadPath: sanitized.uploadPath || (sourceType === 'upload' ? sanitized.project?.repositoryUrl : null),
         url,
         domain: domainName,
+        effectiveDomain,
     };
 }

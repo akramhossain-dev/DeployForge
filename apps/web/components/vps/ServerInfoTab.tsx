@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { Clock, Cpu, Globe, HardDrive, Info, MemoryStick, RefreshCw, Server } from 'lucide-react';
+import { Clock, Cpu, Globe, HardDrive, Info, MemoryStick, RefreshCw, Server, ShieldCheck, Network } from 'lucide-react';
 import { useVpsServerInfo } from '@/hooks/useDeployForgeData';
 import clsx from 'clsx';
 
@@ -107,6 +107,15 @@ export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInf
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {/* Ingress Gateway & Multi-Tenant Routing */}
+                <InfoCard icon={<ShieldCheck size={14} className="text-emerald-400" />} title="Ingress Gateway & Multi-Tenancy">
+                    <Row label="Gateway Engine" value="Traefik v3.1 (Docker)" />
+                    <Row label="Bridge Network" value="deployforge-net" />
+                    <Row label="TLS Resolver" value="Let's Encrypt ACME HTTP-01" />
+                    <Row label="HTTP Redirection" value="Automatic (80 → 443)" />
+                    <Row label="Multi-Site Mode" value={<span className="text-emerald-400 font-bold">ACTIVE (0 Port Collisions)</span>} />
+                </InfoCard>
+
                 {/* Network */}
                 <InfoCard icon={<Globe size={14} />} title="Network Configuration">
                     <Row label="Hostname" value={d.hostname} />

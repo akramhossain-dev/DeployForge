@@ -156,7 +156,7 @@ export default async function domainRoutes(fastify: FastifyInstance) {
                     ]
                 }
             },
-            include: { deployment: { select: { id: true, name: true, port: true, vpsId: true } } },
+            include: { deployment: { select: { id: true, name: true, port: true, vpsId: true, vps: { select: { ipAddress: true, name: true } } } } },
             orderBy: { createdAt: 'desc' },
         });
         return { success: true, data: domains.map(sanitizeDomain).filter(Boolean) };

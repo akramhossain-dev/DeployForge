@@ -266,7 +266,7 @@ export default function DeploymentsPage() {
                                     <tr>
                                         <th className="p-3.5 font-semibold">DEPLOYMENT / PROJECT</th>
                                         <th className="p-3.5 font-semibold">BRANCH</th>
-                                        <th className="p-3.5 font-semibold">SERVER / PORT</th>
+                                        <th className="p-3.5 font-semibold">SERVER / INGRESS</th>
                                         <th className="p-3.5 font-semibold">COMMIT HASH & MESSAGE</th>
                                         <th className="p-3.5 font-semibold">CREATED</th>
                                         <th className="p-3.5 font-semibold text-right">STATUS</th>
@@ -275,7 +275,10 @@ export default function DeploymentsPage() {
                                 <tbody className="divide-y divide-[#1F1F1F] text-[#A1A1A1]">
                                     {filtered.map((d) => {
                                         const sourceType = getSourceType(d);
-                                        const activeUrl = d.url || (d.vps?.ipAddress && d.port ? `http://${d.vps.ipAddress}:${d.port}` : null);
+                                        const safeName = d.project?.name ? d.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : d.name ? d.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : 'app';
+                                        const shortId = d.id.slice(0, 8);
+                                        const effectiveDomain = d.domain || (d.vps?.ipAddress ? `${safeName}-${shortId}.${d.vps.ipAddress}.sslip.io` : null);
+                                        const activeUrl = d.url || (effectiveDomain ? `https://${effectiveDomain}` : null);
 
                                         return (
                                             <tr
@@ -292,7 +295,7 @@ export default function DeploymentsPage() {
                                                         {d.project?.repositoryUrl?.replace('upload://', 'Upload: ') || 'File package release'}
                                                     </p>
                                                     {activeUrl && (
-                                                        <p className="mt-0.5 font-mono text-[10px] text-[#A1A1A1] truncate max-w-md">{activeUrl}</p>
+                                                        <p className="mt-0.5 font-mono text-[10px] text-emerald-400 truncate max-w-md">{activeUrl}</p>
                                                     )}
                                                 </td>
 
@@ -304,13 +307,13 @@ export default function DeploymentsPage() {
                                                     </div>
                                                 </td>
 
-                                                {/* Server & Port */}
+                                                {/* Server & Ingress */}
                                                 <td className="p-3.5 whitespace-nowrap">
                                                     <div className="flex items-center gap-1 text-[#A1A1A1]">
                                                         <Server size={12} className="text-[#666666]" />
                                                         <span>{d.vps?.name || 'Local Host'}</span>
                                                     </div>
-                                                    <p className="text-[10px] text-[#666666]">{d.port ? `Port :${d.port}` : 'Port —'}</p>
+                                                    <p className="text-[10px] text-emerald-400 font-mono">Traefik :443 (TLS)</p>
                                                 </td>
 
                                                 {/* Commit Hash & Message (expanded width on large monitors) */}

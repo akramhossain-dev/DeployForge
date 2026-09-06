@@ -507,9 +507,10 @@ export default function DeploymentDetailsPage() {
     const isStatic = current?.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(current?.framework || '');
     const canRestart = current?.status === 'RUNNING' && (isStatic || Boolean(current.containerId));
     const canRollback = sourceType === 'github' && !isStatic;
-    const activeUrl = current?.url || (current?.vps?.ipAddress && isStatic
-        ? current.port ? `http://${current.vps.ipAddress}:${current.port}/site/${current.id}/` : `http://${current.vps.ipAddress}/site/${current.id}/`
-        : current?.vps?.ipAddress && current?.port ? `http://${current.vps.ipAddress}:${current.port}` : null);
+    const safeProjectName = current?.project?.name ? current.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : current?.name ? current.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : 'app';
+    const shortDeployId = (current?.id || id).slice(0, 8);
+    const effectiveDomain = current?.domain || (current?.vps?.ipAddress ? `${safeProjectName}-${shortDeployId}.${current.vps.ipAddress}.sslip.io` : null);
+    const activeUrl = current?.url || (effectiveDomain ? `https://${effectiveDomain}` : null);
     const isRunning = current?.status === 'RUNNING';
     const isPaused = current?.status === 'PAUSED';
     const isStopped = current?.status === 'STOPPED';
@@ -760,6 +761,18 @@ export default function DeploymentDetailsPage() {
                             <InfoRow label="Last trigger" value={formatDate(current.updatedAt)} />
                             <InfoRow label="Commit" value={sourceType === 'github' && current.commitHash ? current.commitHash.slice(0, 10) : 'Manual'} />
                             <InfoRow label="Branch" value={sourceType === 'github' ? current.branch || 'main' : 'N/A'} />
+                        </div>
+                    </div>
+
+                    {/* Ingress Gateway Card */}
+                    <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3">
+                        <h3 className="font-semibold text-white border-b border-[#1F1F1F] pb-2">Ingress & Gateway</h3>
+                        <div className="space-y-1">
+                            <InfoRow label="Gateway" value="Traefik v3.1" />
+                            <InfoRow label="Bridge Net" value="deployforge-net" />
+                            <InfoRow label="TLS Security" value="ACME Let's Encrypt (:443)" />
+                            <InfoRow label="Host Port" value="Zero Port Exposure" />
+                            <InfoRow label="Router Rule" value={`Host(\`${effectiveDomain || '...'}\`)`} />
                         </div>
                     </div>
 
