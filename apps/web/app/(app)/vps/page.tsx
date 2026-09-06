@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Activity, BarChart2, Info, Plus, RefreshCw, Server } from 'lucide-react';
+import { Activity, BarChart2, Info, Plus, RefreshCw, Server, Cpu } from 'lucide-react';
 import clsx from 'clsx';
 import {
     useVpsList,
@@ -15,8 +15,9 @@ import AddVpsTab from '@/components/vps/AddVpsTab';
 import ServerInfoTab from '@/components/vps/ServerInfoTab';
 import LiveMonitorTab from '@/components/vps/LiveMonitorTab';
 import HistoryMonitorTab from '@/components/vps/HistoryMonitorTab';
+import { EnvironmentTab } from '@/components/vps/EnvironmentTab';
 
-type TabId = 'list' | 'add' | 'info' | 'monitor' | 'history';
+type TabId = 'list' | 'add' | 'info' | 'monitor' | 'history' | 'environment';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'list', label: 'VPS List', icon: <Server size={14} /> },
@@ -24,6 +25,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'info', label: 'Server Info', icon: <Info size={14} /> },
     { id: 'monitor', label: 'Live Monitor', icon: <Activity size={14} /> },
     { id: 'history', label: 'History Monitor', icon: <BarChart2 size={14} /> },
+    { id: 'environment', label: 'Environment', icon: <Cpu size={14} /> },
 ];
 
 export default function VpsPage() {
@@ -120,8 +122,8 @@ export default function VpsPage() {
                 })}
             </div>
 
-            {/* Server Selector strip for info/monitor tabs */}
-            {(activeTab === 'info' || activeTab === 'monitor' || activeTab === 'history') && (vps.data?.length ?? 0) > 0 && (
+            {/* Server Selector strip for info/monitor/environment tabs */}
+            {(activeTab === 'info' || activeTab === 'monitor' || activeTab === 'history' || activeTab === 'environment') && (vps.data?.length ?? 0) > 0 && (
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 text-xs">
                     <span className="shrink-0 text-[#666666] font-semibold uppercase">Active Server:</span>
                     {(vps.data || []).map((server) => (
@@ -176,6 +178,16 @@ export default function VpsPage() {
 
             {activeTab === 'history' && (
                 <HistoryMonitorTab vps={selectedVps} />
+            )}
+
+            {activeTab === 'environment' && selectedVps && (
+                <EnvironmentTab vps={selectedVps} />
+            )}
+
+            {activeTab === 'environment' && !selectedVps && (vps.data?.length ?? 0) > 0 && (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#444', fontSize: '12px' }}>
+                    Select a VPS from the server selector above to view its environment.
+                </div>
             )}
         </div>
     );

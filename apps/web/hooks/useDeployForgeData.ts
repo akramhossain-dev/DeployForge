@@ -27,6 +27,10 @@ import type {
     VpsConnectionResult,
     VpsServerInfo,
     VpsLiveMetrics,
+    VpsEnvironmentScan,
+    InstallRuntimeResponse,
+    PreflightResult,
+    RuntimeName,
 } from '@/lib/api/types';
 
 function handleMutationError(title: string, error: any, deploymentId?: string) {
@@ -86,6 +90,10 @@ export const queryKeys = {
     projects: ['projects'] as const,
     projectMembers: (projectId: string) => ['projects', projectId, 'members'] as const,
     invitations: ['invitations'] as const,
+    // Runtime Manager
+    vpsEnvironment: (vpsId: string) => ['vps', vpsId, 'environment'] as const,
+    vpsPreflight: (vpsId: string, deploymentId?: string) => ['vps', vpsId, 'preflight', deploymentId || ''] as const,
+    allowedRuntimes: ['runtime', 'runtimes'] as const,
 };
 
 function withQuery(path: string, params?: Record<string, string>) {
@@ -889,5 +897,54 @@ export function useDeclineInvitation() {
             queryClient.invalidateQueries({ queryKey: queryKeys.invitations });
         },
         onError: (err) => handleMutationError('Decline Failed', err),
+    });
+}
+
+// ── Runtime Manager Hooks ─────────────────────────────────────────────────────
+
+/** Scan the VPS environment — runtimes, OS info, service status. */
+export function useVpsEnvironment(vpsId?: string) {
+    return useQuery({
+        queryKey: queryKeys.vpsEnvironment(vpsId || 'none'),
+        queryFn: () => api.get<{ data: VpsEnvironmentScan }>(`/vps/${vpsId}/environment`).then((r: any) => r.data),
+        enabled: !!vpsId,
+        staleTime: 60_000,
+        retry: 1,
+    });
+}
+
+/** Install one or more runtimes on a VPS (whitelisted). */
+export function useInstallRuntime(vpsId?: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (runtimes: RuntimeName[]) =>
+            api.post<{ data: InstallRuntimeResponse }>(`/vps/${vpsId}/install-runtime`, { runtimes }).then((r: any) => r.data),
+        onSuccess: () => {
+            handleMutationSuccess('Installation Complete', 'Runtimes were installed and verified successfully.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.vpsEnvironment(vpsId || 'none') });
+        },
+        onError: (err) => handleMutationError('Installation Failed', err),
+    });
+}
+
+/** Get deployment preflight checklist for a VPS. */
+export function useVpsPreflight(vpsId?: string, deploymentId?: string) {
+    return useQuery({
+        queryKey: queryKeys.vpsPreflight(vpsId || 'none', deploymentId),
+        queryFn: () => api.get<{ data: { preflight: PreflightResult; scan: VpsEnvironmentScan } }>(
+            `/runtime/${vpsId}/preflight${deploymentId ? `?deploymentId=${deploymentId}` : ''}`
+        ).then((r: any) => r.data),
+        enabled: !!vpsId,
+        staleTime: 30_000,
+        retry: 1,
+    });
+}
+
+/** List allowed (installable) runtime names. */
+export function useAllowedRuntimes() {
+    return useQuery({
+        queryKey: queryKeys.allowedRuntimes,
+        queryFn: () => api.get<{ data: RuntimeName[] }>('/runtime/runtimes').then((r: any) => r.data),
+        staleTime: Infinity,
     });
 }

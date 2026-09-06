@@ -13,6 +13,8 @@ import { BuildService } from './deployment/build.service';
 import { EnvironmentService } from './deployment/environment.service';
 import { ValidationService } from './deployment/validation.service';
 import { runCommand } from './deployment/runner';
+import { RuntimeManagerService } from './runtime-manager';
+
 import {
     shellQuote,
     shellPath,
@@ -282,8 +284,45 @@ export class DeploymentService {
 
             await BuildService.normalizeProjectRoot(ssh, deploymentId, workDir);
             await runCommand(ssh, deploymentId, 'system', `ln -sfn ${shellQuote(workDir)} ${shellQuote(currentLink)}`);
+
+            // ── Environment Preparation (Runtime Detection & Provisioning) ─────────
+            // Scan the VPS and install any missing runtimes BEFORE detecting the project.
+            // This ensures build commands (npm, pnpm, python, etc.) are available.
+            await LoggingService.log(deploymentId, 'Scanning VPS environment...', 'system');
+            try {
+                // Get the file list from the workdir (reused by detectProject below)
+                const { stdout: fileListOut } = await ssh.execute(
+                    `cd ${shellQuote(workDir)} && find . -maxdepth 3 -type f | sed 's#^./##'`
+                ).catch(() => ({ stdout: '' }));
+                const projectFilesList = fileListOut.split('\n').map((f) => f.trim()).filter(Boolean);
+
+                const prepareResult = await RuntimeManagerService.analyzeAndPrepare(
+                    ssh,
+                    projectFilesList,
+                    {},
+                    (msg, level) => {
+                        const logLevel = level === 'error' ? 'error' : level === 'success' ? 'build' : 'system';
+                        LoggingService.log(deploymentId, msg, logLevel).catch(() => undefined);
+                    },
+                );
+
+                if (!prepareResult.ready) {
+                    throw new DeploymentError(
+                        'building',
+                        prepareResult.failureReason || 'Environment preparation failed. Required runtimes could not be installed.',
+                        'ENV_PREP_FAILED',
+                    );
+                }
+            } catch (err: any) {
+                if (err instanceof DeploymentError) throw err;
+                // Non-fatal: log and continue (e.g. SSH hiccup during scan shouldn't kill the deploy)
+                await LoggingService.log(deploymentId, `Environment scan warning: ${err?.message || 'unknown error'}`, 'system');
+            }
+            // ────────────────────────────────────────────────────────────
+
             await LoggingService.log(deploymentId, 'Validating project structure', 'build');
             const detected = await BuildService.detectProject(ssh, deploymentId, workDir);
+
             await prisma.deployment.update({
                 where: { id: deploymentId },
                 data: {
