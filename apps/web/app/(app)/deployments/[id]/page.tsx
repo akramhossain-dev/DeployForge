@@ -7,26 +7,15 @@ import clsx from 'clsx';
 import {
     AlertCircle,
     ArrowLeft,
-    CheckCircle2,
-    Circle,
-    Clock,
     Copy,
-    ExternalLink,
-    GitBranch,
-    Github,
-    Globe,
     Loader2,
     Pause,
     Play,
     RefreshCw,
     RotateCcw,
-    Server,
     Square,
     TerminalSquare,
     Trash2,
-    XCircle,
-    Zap,
-    PackagePlus,
     Search,
     Edit2,
     Plus,
@@ -39,10 +28,8 @@ import {
     ChevronRight,
     History,
     Check,
-    X,
-    Eye,
-    EyeOff
-} from 'lucide-react';
+    X
+} from '@/components/icons';
 import { formatDate, StatusBadge, PasswordInput, INPUT_STYLE } from '@/components/ui';
 import { AnsiText } from '@/components/deployments/detail/AnsiLogViewer';
 import { DeploymentErrorBanner } from '@/components/deployments/detail/DeploymentErrorBanner';
@@ -134,7 +121,6 @@ export default function DeploymentDetailsPage() {
     const { id } = useParams<{ id: string }>();
     const router = useRouter();
     const addToast = useToastStore((s) => s.addToast);
-    const openErrorDrawer = useToastStore((s) => s.openErrorDrawer);
 
     const deployment = useDeployment(id);
     const initialLogs = useDeploymentLogs(id);
@@ -175,6 +161,8 @@ export default function DeploymentDetailsPage() {
     const [showConfirmOverwrite, setShowConfirmOverwrite] = useState(false);
     const [pendingImportVars, setPendingImportVars] = useState<Record<string, string>>({});
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [composeServiceOverride, setComposeServiceOverride] = useState('');
+    const [composePortOverride, setComposePortOverride] = useState('');
 
     const [renamingIndex, setRenamingIndex] = useState<number | null>(null);
     const [renamingPath, setRenamingPath] = useState('');
@@ -185,7 +173,7 @@ export default function DeploymentDetailsPage() {
         } else if (envModalOpen && draftFiles.length === 0) {
             setDraftFiles([{ path: '.env', variables: {} }]);
         }
-    }, [decEnvResponse, envModalOpen]);
+    }, [decEnvResponse, envModalOpen, draftFiles.length]);
 
     const activeFile = draftFiles[activeFileIndex] || { path: '.env', variables: {} };
 
@@ -419,7 +407,7 @@ export default function DeploymentDetailsPage() {
                 }
             });
             setEnvModalOpen(false);
-        } catch (e) {}
+        } catch {}
     };
 
     const handleSaveAndRedeploy = async () => {
@@ -443,10 +431,10 @@ export default function DeploymentDetailsPage() {
                     files: draftFiles
                 }
             });
-            const newDep = await redeploy.mutateAsync(id);
+            const newDep = await redeploy.mutateAsync({ deploymentId: id });
             setEnvModalOpen(false);
             router.push(`/deployments/${newDep.id}`);
-        } catch (e) {}
+        } catch {}
     };
 
     const filteredVariables = useMemo(() => {
@@ -506,7 +494,8 @@ export default function DeploymentDetailsPage() {
     const sourceType = getSourceType(current);
     const isStatic = current?.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(current?.framework || '');
     const canRestart = current?.status === 'RUNNING' && (isStatic || Boolean(current.containerId));
-    const canRollback = sourceType === 'github' && !isStatic;
+    const candidateInProgress = Boolean(current?.candidateRelease && ['BUILDING', 'CANDIDATE', 'READY', 'ACTIVATING'].includes(current.candidateRelease.status));
+    const canRollback = Boolean(current?.rollbackAvailable) && !candidateInProgress;
     const safeProjectName = current?.project?.name ? current.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : current?.name ? current.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : 'app';
     const shortDeployId = (current?.id || id).slice(0, 8);
     const effectiveDomain = current?.domain || (current?.vps?.ipAddress ? `${safeProjectName}-${shortDeployId}.${current.vps.ipAddress}.sslip.io` : null);
@@ -523,6 +512,27 @@ export default function DeploymentDetailsPage() {
     }, [current?.status, logs]);
 
     const parsedError = useMemo(() => (rawErrorText ? parseError(rawErrorText) : null), [rawErrorText]);
+    const composeCandidates = useMemo(() => {
+        const candidates = current?.operationError?.details?.candidates;
+        return Array.isArray(candidates) ? candidates as Array<{ service: string; ports: number[] }> : [];
+    }, [current?.operationError]);
+
+    useEffect(() => {
+        if (!composeServiceOverride && composeCandidates[0]) {
+            setComposeServiceOverride(composeCandidates[0].service);
+            setComposePortOverride(String(composeCandidates[0].ports?.[0] || 3000));
+        }
+    }, [composeCandidates, composeServiceOverride]);
+
+    const retryComposeSelection = async () => {
+        const newDeployment = await redeploy.mutateAsync({
+            deploymentId: id,
+            composeService: composeServiceOverride,
+            composePort: Number(composePortOverride),
+            resourceTier: 'FULLSTACK',
+        });
+        router.push(`/deployments/${newDeployment.id}`);
+    };
 
     const failedStepIndex = useMemo(() => {
         if (current?.status !== 'FAILED') return -1;
@@ -613,8 +623,8 @@ export default function DeploymentDetailsPage() {
                             </button>
                         </>
                     )}
-                    {canRollback && isRunning && (
-                        <button onClick={() => rollback.mutate({ id })} disabled={rollback.isPending} className="flex h-8 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50">
+                    {(current.rollbackAvailable || candidateInProgress) && isRunning && (
+                        <button onClick={() => rollback.mutate({ id })} disabled={rollback.isPending || !canRollback} className="flex h-8 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50">
                             {rollback.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Rollback
                         </button>
                     )}
@@ -636,12 +646,49 @@ export default function DeploymentDetailsPage() {
                 />
             ) : null}
 
+            {current.operationError?.errorCode === 'COMPOSE_INGRESS_AMBIGUOUS' && composeCandidates.length > 0 && sourceType === 'github' ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100">
+                    <p className="font-semibold">Select the Compose ingress service</p>
+                    <p className="mt-1 text-[11px] text-amber-200">The deployment was safely rejected before activation because multiple web services were detected.</p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <select value={composeServiceOverride} onChange={(event) => {
+                            const service = event.target.value;
+                            setComposeServiceOverride(service);
+                            const candidate = composeCandidates.find((item) => item.service === service);
+                            setComposePortOverride(String(candidate?.ports?.[0] || 3000));
+                        }} className={INPUT_STYLE}>
+                            {composeCandidates.map((candidate) => <option key={candidate.service} value={candidate.service}>{candidate.service}</option>)}
+                        </select>
+                        <input type="number" min={1} max={65535} value={composePortOverride} onChange={(event) => setComposePortOverride(event.target.value)} className={INPUT_STYLE} />
+                        <button onClick={retryComposeSelection} disabled={redeploy.isPending || !composeServiceOverride || !composePortOverride} className="h-9 shrink-0 rounded bg-white px-4 font-semibold text-black disabled:opacity-50">Retry deployment</button>
+                    </div>
+                </div>
+            ) : null}
+
             <DeploymentTimeline
                 current={current}
                 activeUrl={activeUrl}
                 isStatic={isStatic}
                 failedStepIndex={failedStepIndex}
             />
+
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
+                    <p className="text-[10px] uppercase text-[#666666]">Active Release</p>
+                    <p className="mt-1 font-semibold text-white">{current.activeRelease?.version || 'No active release'}</p>
+                    <p className="mt-1 text-[11px] text-[#A1A1A1]">{current.activeRelease?.status || 'UNKNOWN'} · {current.activeRelease?.readinessStatus || 'UNKNOWN'}</p>
+                </div>
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
+                    <p className="text-[10px] uppercase text-[#666666]">Candidate Release</p>
+                    <p className="mt-1 font-semibold text-white">{current.candidateRelease?.version || 'None'}</p>
+                    <p className="mt-1 text-[11px] text-[#A1A1A1]">{current.candidateRelease?.status || 'IDLE'} · {current.readiness || 'UNKNOWN'}</p>
+                </div>
+                <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
+                    <p className="text-[10px] uppercase text-[#666666]">Effective Resource Policy</p>
+                    <p className="mt-1 font-semibold text-white">{current.resourceTier || 'SERVER'}</p>
+                    <p className="mt-1 text-[11px] text-[#A1A1A1]">{(current.cpuLimitMillis || 0) / 1000} CPU · {current.memoryLimitMiB || 0} MiB · {current.pidsLimit || 0} PIDs · {current.storageLimitMiB || 0} MiB</p>
+                </div>
+            </div>
 
             {/* ── 6. Console Main Column & Sidebar Grid ── */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">

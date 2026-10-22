@@ -37,8 +37,20 @@ export function cookie(name: string, value: string, maxAge: number, options: { h
     return `${name}=${encodedValue}; Path=/; ${options.httpOnly ? 'HttpOnly; ' : ''}${isProd ? 'Secure; ' : ''}SameSite=${sameSite}; Max-Age=${maxAge}${expires}`;
 }
 
-export function apiError(reply: FastifyReply, statusCode: number, code: ApiErrorCode | string, message: string) {
-    return reply.status(statusCode).send(createApiError(code, message));
+export function apiError(
+    reply: FastifyReply,
+    statusCode: number,
+    code: ApiErrorCode | string,
+    message: string,
+    options: { stage?: string; details?: Record<string, unknown> } = {},
+) {
+    return reply.status(statusCode).send(createApiError(
+        code,
+        message,
+        options.stage,
+        options.details,
+        reply.request.id,
+    ));
 }
 
 export function apiSuccess<T>(data: T) {

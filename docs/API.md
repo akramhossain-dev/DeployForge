@@ -52,8 +52,10 @@ The DeployForge backend is powered by a Fastify REST API and WebSocket gateway.
 * Combined health status: returns JSON with API, database, and Redis states.
 
 ### `GET /metrics`
-* Platform request counters and response-time percentiles.
+* Platform request counters, latency, queue states, gateway/release/TLS states, capacity reservations, and cleanup failures.
 * **Protected** by `Authorization: Bearer <METRICS_TOKEN>` in production.
+
+Error responses include an `X-Request-Id` header and additive `error.requestId`, `error.stage`, and structured `error.details` fields when safe to expose.
 
 ---
 
@@ -394,14 +396,18 @@ All admin endpoints require authentication as an `ADMIN` or `SUPER_ADMIN` role v
 ### Deployments
 * `GET /admin/deployments` — List all deployments across all users.
 * `DELETE /admin/deployments/:id` — Force-delete any deployment.
+* `GET /admin/projects/:projectId/resource-policy` — Read the future deployment resource override.
+* `PUT /admin/projects/:projectId/resource-policy` — Validate and update the future deployment resource override.
 
 ### Audit Logs
 * `GET /admin/audit-logs` — Paginated audit log with filters by user, action, and date.
 
-### Backup & Restore
+### Experimental Local Backup Utilities
 * `POST /admin/backup` — Trigger a manual database backup.
 * `GET /admin/backups` — List available backup files.
 * `POST /admin/restore` — Restore from a backup file.
+
+These endpoints are internal utilities and do not provide scheduled/offsite backup or disaster-recovery guarantees.
 
 ### Contact Messages
 * `GET /admin/contact` — List all contact form submissions.

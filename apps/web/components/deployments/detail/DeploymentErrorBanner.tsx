@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, Copy } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Copy } from '@/components/icons';
 import type { ParsedError } from '@/lib/utils/errorParser';
 import { useToastStore } from '@/lib/store/useToastStore';
 

@@ -2,11 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import {
-    Bell, Check, CheckCheck, Trash2, Search, Filter, X,
-    AlertTriangle, AlertCircle, Info, CheckCircle, Server,
-    Cpu, HardDrive, MemoryStick, Wifi, WifiOff, Rocket,
-    Shield, Database, ChevronLeft, ChevronRight, Loader2
-} from 'lucide-react';
+    Bell, Check, CheckCheck, Trash2, ChevronLeft, ChevronRight, Loader2
+} from '@/components/icons';
 import {
     useNotifications,
     useMarkAsRead,
@@ -14,7 +11,7 @@ import {
     useDeleteNotification,
     useDeleteAllNotifications,
 } from '@/hooks/useNotifications';
-import type { AlertLevel, AlertType, AppNotification } from '@/lib/api/types';
+import type { AlertLevel, AlertType } from '@/lib/api/types';
 import { formatDate } from '@/components/ui';
 import clsx from 'clsx';
 

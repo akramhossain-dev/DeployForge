@@ -26,13 +26,13 @@ export function maskSensitiveData(text: string): string {
     let sanitized = text;
     
     const keyValuePattern = /(db_password|database_url|ssh_password|github_token|jwt_secret|api_key|secret|password|token|private_key|privatekey)(.*?)(=|:|is)\s*([^\s;'"\n\r]+)/gi;
-    sanitized = sanitized.replace(keyValuePattern, (match, p1, p2, p3, p4) => {
+    sanitized = sanitized.replace(keyValuePattern, (_match, p1, p2, p3) => {
         return `${p1}${p2}${p3}********`;
     });
 
     // 2. CLI flags (e.g., --token xyz)
     const cliPattern = /(--password|--token|--key)\s+([^\s;'"\n\r]+)/gi;
-    sanitized = sanitized.replace(cliPattern, (match, p1, p2) => {
+    sanitized = sanitized.replace(cliPattern, (_match, p1) => {
         return `${p1} ********`;
     });
 

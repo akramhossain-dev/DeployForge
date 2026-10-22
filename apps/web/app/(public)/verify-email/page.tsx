@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowRight, CheckCircle2, Loader2, Rocket, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2, Rocket, XCircle } from '@/components/icons';
 import api from '@/lib/api/client';
 
 function VerifyEmailContent() {

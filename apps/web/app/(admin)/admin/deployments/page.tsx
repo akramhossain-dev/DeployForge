@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { RefreshCw, RotateCcw, Rocket, Search, Square, Trash2, Loader2 } from 'lucide-react';
+import { Edit2, RefreshCw, RotateCcw, Square, Trash2 } from '@/components/icons';
 import clsx from 'clsx';
-import { AppModal } from '@/components/ui';
 import { AdminTable, StatusBadge, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAction, useAdminDeployments } from '@/hooks/useDeployForgeData';
+import { AdminResourcePolicyEditor } from '@/components/admin/AdminResourcePolicyEditor';
 
 const STATUSES = ['PENDING', 'BUILDING', 'RUNNING', 'FAILED', 'STOPPED'];
 const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
@@ -16,6 +16,7 @@ export default function AdminDeploymentsPage() {
     const params = useMemo(() => ({ status }), [status]);
     const deployments = useAdminDeployments(params);
     const action = useAdminAction();
+    const [policyTarget, setPolicyTarget] = useState<{ id: string; name: string } | null>(null);
 
     const [confirmModal, setConfirmModal] = useState<{
         open: boolean; title: string; message: string; actionText: string;
@@ -164,6 +165,7 @@ export default function AdminDeploymentsPage() {
                             <StatusBadge key="s" status={d.status} />,
                             <span key="t" className="text-[#666666]">{formatDate(d.updatedAt || d.createdAt)}</span>,
                             <div key="act" className="flex items-center gap-1">
+                                {d.project?.id ? <button onClick={() => setPolicyTarget({ id: d.project.id, name: d.project.name || name })} className="h-6 w-6 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-cyan-400 hover:text-cyan-300" title="Future resource policy"><Edit2 size={11} /></button> : null}
                                 <button onClick={() => triggerRestart(d.id, name)} className="h-6 w-6 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white" title="Restart">
                                     <RotateCcw size={11} />
                                 </button>
@@ -192,6 +194,7 @@ export default function AdminDeploymentsPage() {
                     </div>
                 </div>
             )}
+            {policyTarget ? <AdminResourcePolicyEditor projectId={policyTarget.id} projectName={policyTarget.name} onClose={() => setPolicyTarget(null)} /> : null}
         </div>
     );
 }

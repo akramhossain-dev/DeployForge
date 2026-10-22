@@ -9,10 +9,10 @@
         "dev": "tsc -w"
     },
     "dependencies": {
-        "nodemailer": "^6.9.11"
+        "nodemailer": "^10.1.0"
     },
     "devDependencies": {
-        "@types/nodemailer": "^6.4.14",
+        "@types/nodemailer": "^8.0.2",
         "typescript": "^5.0.0"
     }
 }

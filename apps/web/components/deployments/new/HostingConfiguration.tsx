@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from '@/components/icons';
 import { INPUT_STYLE } from '@/components/ui';
 
 export function isValidDomainInput(input: string): boolean {

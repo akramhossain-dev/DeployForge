@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Loader2, Lock, Mail, MessageSquare, Send, Shield, BookOpen, Github } from 'lucide-react';
+import { CheckCircle2, Loader2, Lock, Mail, Send, Shield, BookOpen, Github } from '@/components/icons';
 import api, { ApiError } from '@/lib/api/client';
 
 const initialForm = { name: '', email: '', subject: '', message: '' };

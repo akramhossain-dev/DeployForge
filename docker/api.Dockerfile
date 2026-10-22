@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
@@ -21,10 +21,10 @@ RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
 FROM deps AS builder
 COPY . .
 RUN pnpm --filter @deployforge/shared build \
+    && pnpm --filter @deployforge/security build \
     && pnpm --filter @deployforge/database generate \
     && pnpm --filter @deployforge/database build \
     && pnpm --filter @deployforge/mail build \
-    && pnpm --filter @deployforge/security build \
     && pnpm --filter @deployforge/vps build \
     && pnpm --filter api build
 
@@ -38,11 +38,20 @@ COPY packages/shared/package.json packages/shared/package.json
 COPY packages/vps/package.json packages/vps/package.json
 RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
     && pnpm install --prod --frozen-lockfile --filter api...
-# Generate the Prisma client into prod node_modules.
-# prisma CLI is a devDep (excluded by --prod). npx downloads it on the fly
-# without touching the pnpm workspace, so pnpm-workspace.yaml doesn't interfere.
+# Generate the Prisma client into prod node_modules. The CLI is an API runtime
+# dependency for the dedicated migrator; invoke it through that workspace so
+# pnpm resolves the package-local binary in an isolated production install.
 COPY prisma ./prisma
-RUN PRISMA_GENERATE_SKIP_AUTOINSTALL=1 npx --yes prisma@5.22.0 generate --schema ./prisma/schema.prisma
+COPY prisma.config.ts ./prisma.config.ts
+COPY docker/prisma.config.ts ./apps/api/prisma.config.ts
+COPY prisma/schema.prisma ./packages/database/schema.prisma
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build \
+    pnpm --filter api exec prisma generate --schema ../../packages/database/schema.prisma
+
+FROM prod-deps AS migrator
+ENV NODE_ENV=production
+USER node
+CMD ["node", "apps/api/node_modules/prisma/build/index.js", "migrate", "deploy", "--config", "apps/api/prisma.config.ts"]
 
 FROM base AS runner
 ENV NODE_ENV=production
@@ -60,9 +69,9 @@ COPY --from=builder --chown=node:node /app/packages/security/dist ./packages/sec
 COPY --from=builder --chown=node:node /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder --chown=node:node /app/packages/vps/dist ./packages/vps/dist
 COPY --from=builder --chown=node:node /app/prisma ./prisma
+COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/live').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-# M-6: Run DB migration on every container start, then launch the server
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema=prisma/schema.prisma && node apps/api/dist/server.js"]
+CMD ["node", "apps/api/dist/server.js"]
 

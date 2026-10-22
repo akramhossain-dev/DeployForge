@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Github, Rocket } from 'lucide-react';
+import { Github, Rocket } from '@/components/icons';
 
 const FOOTER_LINKS = {
     Platform:  [['Overview', '/'], ['Features', '/features'], ['About', '/about'], ['Console', '/dashboard']] as const,

@@ -11,16 +11,11 @@ import {
     Lock,
     PlusCircle,
     RefreshCw,
-    Search,
-    Shield,
     ShieldCheck,
     Trash2,
-    Wifi,
-    WifiOff,
-    X,
     Zap,
     Loader2
-} from 'lucide-react';
+} from '@/components/icons';
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
@@ -149,6 +144,9 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
 
     const isDeleted = domain.status === 'DELETED';
     const sslIssued = domain.sslStatus === 'ISSUED';
+    const sslStatus = domain.sslStatus || 'NONE';
+    const sslPending = sslStatus === 'PENDING';
+    const sslFailed = sslStatus === 'FAILED' || sslStatus === 'EXPIRED';
 
     function copyToClipboard(text: string, type: 'a' | 'cname') {
         navigator.clipboard.writeText(text);
@@ -187,10 +185,10 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
                 <div className="flex items-center gap-2">
                     <span className={clsx(
                         'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] uppercase font-bold',
-                        sslIssued ? 'border-emerald-900/50 bg-emerald-950/20 text-emerald-400' : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]'
+                        sslIssued ? 'border-emerald-900/50 bg-emerald-950/20 text-emerald-400' : sslFailed ? 'border-rose-900/50 bg-rose-950/20 text-rose-400' : sslPending ? 'border-cyan-900/50 bg-cyan-950/20 text-cyan-400' : 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]'
                     )}>
                         {sslIssued ? <ShieldCheck size={11} /> : <Lock size={11} />}
-                        {sslIssued ? 'TLS Active' : 'No TLS'}
+                        {sslIssued ? 'TLS Verified' : sslPending ? 'TLS Pending' : sslFailed ? `TLS ${sslStatus}` : 'No TLS'}
                     </span>
                     <button
                         onClick={() => setExpanded(!expanded)}
@@ -314,17 +312,25 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
                         </span>
                     </div>
 
+                    <div className="grid grid-cols-1 gap-2 rounded border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 text-[11px] text-[#A1A1A1] sm:grid-cols-2">
+                        <span>Status: <strong className="text-white">{sslStatus}</strong></span>
+                        <span>Verified: <strong className="text-white">{domain.sslVerifiedAt ? formatDate(domain.sslVerifiedAt) : 'Not yet'}</strong></span>
+                        <span>Issuer: <strong className="text-white">{domain.sslIssuer || 'Not verified'}</strong></span>
+                        <span>Expires: <strong className="text-white">{domain.sslExpiresAt ? formatDate(domain.sslExpiresAt) : 'Unknown'}</strong></span>
+                        {domain.sslError ? <span className="text-rose-400 sm:col-span-2">{domain.sslError}</span> : null}
+                    </div>
+
                     {/* Controls */}
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#1F1F1F] pt-3">
                         <div className="flex flex-wrap gap-2">
                             {!sslIssued && (
                                 <button
                                     onClick={() => issueSSL.mutate(domain.id)}
-                                    disabled={issueSSL.isPending}
+                                    disabled={issueSSL.isPending || sslPending}
                                     className="flex h-7 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A] disabled:opacity-50"
                                 >
                                     {issueSSL.isPending ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />}
-                                    <span>Trigger ACME SSL Issue</span>
+                                    <span>{sslPending ? 'TLS Verification Pending' : 'Trigger TLS Verification'}</span>
                                 </button>
                             )}
                             {sslIssued && (

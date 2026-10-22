@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
 
 interface ContextMenuProps {
     x: number;

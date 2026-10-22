@@ -2,11 +2,10 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
-    FolderOpen, LayoutGrid, List, Search, Upload, RefreshCw,
-    Plus, Trash2, Copy, Scissors, Clipboard, Download, ArrowLeft,
+    FolderOpen, LayoutGrid, List, Search, Upload, RefreshCw, Trash2, Copy, Scissors, Clipboard, Download, ArrowLeft,
     ArrowUp, X, Loader2, FolderPlus, FilePlus, AlertTriangle,
     FolderArchive, FileArchive,
-} from 'lucide-react';
+} from '@/components/icons';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDirectoryListing, useCreateEntry, useDeleteEntries, useRenameEntry, useCopyEntry, downloadFile, downloadZip, useCompress, useDecompress, useFileSearch } from '@/hooks/useFileManager';
 import { FileList } from './FileList';
@@ -43,7 +42,7 @@ function sortEntries(entries: FileEntry[], key: SortKey, dir: SortDir): FileEntr
     return [...dirs.sort(cmp), ...files.sort(cmp)];
 }
 
-export function FileManager({ vpsId, vpsName }: FileManagerProps) {
+export function FileManager({ vpsId }: FileManagerProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const pathParam = searchParams.get('path');

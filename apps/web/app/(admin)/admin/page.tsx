@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, Github, Rocket, Server, ShieldCheck, Users, Zap, RefreshCw } from 'lucide-react';
+import { Activity, Github, Rocket, Server, ShieldCheck, Users, Zap, RefreshCw } from '@/components/icons';
 import { AdminStat, AdminTable, ResourceBars, StatusBadge, formatDate, LoadingGrid } from '@/components/admin/AdminWidgets';
 import { useAdminOverview } from '@/hooks/useDeployForgeData';
 

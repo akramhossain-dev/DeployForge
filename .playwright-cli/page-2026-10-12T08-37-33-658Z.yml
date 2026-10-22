@@ -1,0 +1,99 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "DeployForge home" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e13]: DeployForge
+        - navigation [ref=e14]:
+          - link "Overview" [ref=e15] [cursor=pointer]:
+            - /url: /
+          - link "Features" [ref=e16] [cursor=pointer]:
+            - /url: /features
+          - link "About" [ref=e17] [cursor=pointer]:
+            - /url: /about
+          - link "Docs" [ref=e18] [cursor=pointer]:
+            - /url: /docs
+      - link "GitHub repository" [ref=e20] [cursor=pointer]:
+        - /url: https://github.com/akramhossain-dev/DeployForge
+        - generic [ref=e25]: GitHub
+  - main [ref=e27]:
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - link "DeployForge" [ref=e31] [cursor=pointer]:
+            - /url: /
+          - heading "Sign in to DeployForge" [level=1] [ref=e39]
+          - paragraph [ref=e40]: Enter your credentials to access your deployment console.
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - button "Continue with Google" [disabled] [ref=e43]
+            - button "Continue with GitHub" [disabled] [ref=e48]
+          - generic [ref=e54]: OR
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - generic [ref=e60]: Email Address
+              - textbox "name@company.com" [disabled] [ref=e61]
+            - generic [ref=e62]:
+              - generic [ref=e63]:
+                - generic [ref=e64]: Password
+                - link "Forgot password?" [ref=e65] [cursor=pointer]:
+                  - /url: /forgot-password
+              - generic [ref=e66]:
+                - textbox "••••••••" [disabled] [ref=e67]
+                - button "Show password" [ref=e68] [cursor=pointer]
+            - button "Sign in" [disabled] [ref=e72]
+        - paragraph [ref=e76]:
+          - text: Don't have an account?
+          - link "Sign up" [ref=e77] [cursor=pointer]:
+            - /url: /register
+  - contentinfo [ref=e78]:
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - generic [ref=e81]:
+          - link "DeployForge home" [ref=e82] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e89]: DeployForge
+          - paragraph [ref=e90]: Production-grade, self-hosted deployment orchestrator automating application builds, VPS deployments, and real-time monitoring.
+          - link "View Repository" [ref=e91] [cursor=pointer]:
+            - /url: https://github.com/akramhossain-dev/DeployForge
+        - generic [ref=e96]:
+          - heading "Platform" [level=3] [ref=e97]
+          - generic [ref=e98]:
+            - link "Overview" [ref=e99] [cursor=pointer]:
+              - /url: /
+            - link "Features" [ref=e100] [cursor=pointer]:
+              - /url: /features
+            - link "About" [ref=e101] [cursor=pointer]:
+              - /url: /about
+            - link "Console" [ref=e102] [cursor=pointer]:
+              - /url: /dashboard
+        - generic [ref=e103]:
+          - heading "Resources" [level=3] [ref=e104]
+          - generic [ref=e105]:
+            - link "Documentation" [ref=e106] [cursor=pointer]:
+              - /url: /docs
+            - link "Contact Support" [ref=e107] [cursor=pointer]:
+              - /url: /contact
+            - link "Security Controls" [ref=e108] [cursor=pointer]:
+              - /url: /docs#security
+        - generic [ref=e109]:
+          - heading "Legal" [level=3] [ref=e110]
+          - generic [ref=e111]:
+            - link "Privacy Policy" [ref=e112] [cursor=pointer]:
+              - /url: /privacy-policy
+            - link "Terms of Service" [ref=e113] [cursor=pointer]:
+              - /url: /terms
+      - generic [ref=e115]:
+        - generic [ref=e116]: © 2026 DeployForge. Open source self-hosted orchestration.
+        - generic [ref=e117]:
+          - link "About" [ref=e118] [cursor=pointer]:
+            - /url: /about
+          - link "Features" [ref=e119] [cursor=pointer]:
+            - /url: /features
+          - link "Docs" [ref=e120] [cursor=pointer]:
+            - /url: /docs
+          - link "Privacy" [ref=e121] [cursor=pointer]:
+            - /url: /privacy-policy
+          - link "Terms" [ref=e122] [cursor=pointer]:
+            - /url: /terms

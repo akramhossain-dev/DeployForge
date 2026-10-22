@@ -5,7 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import type { IDisposable } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { Server, Play, Square, Trash2, RefreshCw, ChevronDown, Monitor, Maximize2, Minimize2, Terminal as TerminalIcon } from 'lucide-react';
+import { Server, Play, Square, Trash2, RefreshCw, Maximize2, Minimize2 } from '@/components/icons';
 import api from '@/lib/api/client';
 import type { Vps } from '@/lib/api/types';
 import clsx from 'clsx';
@@ -155,7 +155,7 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
         try {
             const res = await api.get<{ token: string }>('/auth/socket-token');
             token = res.token;
-        } catch (err) {
+        } catch {
             shouldReconnectRef.current = false;
             setStatus('error');
             writeStatus('Authentication failed. Session token expired.');

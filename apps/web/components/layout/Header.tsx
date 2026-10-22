@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Github, LayoutDashboard, LogIn, Menu, Rocket, X } from 'lucide-react';
+import { Github, LayoutDashboard, LogIn, Menu, Rocket, X } from '@/components/icons';
 import { useState } from 'react';
 import clsx from 'clsx';
 import { useAuthSession } from '@/hooks/useDeployForgeData';

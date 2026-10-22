@@ -32,7 +32,7 @@ function fmError(reply: FastifyReply, error: unknown) {
         return reply.status(error.statusCode).send({ success: false, error: { code: error.errorCode, message: error.message } });
     }
     if (error instanceof z.ZodError) {
-        return reply.status(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: error.errors[0]?.message || 'Invalid request' } });
+        return reply.status(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: error.issues[0]?.message || 'Invalid request' } });
     }
     const msg = error instanceof Error ? error.message : 'Unknown error';
     return reply.status(500).send({ success: false, error: { code: 'FILE_MANAGER_ERROR', message: msg } });

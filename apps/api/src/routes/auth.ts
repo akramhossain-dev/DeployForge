@@ -20,7 +20,7 @@ const registerSchema = z.object({
     password: strongPasswordSchema,
     name: z.string().trim().min(1).max(120).optional(),
     termsAccepted: z.literal(true, {
-        errorMap: () => ({ message: 'You must accept Privacy Policy and Terms' }),
+        error: 'You must accept Privacy Policy and Terms',
     }),
 });
 
@@ -62,7 +62,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     fastify.post('/register', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { email, password, name } = registerSchema.parse(request.body);
         const result = await AuthService.register(email, password, name);
         return {
@@ -76,7 +76,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     fastify.post('/verify-otp', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { email, otp } = verifyOtpSchema.parse(request.body);
         await AuthService.verifyOTP(email, otp);
         return { success: true, data: { message: 'Email verified successfully' } };
@@ -109,7 +109,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         if (hasBody) {
             const result = refreshSchema.safeParse(request.body);
             if (!result.success) {
-                return apiError(reply, 400, 'BAD_REQUEST', result.error.errors[0].message);
+                return apiError(reply, 400, 'BAD_REQUEST', result.error.issues[0].message);
             }
             refreshToken = result.data.refreshToken;
         } else {
@@ -145,7 +145,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         if (hasBody) {
             const result = logoutSchema.safeParse(request.body);
             if (!result.success) {
-                return apiError(reply, 400, 'BAD_REQUEST', result.error.errors[0].message);
+                return apiError(reply, 400, 'BAD_REQUEST', result.error.issues[0].message);
             }
             refreshToken = result.data.refreshToken;
             logoutMode = result.data.logoutMode || 'current';
@@ -187,7 +187,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     fastify.get('/me', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         return { success: true, data: { user: request.user } };
     });
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Activity, ArrowRight, CheckCircle2, Github, GitBranch, Plus, Rocket, Server, XCircle, Zap, RefreshCw } from 'lucide-react';
+import { Activity, ArrowRight, CheckCircle2, Github, GitBranch, Plus, Rocket, Server, XCircle, Zap, RefreshCw } from '@/components/icons';
 import { useMemo } from 'react';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';

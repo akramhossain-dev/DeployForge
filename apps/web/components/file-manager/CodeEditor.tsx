@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Save, X, WrapText, Search, Loader2, FileCode, AlertTriangle, Eye, ArrowLeft, Server } from 'lucide-react';
+import { Save, X, WrapText, Search, Loader2, FileCode, ArrowLeft, Server } from '@/components/icons';
 import { useFileContent, useSaveFile } from '@/hooks/useFileManager';
 import { getLanguage } from './utils';
 import type { FileEntry } from '@/lib/api/types';

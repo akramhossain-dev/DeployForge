@@ -19,14 +19,14 @@
 * **Automated Git Workflows:** Sync with GitHub via OAuth. Pushing to monitored branches triggers automated build pipelines via webhooks.
 * **Multi-Framework Build Engine:** Automatically detects and configures runtimes for Next.js, Node.js, Vite (React/Vue), Astro, SvelteKit, Python Django/FastAPI, and static HTML.
 * **Environment Variable Management:** Multi-file, tabbed environment editor with AES-256-GCM encryption at rest.
-* **Zero-Config SSL & Networking:** Dynamic Nginx reverse proxy routing with automatic Let's Encrypt certificate issuance and renewal via Certbot.
-* **Blue-Green Deployments:** Deploys new builds in parallel containers, verifies health, reloads Nginx, and tears down old containers for zero-downtime releases.
-* **Instant Rollbacks:** One-click rollback to any previous successful deployment image.
+* **Verified TLS & Networking:** Stable Traefik file-provider routes with asynchronous ACME issuance and real SNI certificate verification.
+* **Blue-Green Deployments:** Builds immutable candidates on a private validation network, probes them through Traefik, atomically switches the route, and preserves the prior release for rollback.
+* **Safe Rollbacks:** Re-validates a retained release before traffic is switched; stateful Compose dependency changes require a maintenance workflow.
 * **Real-time Monitoring & SSH Terminal:** Track server CPU/RAM/Disk metrics and open an interactive web SSH terminal directly in the browser (powered by `xterm.js` + WebSockets).
 * **Notification & Alert System:** Configurable per-user alert thresholds for CPU, RAM, Disk, and Swap. In-app and email notifications for deployments, SSL, backups, and server events.
 * **Deployment Sandbox:** Pre-flight analysis that scores each deployment configuration, estimates resource usage, and blocks risky deployments before they reach your VPS.
 * **VPS File Manager:** Web-based file explorer with a built-in code editor, syntax highlighting, drag-and-drop uploads, archive tools, and path search.
-* **Backup & Restore System:** Manual and scheduled database backup exports with one-click restore.
+* **Experimental Local Backup Tools:** Internal manual export/restore helpers only; no scheduled, offsite, continuous-backup, or disaster-recovery guarantee.
 * **Enterprise Security Controls:** AES-256-GCM encryption, Argon2id password hashing, double-submit CSRF, Helmet headers, admin brute-force lockout, prototype pollution protection, and Docker sandbox profiles.
 
 ---
@@ -89,6 +89,7 @@ pnpm dev
 | 🏗️ [Architecture](docs/ARCHITECTURE.md) | Design diagrams, Blue-Green deployment sequence, monorepo layout |
 | 🌟 [Features](docs/FEATURES.md) | All platform features: deployments, env vars, monitoring, alerts, file manager |
 | 🔐 [Security](docs/SECURITY.md) | Encryption, CSRF, rate limiting, Docker hardening, metrics protection |
+| 🧭 [Phase 6 Migration Runbook](docs/PHASE6_RUNBOOK.md) | Dry-run-first staging, soak, cutover and rollback automation |
 
 ---
 

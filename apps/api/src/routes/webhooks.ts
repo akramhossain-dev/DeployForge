@@ -137,7 +137,7 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
                 const previousDeployment = await prisma.deployment.findFirst({
                     where: { projectId: project.id, userId: project.userId },
                     orderBy: { createdAt: 'desc' },
-                    select: { vpsId: true },
+                    select: { vpsId: true, composeService: true, composePort: true, requestedResourceTier: true, resourceTier: true },
                 });
 
                 if (!previousDeployment) {
@@ -154,6 +154,9 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
                     commitHash: parsed.after,
                     commitMessage: parsed.head_commit?.message,
                     skipWebhookRegistration: true,
+                    composeService: previousDeployment.composeService || undefined,
+                    composePort: previousDeployment.composePort || undefined,
+                    resourceTier: previousDeployment.requestedResourceTier || previousDeployment.resourceTier,
                 });
 
                 fastify.log.info({ deploymentId: deployment.id, projectId: project.id, branch }, 'Deployment queued from GitHub webhook');

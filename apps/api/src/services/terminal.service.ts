@@ -2,7 +2,7 @@ import prisma from '@deployforge/database';
 import { SSHConnectionError, SSHService } from '@deployforge/vps';
 import { EncryptionService } from '@deployforge/security';
 import { config } from '../config/env';
-import { SocketStream } from '@fastify/websocket';
+import type { WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
 
 const encryptionService = new EncryptionService(config.encryption.key);
@@ -29,7 +29,7 @@ type SSHSession = {
     vpsId: string;
     ssh: SSHService;
     shell?: SSHShellStream;
-    socket: SocketStream['socket'];
+    socket: WebSocket;
     heartbeat?: NodeJS.Timeout;
     closed: boolean;
 };
@@ -41,16 +41,16 @@ const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 
 export class TerminalService {
-    static async createSession(userId: string, vpsId: string, socket: SocketStream, options: TerminalSessionOptions = {}) {
+    static async createSession(userId: string, vpsId: string, socket: WebSocket, options: TerminalSessionOptions = {}) {
         const vps = await prisma.vPS.findUnique({ where: { id: vpsId } });
         if (!vps || vps.userId !== userId) {
-            this.sendEvent(socket.socket, 'terminal:error', {
+            this.sendEvent(socket, 'terminal:error', {
                 success: false,
                 stage: 'websocket_bridge',
                 message: 'Unauthorized',
                 errorCode: 'AUTH_FAILED',
             });
-            socket.socket.close();
+            socket.close();
             return;
         }
 
@@ -61,7 +61,7 @@ export class TerminalService {
             userId,
             vpsId,
             ssh,
-            socket: socket.socket,
+            socket,
             closed: false,
         };
         sessions.set(sessionId, activeSession);
@@ -97,46 +97,46 @@ export class TerminalService {
             });
             activeSession.shell = stream;
 
-            this.sendEvent(socket.socket, 'terminal:connected', { sessionId });
+            this.sendEvent(socket, 'terminal:connected', { sessionId });
             this.attachHeartbeat(activeSession);
 
             stream.on('data', (data: Buffer) => {
-                if (socket.socket.readyState === WS_OPEN) {
-                    socket.socket.send(data);
+                if (socket.readyState === WS_OPEN) {
+                    socket.send(data);
                 }
             });
 
             stream.on('error', (error: Error) => {
-                this.sendError(socket.socket, 'websocket_bridge', error);
+                this.sendError(socket, 'websocket_bridge', error);
             });
 
             stream.on('close', () => {
                 void this.cleanup(activeSession, 'CLOSED');
-                if (socket.socket.readyState === WS_OPEN) {
-                    this.sendEvent(socket.socket, 'terminal:closed', { sessionId });
-                    socket.socket.close();
+                if (socket.readyState === WS_OPEN) {
+                    this.sendEvent(socket, 'terminal:closed', { sessionId });
+                    socket.close();
                 }
             });
 
-            socket.socket.on('message', (data: unknown) => {
+            socket.on('message', (data: unknown) => {
                 if (activeSession.closed || !activeSession.shell) return;
                 if (this.handleControlMessage(activeSession, data)) return;
                 activeSession.shell.write(this.toInput(data));
             });
 
-            socket.socket.on('close', () => {
+            socket.on('close', () => {
                 void this.cleanup(activeSession, 'CLOSED');
             });
 
-            socket.socket.on('error', (error: Error) => {
-                this.sendError(socket.socket, 'websocket_bridge', error);
+            socket.on('error', (error: Error) => {
+                this.sendError(socket, 'websocket_bridge', error);
                 void this.cleanup(activeSession, 'FAILED');
             });
         } catch (err: any) {
             const stage: TerminalStage = dbSession ? 'shell_init' : 'ssh_connect';
-            this.sendError(socket.socket, stage, err);
+            this.sendError(socket, stage, err);
             await this.cleanup(activeSession, 'FAILED');
-            if (socket.socket.readyState === WS_OPEN) socket.socket.close();
+            if (socket.readyState === WS_OPEN) socket.close();
         }
     }
 
@@ -226,7 +226,7 @@ export class TerminalService {
         return Math.max(1, Math.floor(value));
     }
 
-    private static sendError(socket: SocketStream['socket'], stage: TerminalStage, error: unknown) {
+    private static sendError(socket: WebSocket, stage: TerminalStage, error: unknown) {
         const mapped = this.mapError(error);
         this.sendEvent(socket, 'terminal:error', {
             success: false,
@@ -256,7 +256,7 @@ export class TerminalService {
         return { message, errorCode: code || 'TERMINAL_CONNECTION_FAILED' };
     }
 
-    private static sendEvent(socket: SocketStream['socket'], event: TerminalStatusEvent, payload: Record<string, unknown>) {
+    private static sendEvent(socket: WebSocket, event: TerminalStatusEvent, payload: Record<string, unknown>) {
         if (socket.readyState !== WS_OPEN) return;
         socket.send(JSON.stringify({ event, ...payload }));
     }

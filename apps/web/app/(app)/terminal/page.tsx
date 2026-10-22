@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useVpsList } from '@/hooks/useDeployForgeData';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from '@/components/icons';
 import type { Vps } from '@/lib/api/types';
 
 const TerminalPanel = dynamic(() => import('@/components/terminal/TerminalPanel').then((module) => module.TerminalPanel), {

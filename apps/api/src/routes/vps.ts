@@ -7,11 +7,12 @@ import { sanitizeVps } from '../utils/sanitizers';
 import { AccountService } from '../services/account.service';
 import { RuntimeManagerService, RuntimeInstaller } from '../services/runtime-manager';
 import { SSHService } from '@deployforge/vps';
+import { isIP } from 'node:net';
 
 const hostnamePattern = /^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$/;
 
 const connectionBaseSchema = z.object({
-    ipAddress: z.string().trim().min(1).max(253).refine((value) => z.string().ip().safeParse(value).success || hostnamePattern.test(value), {
+    ipAddress: z.string().trim().min(1).max(253).refine((value) => isIP(value) !== 0 || hostnamePattern.test(value), {
         message: 'Enter a valid IP address or hostname',
     }),
     port: z.coerce.number().int().min(1).max(65535).default(22),
@@ -43,7 +44,7 @@ const addVPSSchema = connectionBaseSchema.extend({
 
 const updateVPSSchema = z.object({
     name: z.string().trim().min(1).max(80).optional(),
-    ipAddress: z.string().trim().min(1).max(253).refine((value) => z.string().ip().safeParse(value).success || hostnamePattern.test(value), {
+    ipAddress: z.string().trim().min(1).max(253).refine((value) => isIP(value) !== 0 || hostnamePattern.test(value), {
         message: 'Enter a valid IP address or hostname',
     }).optional(),
     port: z.coerce.number().int().min(1).max(65535).optional(),
@@ -68,6 +69,14 @@ const testConnectionSchema = z.union([
 const vpsParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid VPS ID format' }),
 });
+
+const vpsOperationParamsSchema = vpsParamsSchema.extend({
+    operationId: z.string().uuid({ message: 'Invalid operation ID format' }),
+});
+
+const bootstrapVPSSchema = z.object({
+    email: z.string().trim().email().max(254).optional(),
+}).strict();
 
 const sshAttemptRateLimit = {
     max: 8,
@@ -227,10 +236,32 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         try {
             const { id } = vpsParamsSchema.parse(request.params);
-            const body = request.body as { email?: string } | undefined;
-            const result = await VPSService.bootstrapVPS(request.user!.id, id, body?.email);
-            await AccountService.logAudit(request.user!.id, 'VPS_BOOTSTRAP', `Bootstrapped Traefik on VPS ID: ${id}`, request.ip, request.headers['user-agent']);
-            return { success: true, data: result };
+            const body = bootstrapVPSSchema.parse(request.body || {});
+            const operation = await VPSService.enqueueBootstrap(request.user!.id, id, body.email);
+            await AccountService.logAudit(request.user!.id, 'VPS_BOOTSTRAP_QUEUED', `Queued Traefik bootstrap on VPS ID: ${id}`, request.ip, request.headers['user-agent']);
+            return reply.status(202).send({
+                success: true,
+                data: {
+                    operationId: operation.id,
+                    status: operation.status,
+                },
+            });
+        } catch (error) {
+            return sendVpsError(reply, error);
+        }
+    });
+
+    fastify.get('/:id/operations/:operationId', {
+        preHandler: [(fastify as any).authGuard],
+        config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        try {
+            const { id, operationId } = vpsOperationParamsSchema.parse(request.params);
+            const operation = await VPSService.getBootstrapOperation(request.user!.id, operationId);
+            if (operation.vpsId !== id) {
+                return reply.status(404).send({ success: false, error: { code: 'GATEWAY_OPERATION_NOT_FOUND', message: 'Gateway operation not found' } });
+            }
+            return { success: true, data: operation };
         } catch (error) {
             return sendVpsError(reply, error);
         }
@@ -415,7 +446,7 @@ function sendVpsError(reply: FastifyReply, error: unknown) {
             success: false,
             error: {
                 code: 'VALIDATION_ERROR',
-                message: error.errors[0]?.message || 'Invalid VPS request'
+                message: error.issues[0]?.message || 'Invalid VPS request'
             }
         });
     }

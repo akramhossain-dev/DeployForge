@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Activity, BarChart2, Info, Plus, RefreshCw, Server, Cpu } from 'lucide-react';
+import { Activity, BarChart2, Info, Plus, RefreshCw, Server, Cpu } from '@/components/icons';
 import clsx from 'clsx';
 import {
     useVpsList,

@@ -4,6 +4,9 @@ import { SSHConnectionError, SSHService } from '@deployforge/vps';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
 import { AlertService } from './alert.service';
+import { gatewayQueue } from '../utils/queue';
+import { CacheService } from './cache.service';
+import { shellQuote } from './deployment/utils';
 
 const encryptionService = new EncryptionService(config.encryption.key);
 
@@ -80,7 +83,7 @@ export class VPSService {
             logger.warn({ vpsId: vps.id, err: error }, 'Initial VPS health check failed');
         });
 
-        this.bootstrapVPS(userId, vps.id).catch((error) => {
+        this.enqueueBootstrap(userId, vps.id).catch((error) => {
             logger.warn({ vpsId: vps.id, err: error }, 'Initial VPS Traefik bootstrap failed');
         });
 
@@ -128,15 +131,34 @@ export class VPSService {
                 await ssh.execute('export DEBIAN_FRONTEND=noninteractive && curl -fsSL https://get.docker.com | sh && systemctl enable --now docker', 300000);
             }
 
-            // 2. Create external bridge network
+            // 2. Create the application and private gateway networks.
             await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
+            await ssh.execute('docker network inspect deployforge-gateway >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-gateway');
+            await ssh.execute('docker network inspect deployforge-validation >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-validation');
 
             // 3. Prepare ACME persistent storage
-            await ssh.execute('mkdir -p /etc/deployforge/traefik/acme && touch /etc/deployforge/traefik/acme/acme.json && chmod 600 /etc/deployforge/traefik/acme/acme.json');
+            await ssh.execute('mkdir -p /etc/deployforge/traefik/acme /etc/deployforge/traefik/dynamic && touch /etc/deployforge/traefik/acme/acme.json && chmod 600 /etc/deployforge/traefik/acme/acme.json');
 
-            // 4. Ensure deployforge-traefik container
+            // 4. Keep the Docker socket behind a read-only allowlisted proxy.
+            const proxyRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-socket-proxy 2>/dev/null");
+            if (proxyRunning.stdout.trim() !== 'true') {
+                await ssh.execute('docker rm -f deployforge-socket-proxy 2>/dev/null || true');
+                const proxyResult = await ssh.execute(`docker run -d \\
+                    --name deployforge-socket-proxy \\
+                    --restart always \\
+                    --network deployforge-gateway \\
+                    -e LOG_LEVEL=warning \\
+                    -e CONTAINERS=1 -e EVENTS=1 -e INFO=1 -e NETWORKS=1 \\
+                    -e SERVICES=1 -e TASKS=1 -e VERSION=1 -e POST=0 \\
+                    -v /var/run/docker.sock:/var/run/docker.sock:ro \\
+                    tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459`);
+                if (proxyResult.code !== 0) throw new Error('Docker socket proxy failed to start');
+            }
+
+            // 5. Ensure Traefik talks to the proxy and never mounts the socket.
             const traefikRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-traefik 2>/dev/null");
-            if (traefikRunning.stdout.trim() !== 'true') {
+            const proxyConfigured = await ssh.execute("docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'deployforge-socket-proxy:2375' && docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'providers.file.directory=/dynamic'");
+            if (traefikRunning.stdout.trim() !== 'true' || proxyConfigured.code !== 0) {
                 await ssh.execute('docker rm -f deployforge-traefik 2>/dev/null || true');
                 const runTraefikCmd = `docker run -d \\
                     --name deployforge-traefik \\
@@ -144,39 +166,207 @@ export class VPSService {
                     --network deployforge-net \\
                     -p 80:80 \\
                     -p 443:443 \\
-                    -v /var/run/docker.sock:/var/run/docker.sock:ro \\
                     -v /etc/deployforge/traefik/acme/acme.json:/acme.json \\
-                    traefik:v3.1 \\
+                    -v /etc/deployforge/traefik/dynamic:/dynamic:ro \\
+                    traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d \\
                     --global.sendAnonymousUsage=false \\
                     --api.dashboard=false \\
                     --providers.docker=true \\
+                    --providers.docker.endpoint=tcp://deployforge-socket-proxy:2375 \\
                     --providers.docker.exposedbydefault=false \\
                     --providers.docker.network=deployforge-net \\
+                    --providers.file.directory=/dynamic \\
+                    --providers.file.watch=true \\
                     --entrypoints.web.address=:80 \\
                     --entrypoints.web.http.redirections.entrypoint.to=websecure \\
                     --entrypoints.web.http.redirections.entrypoint.scheme=https \\
                     --entrypoints.websecure.address=:443 \\
                     --certificatesresolvers.letsencrypt.acme.httpchallenge=true \\
                     --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web \\
-                    --certificatesresolvers.letsencrypt.acme.email='${acmeEmail}' \\
+                    --certificatesresolvers.letsencrypt.acme.email=${shellQuote(acmeEmail)} \\
                     --certificatesresolvers.letsencrypt.acme.storage=/acme.json`;
                 const runRes = await ssh.execute(runTraefikCmd);
                 if (runRes.code !== 0) {
-                    logger.warn({ vpsId, err: runRes.stderr }, 'Traefik container start returned non-zero code');
+                    throw new Error('Traefik gateway failed to start');
                 }
             }
 
+            await ssh.execute('docker network connect deployforge-gateway deployforge-traefik 2>/dev/null || true');
+
+            const verification = await ssh.execute("test \"$(docker inspect -f '{{.State.Running}}' deployforge-traefik 2>/dev/null)\" = true && test \"$(docker inspect -f '{{.State.Running}}' deployforge-socket-proxy 2>/dev/null)\" = true");
+            if (verification.code !== 0) throw new Error('Gateway verification failed after bootstrap');
+            const versionResult = await ssh.execute("docker inspect -f '{{.Config.Image}}' deployforge-traefik 2>/dev/null");
+            const gatewayVersion = versionResult.stdout.trim() || 'traefik:unknown';
+
             await prisma.vPS.update({
                 where: { id: vpsId },
-                data: { status: 'active', lastCheckedAt: new Date() },
+                data: {
+                    status: 'active',
+                    lastCheckedAt: new Date(),
+                    gatewayStatus: 'READY',
+                    gatewayVersion,
+                    gatewayCheckedAt: new Date(),
+                    gatewayError: null,
+                },
             });
 
             return {
                 success: true,
+                gatewayVersion,
                 message: 'VPS bootstrapped with Docker, deployforge-net, and Traefik ingress gateway',
             };
         } finally {
             ssh.disconnect();
+        }
+    }
+
+    static async enqueueBootstrap(userId: string, vpsId: string, email?: string) {
+        const vps = await prisma.vPS.findFirst({
+            where: {
+                id: vpsId,
+                OR: [
+                    { userId },
+                    {
+                        deployments: {
+                            some: {
+                                project: {
+                                    OR: [
+                                        { userId },
+                                        { members: { some: { userId, role: { in: ['OWNER', 'ADMIN'] } } } },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            select: { id: true },
+        });
+        if (!vps) throw new VPSConnectionFailure('VPS not found', 'VPS_NOT_FOUND');
+
+        const release = await CacheService.acquireLock(`gateway-enqueue:${vpsId}`, 15000);
+        if (!release) throw new VPSConnectionFailure('Gateway operation is already being queued', 'GATEWAY_OPERATION_BUSY');
+
+        try {
+            const existing = await prisma.vPSOperation.findFirst({
+                where: {
+                    vpsId,
+                    type: 'GATEWAY_BOOTSTRAP',
+                    status: { in: ['QUEUED', 'RUNNING'] },
+                },
+                orderBy: { createdAt: 'desc' },
+            });
+            if (existing) return existing;
+
+            const operation = await prisma.vPSOperation.create({
+                data: {
+                    vpsId,
+                    requestedById: userId,
+                    acmeEmail: email?.trim() || null,
+                    type: 'GATEWAY_BOOTSTRAP',
+                    status: 'QUEUED',
+                },
+            });
+            await prisma.vPS.update({
+                where: { id: vpsId },
+                data: { gatewayStatus: 'PROVISIONING', gatewayError: null },
+            });
+
+            try {
+                await gatewayQueue.add(
+                    'gateway-bootstrap',
+                    { operationId: operation.id, operation: 'bootstrap' as const },
+                    { jobId: `gateway-${operation.id}` },
+                );
+            } catch (error) {
+                await prisma.$transaction([
+                    prisma.vPSOperation.update({
+                        where: { id: operation.id },
+                        data: { status: 'FAILED', error: 'Gateway queue is unavailable', completedAt: new Date() },
+                    }),
+                    prisma.vPS.update({
+                        where: { id: vpsId },
+                        data: {
+                            gatewayStatus: 'FAILED',
+                            gatewayError: 'Gateway queue is unavailable',
+                            gatewayCheckedAt: new Date(),
+                        },
+                    }),
+                ]);
+                throw error;
+            }
+
+            return operation;
+        } finally {
+            await release();
+        }
+    }
+
+    static async getBootstrapOperation(userId: string, operationId: string) {
+        const operation = await prisma.vPSOperation.findFirst({
+            where: {
+                id: operationId,
+                vps: {
+                    OR: [
+                        { userId },
+                        {
+                            deployments: {
+                                some: {
+                                    project: {
+                                        OR: [
+                                            { userId },
+                                            { members: { some: { userId } } },
+                                        ],
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                },
+            },
+        });
+        if (!operation) throw new VPSConnectionFailure('Gateway operation not found', 'GATEWAY_OPERATION_NOT_FOUND');
+        return operation;
+    }
+
+    static async processBootstrapOperation(operationId: string) {
+        const operation = await prisma.vPSOperation.findUnique({ where: { id: operationId } });
+        if (!operation || operation.type !== 'GATEWAY_BOOTSTRAP') throw new Error('Gateway operation not found');
+        if (operation.status === 'SUCCESS') return;
+
+        await prisma.vPSOperation.update({
+            where: { id: operationId },
+            data: {
+                status: 'RUNNING',
+                startedAt: operation.startedAt || new Date(),
+                completedAt: null,
+                error: null,
+            },
+        });
+
+        try {
+            await this.bootstrapVPS(operation.requestedById, operation.vpsId, operation.acmeEmail || undefined);
+            await prisma.vPSOperation.update({
+                where: { id: operationId },
+                data: { status: 'SUCCESS', completedAt: new Date(), error: null },
+            });
+        } catch (error) {
+            const reason = sanitizeGatewayError(error);
+            await prisma.$transaction([
+                prisma.vPSOperation.update({
+                    where: { id: operationId },
+                    data: { status: 'FAILED', completedAt: new Date(), error: reason },
+                }),
+                prisma.vPS.update({
+                    where: { id: operation.vpsId },
+                    data: {
+                        gatewayStatus: 'FAILED',
+                        gatewayError: reason,
+                        gatewayCheckedAt: new Date(),
+                    },
+                }),
+            ]);
+            throw error;
         }
     }
 
@@ -710,4 +900,15 @@ function normalizeConnectionFailure(error: any): VpsConnectionTestResult {
         message: error?.message || 'SSH connection failed',
         errorCode: error?.code || 'SSH_CONNECTION_FAILED',
     };
+}
+
+function sanitizeGatewayError(error: unknown) {
+    const raw = error instanceof Error ? error.message : 'Gateway bootstrap failed';
+    return raw
+        .replace(/redis:\/\/[^\s@]+@/gi, 'redis://[redacted]@')
+        .replace(/postgres(?:ql)?:\/\/[^\s@]+@/gi, 'postgresql://[redacted]@')
+        .replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, '[redacted-key]')
+        .replace(/[\r\n\t]+/g, ' ')
+        .trim()
+        .slice(0, 500) || 'Gateway bootstrap failed';
 }

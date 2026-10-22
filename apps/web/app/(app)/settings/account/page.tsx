@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Trash2, Loader2 } from 'lucide-react';
+import { AlertTriangle, Trash2, Loader2 } from '@/components/icons';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 import { useAuthStore } from '@/lib/store/useAuthStore';
+import { useRouter } from 'next/navigation';
 
 const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 
 export default function AccountSettingsPage() {
+    const router = useRouter();
     const addToast = useToastStore((state) => state.addToast);
     const logout = useAuthStore((state) => state.logout);
     const user = useAuthStore((state) => state.user);
@@ -46,7 +48,7 @@ export default function AccountSettingsPage() {
 
             logout();
             setTimeout(() => {
-                window.location.assign('/');
+                router.push('/');
             }, 1500);
         } catch (err: any) {
             addToast({ title: 'Error', description: err.message || 'Failed to delete account. Please check your password.', severity: 'error' });

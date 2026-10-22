@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react';
+import { ChevronUp, ChevronDown, Download, Loader2 } from '@/components/icons';
 import type { FileEntry } from '@/lib/api/types';
 import { FileIcon } from './FileIcon';
 import { formatSize, formatDate } from './utils';

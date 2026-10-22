@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, ShieldCheck, FileText } from 'lucide-react';
+import { ArrowRight, ShieldCheck } from '@/components/icons';
 
 const SECTIONS = [
     {

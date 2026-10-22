@@ -4,6 +4,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { PasswordService, TokenService } from '@deployforge/security';
 import { config } from '../config/env';
+import { RESOURCE_DEFAULTS, ResourcePolicyService } from '../services/resource-policy.service';
 import { DeploymentService } from '../services/deployment.service';
 import { GitHubService } from '../services/github.service';
 import { CacheService } from '../services/cache.service';
@@ -79,7 +80,7 @@ function canManagePlatform(role: string) {
     return role === 'SUPER_ADMIN' || role === 'ADMIN';
 }
 
-async function audit(request: FastifyRequest, action: string, data: { targetUserId?: string; targetRole?: string; targetType?: string; targetId?: string } = {}) {
+async function audit(request: FastifyRequest, action: string, data: { targetUserId?: string; targetRole?: string; targetType?: string; targetId?: string; metadata?: any } = {}) {
     if (!request.admin?.id) return;
     await prisma.adminActivity.create({
         data: {
@@ -90,6 +91,7 @@ async function audit(request: FastifyRequest, action: string, data: { targetUser
             targetType: data.targetType,
             targetId: data.targetId,
             ipAddress: request.ip,
+            metadata: data.metadata,
         },
     });
 }
@@ -111,6 +113,53 @@ async function auditAdminLoginEvent(admin: { id: string; role: string } | null, 
 }
 
 export default async function adminRoutes(fastify: FastifyInstance) {
+    fastify.get('/projects/:projectId/resource-policy', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+        const { projectId } = z.object({ projectId: z.string().uuid() }).parse(request.params);
+        const project = await prisma.project.findUnique({ where: { id: projectId }, include: { resourcePolicy: true } });
+        if (!project) return error(reply, 404, 'Project not found', 'NOT_FOUND');
+        return { success: true, data: project.resourcePolicy };
+    });
+
+    fastify.put('/projects/:projectId/resource-policy', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+        const { projectId } = z.object({ projectId: z.string().uuid() }).parse(request.params);
+        const body = z.object({
+            resourceTier: z.enum(['STATIC', 'SERVER', 'FULLSTACK']).optional(),
+            cpuLimitMillis: z.number().int().min(100).max(64000).optional(),
+            memoryLimitMiB: z.number().int().min(128).max(262144).optional(),
+            pidsLimit: z.number().int().min(32).max(4096).optional(),
+            storageLimitMiB: z.number().int().min(1024).max(51200).optional(),
+        }).refine((value) => Object.values(value).some((item) => item !== undefined), 'At least one resource override is required').parse(request.body);
+        const project = await prisma.project.findUnique({ where: { id: projectId }, include: { resourcePolicy: true, deployments: { orderBy: { createdAt: 'desc' }, take: 1, include: { vps: true } } } });
+        if (!project) return error(reply, 404, 'Project not found', 'NOT_FOUND');
+        const latest = project.deployments[0];
+        const tier = body.resourceTier || project.resourcePolicy?.resourceTier || 'SERVER';
+        const defaults = RESOURCE_DEFAULTS[tier];
+        const next = {
+            resourceTier: tier,
+            cpuLimitMillis: body.cpuLimitMillis ?? project.resourcePolicy?.cpuLimitMillis ?? defaults.cpuMillis,
+            memoryLimitMiB: body.memoryLimitMiB ?? project.resourcePolicy?.memoryLimitMiB ?? defaults.memoryMiB,
+            pidsLimit: body.pidsLimit ?? project.resourcePolicy?.pidsLimit ?? defaults.pids,
+            storageLimitMiB: body.storageLimitMiB ?? project.resourcePolicy?.storageLimitMiB ?? defaults.storageMiB,
+            updatedByAdminId: request.admin.id,
+        };
+        if (latest) {
+            try {
+                await ResourcePolicyService.validateOverride(latest.vpsId, {
+                    tier,
+                    cpuMillis: next.cpuLimitMillis,
+                    memoryMiB: next.memoryLimitMiB,
+                    pids: next.pidsLimit,
+                    storageMiB: next.storageLimitMiB,
+                });
+            } catch (err: any) {
+                return error(reply, err.errorCode ? 409 : 500, err.message || 'VPS capacity validation failed', err.errorCode || 'VPS_CAPACITY_UNAVAILABLE');
+            }
+        }
+        const policy = await prisma.projectResourcePolicy.upsert({ where: { projectId }, create: { projectId, ...next }, update: next });
+        await audit(request, 'UPDATE_PROJECT_RESOURCE_POLICY', { targetType: 'PROJECT', targetId: projectId, metadata: { old: project.resourcePolicy, new: policy } });
+        return { success: true, data: policy };
+    });
+
     fastify.post('/login', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -512,7 +561,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: { message: 'Deployment restarted' } };
     });
 
-    fastify.delete('/deployments/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+    fastify.delete('/deployments/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, _reply) => {
         const { id } = idParamsSchema.parse(request.params);
         await AdminService.deleteDeploymentCascade(id);
         await audit(request, 'DELETE_DEPLOYMENT', { targetType: 'DEPLOYMENT', targetId: id });
@@ -527,7 +576,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: servers };
     });
 
-    fastify.delete('/vps/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+    fastify.delete('/vps/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, _reply) => {
         const { id } = idParamsSchema.parse(request.params);
         await AdminService.deleteVpsCascade(id);
         await audit(request, 'DELETE_VPS', { targetType: 'VPS', targetId: id });
@@ -585,7 +634,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: accounts };
     });
 
-    fastify.post('/github/accounts/:userId/sync', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
+    fastify.post('/github/accounts/:userId/sync', { preHandler: [(fastify as any).requireAdmin] }, async (request, _reply) => {
         const { userId } = userIdParamsSchema.parse(request.params);
         const repos = await GitHubService.syncRepos(userId);
         await audit(request, 'FORCE_REPOSITORY_SYNC', { targetUserId: userId, targetType: 'GITHUB_ACCOUNT', targetId: userId });

@@ -1,5 +1,4 @@
-import prisma from '@deployforge/database';
-import { AlertType, AlertLevel } from '@prisma/client';
+import prisma, { AlertType, AlertLevel } from '@deployforge/database';
 import { logger } from '../utils/logger';
 import { monitoringEventEmitter, MONITORING_EVENTS } from '../utils/monitoring-events';
 import { CacheService } from './cache.service';

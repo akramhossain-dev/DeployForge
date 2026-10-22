@@ -7,12 +7,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { RollbackService } from '../services/rollback.service';
-import { TokenService } from '@deployforge/security';
-import { config } from '../config/env';
 import { formatDeploymentResponse, sanitizeDeployment } from '../utils/sanitizers';
 import { AccountService } from '../services/account.service';
-
-const tokenService = new TokenService(config.auth.jwtSecret);
+import { socketToken, verifyDeploymentSocketAccess } from '../utils/socket-auth';
 
 const idParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid ID format' }),
@@ -28,19 +25,19 @@ const githubDeploySchema = z.object({
     autoDeploy: z.boolean().optional().default(true),
     domainName: z.string().trim().optional(),
     env: z.any().optional(),
+    composeService: z.string().trim().min(1).max(63).optional(),
+    composePort: z.coerce.number().int().min(1).max(65535).optional(),
+    resourceTier: z.enum(['STATIC', 'SERVER', 'FULLSTACK']).optional(),
 });
 
 const wsParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid deployment ID format' }),
 });
 
-const wsQuerySchema = z.object({
-    token: z.string().min(1, 'Token is required'),
-});
-
 const rollbackBodySchema = z.object({
     historyId: z.string().uuid({ message: 'Invalid history ID format' }).optional(),
-});
+    releaseId: z.string().uuid({ message: 'Invalid release ID format' }).optional(),
+}).refine((value) => !(value.historyId && value.releaseId), { message: 'Provide either releaseId or historyId, not both' });
 
 export default async function deployRoutes(fastify: FastifyInstance) {
     
@@ -49,7 +46,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         try {
-            const { projectId, repositoryId, vpsId, branch, autoDeploy, domainName, env, mode } = githubDeploySchema.parse(request.body);
+            const { projectId, repositoryId, vpsId, branch, autoDeploy, domainName, env, mode, composeService, composePort, resourceTier } = githubDeploySchema.parse(request.body);
             const project = projectId
                 ? await prisma.project.findFirst({
                     where: {
@@ -81,6 +78,9 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 domainName: mode === 'sandbox' ? undefined : domainName || undefined,
                 env,
                 mode,
+                composeService,
+                composePort,
+                resourceTier,
             });
             await AccountService.logAudit(request.user.id, 'DEPLOYMENT_TRIGGERED', `GitHub deployment triggered for project: ${project.name} (branch: ${branch})`, request.ip, request.headers['user-agent']);
             return { success: true, data: sanitizeDeployment(deployment) };
@@ -112,6 +112,21 @@ export default async function deployRoutes(fastify: FastifyInstance) {
             const projectName = fields.name || path.basename(safeName).replace(/\.(zip|tar\.gz|tgz)$/i, '');
             const env = parseEnvField(fields.env);
             const mode = fields.mode === 'sandbox' ? 'sandbox' : 'production';
+            const composeService = fields.composeService?.trim() || undefined;
+            const composePort = fields.composePort ? Number(fields.composePort) : undefined;
+            const resourceTier = fields.resourceTier && ['STATIC', 'SERVER', 'FULLSTACK'].includes(fields.resourceTier)
+                ? fields.resourceTier as 'STATIC' | 'SERVER' | 'FULLSTACK'
+                : undefined;
+            if (fields.resourceTier && !resourceTier) {
+                return reply.status(422).send({ success: false, error: { code: 'RESOURCE_TIER_INVALID', message: 'resourceTier must be STATIC, SERVER, or FULLSTACK' } });
+            }
+
+            if (composeService && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/.test(composeService)) {
+                return reply.status(422).send({ success: false, error: { code: 'COMPOSE_INGRESS_INVALID', message: 'Invalid composeService name' } });
+            }
+            if (composePort !== undefined && (!Number.isInteger(composePort) || composePort < 1 || composePort > 65535)) {
+                return reply.status(422).send({ success: false, error: { code: 'COMPOSE_INGRESS_INVALID', message: 'composePort must be between 1 and 65535' } });
+            }
 
             if (!vpsId || !z.string().uuid().safeParse(vpsId).success) {
                 return reply.status(400).send({
@@ -194,6 +209,9 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 domainName: mode === 'sandbox' ? undefined : domainName || undefined,
                 env,
                 mode,
+                composeService,
+                composePort,
+                resourceTier,
             });
 
             await AccountService.logAudit(request.user.id, 'DEPLOYMENT_TRIGGERED', `Zip upload deployment triggered for project: ${project.name}`, request.ip, request.headers['user-agent']);
@@ -206,7 +224,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     fastify.get('/list', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const deployments = await prisma.deployment.findMany({
             where: {
                 OR: [
@@ -238,7 +256,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     fastify.get('/:id/logs', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { id } = idParamsSchema.parse(request.params);
         const logs = await prisma.deploymentLog.findMany({
             where: {
@@ -267,29 +285,18 @@ export default async function deployRoutes(fastify: FastifyInstance) {
         let token: string;
         try {
             const params = wsParamsSchema.parse(request.params);
-            const query = wsQuerySchema.parse(request.query);
             id = params.id;
-            token = query.token;
+            token = socketToken(request);
         } catch (err: any) {
-            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Invalid parameters or query' }));
-            connection.socket.close();
+            connection.send(JSON.stringify({ event: 'deployment:error', message: 'Invalid parameters or query' }));
+            connection.close();
             return;
         }
 
-        let userId = '';
-        try {
-            const payload = tokenService.verifyToken(token);
-            userId = payload.userId;
-        } catch {
-            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Unauthorized' }));
-            connection.socket.close();
-            return;
-        }
-
-        const deployment = await prisma.deployment.findFirst({ where: { id, userId }, select: { id: true } });
-        if (!deployment) {
-            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Deployment not found' }));
-            connection.socket.close();
+        const access = await verifyDeploymentSocketAccess(id, token);
+        if (!access) {
+            connection.send(JSON.stringify({ event: 'deployment:error', message: 'Unauthorized' }));
+            connection.close();
             return;
         }
 
@@ -302,18 +309,29 @@ export default async function deployRoutes(fastify: FastifyInstance) {
             });
             for (const log of logs) {
                 lastSeen = log.createdAt;
-                connection.socket.send(JSON.stringify({ event: 'deployment:log', data: log }));
+                connection.send(JSON.stringify({ event: 'deployment:log', data: log }));
             }
         };
 
         await sendLogs();
         const interval = setInterval(() => {
             sendLogs().catch((err) => {
-                connection.socket.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
+                connection.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
             });
         }, 1500);
+        const accessInterval = setInterval(async () => {
+            const currentAccess = await verifyDeploymentSocketAccess(id, token).catch(() => null);
+            if (!currentAccess) {
+                connection.send(JSON.stringify({ event: 'deployment:error', message: 'Access revoked' }));
+                connection.close();
+            }
+        }, 60_000);
+        accessInterval.unref();
 
-        connection.socket.on('close', () => clearInterval(interval));
+        connection.on('close', () => {
+            clearInterval(interval);
+            clearInterval(accessInterval);
+        });
     });
 
     fastify.get('/status/:id', {
@@ -335,10 +353,10 @@ export default async function deployRoutes(fastify: FastifyInstance) {
     }, async (request, reply) => {
         try {
             const { id } = idParamsSchema.parse(request.params);
-            const { historyId } = rollbackBodySchema.parse(request.body);
-            const result = await RollbackService.rollback(request.user.id, id, historyId);
-            await AccountService.logAudit(request.user.id, 'DEPLOYMENT_ROLLED_BACK', `Deployment rollback requested for deployment ID: ${id} to history ID: ${historyId || 'previous'}`, request.ip, request.headers['user-agent']);
-            return { success: true, data: result };
+            const { historyId, releaseId } = rollbackBodySchema.parse(request.body);
+            const result = await RollbackService.rollback(request.user.id, id, releaseId || historyId);
+            await AccountService.logAudit(request.user.id, 'DEPLOYMENT_ROLLED_BACK', `Deployment rollback queued for deployment ID: ${id} to release ID: ${releaseId || historyId || 'previous'}`, request.ip, request.headers['user-agent']);
+            return reply.status(202).send({ success: true, data: result });
         } catch (err: any) {
             return sendDeploymentError(reply, err);
         }
@@ -422,7 +440,7 @@ async function readUploadMultipart(request: any) {
 
 function sendDeploymentError(reply: any, err: any) {
     const status = err instanceof DeploymentError
-        ? err.errorCode.endsWith('NOT_FOUND') ? 404 : 400
+        ? err.statusCode || (err.errorCode.endsWith('NOT_FOUND') ? 404 : err.errorCode.includes('CAPACITY') || err.errorCode === 'DEPLOYMENT_LIMIT_REACHED' ? 409 : err.errorCode.includes('TIER') ? 422 : 400)
         : err?.name === 'ZodError' ? 400 : 500;
 
     return reply.status(status).send({
@@ -431,6 +449,8 @@ function sendDeploymentError(reply: any, err: any) {
             code: err?.errorCode || (err?.name === 'ZodError' ? 'VALIDATION_ERROR' : 'DEPLOYMENT_ERROR'),
             message: err.message || 'Internal Server Error',
             stage: err?.stage || 'request',
+            requestId: reply.request.id,
+            ...(err?.details ? { details: err.details } : {}),
         }
     });
 }

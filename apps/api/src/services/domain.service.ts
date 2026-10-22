@@ -5,6 +5,8 @@ import { config } from '../config/env';
 import dns from 'dns';
 import { promisify } from 'util';
 import { Prisma } from '@deployforge/database';
+import { queueTLSVerification } from '../utils/queue';
+import { ReleaseService } from './release.service';
 
 const resolveA = promisify(dns.resolve4);
 const resolveCname = promisify(dns.resolveCname);
@@ -60,9 +62,10 @@ export class DomainService {
         const cleanDomain = normalizeDomain(domainName);
         const deployment = await prisma.deployment.findUnique({
             where: { id: deploymentId },
-            include: { vps: true, domains: true, project: true },
+            include: { vps: true, domains: true, project: { include: { activeRelease: true } } },
         });
         if (!deployment) throw domainError('domain_bind', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
+        const routeDeploymentId = deployment.project.activeRelease?.deploymentId || deploymentId;
         
         const isOwner = deployment.userId === userId;
         const isMember = await prisma.projectMember.findFirst({
@@ -77,8 +80,8 @@ export class DomainService {
         const existing = await prisma.domain.findFirst({
             where: {
                 domainName: cleanDomain,
-                deploymentId: { not: deploymentId },
-                deployment: { status: { not: 'DELETED' } },
+                deploymentId: { not: routeDeploymentId },
+                deployment: { status: { not: 'DELETED' }, projectId: { not: deployment.projectId } },
             },
         });
         if (existing) throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
@@ -106,8 +109,10 @@ export class DomainService {
             const safeProjectName = deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
             const shortDeployId = deploymentId.slice(0, 8);
 
-            // If deployment is running, update Traefik router Host rule on the container
-            if (deployment.status === 'RUNNING' && deployment.containerId) {
+            // Phase 3 routes are updated atomically without recreating the active runtime.
+            if (deployment.project.activeRelease) {
+                await ReleaseService.updateDomainRoute(ssh, deployment.projectId, cleanDomain, routerId);
+            } else if (deployment.status === 'RUNNING' && deployment.containerId) {
                 const isStatic = deployment.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '');
 
                 if (isStatic) {
@@ -168,18 +173,18 @@ export class DomainService {
                     const conflict = await tx.domain.findFirst({
                         where: {
                             domainName: cleanDomain,
-                            deploymentId: { not: deploymentId },
-                            deployment: { status: { not: 'DELETED' } },
+                            deploymentId: { not: routeDeploymentId },
+                            deployment: { status: { not: 'DELETED' }, projectId: { not: deployment.projectId } },
                         },
                     });
                     if (conflict) throw domainError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
 
                     await tx.domain.updateMany({
-                        where: { deploymentId, domainName: { not: cleanDomain } },
+                        where: { deploymentId: routeDeploymentId, domainName: { not: cleanDomain } },
                         data: { status: 'DELETED' },
                     });
                     await tx.deployment.update({
-                        where: { id: deploymentId },
+                        where: { id: routeDeploymentId },
                         data: { domain: cleanDomain, hostType: 'domain' },
                     });
 
@@ -188,26 +193,32 @@ export class DomainService {
                         return tx.domain.update({
                             where: { id: current.id },
                             data: {
-                                deploymentId,
+                                deploymentId: routeDeploymentId,
                                 vpsId: vps.id,
                                 domainName: cleanDomain,
                                 status: 'ACTIVE',
-                                sslStatus: 'ISSUED',
+                                sslStatus: 'PENDING',
+                                sslVerifiedAt: null,
+                                sslExpiresAt: null,
+                                sslIssuer: null,
+                                sslError: null,
+                                sslRetryCount: 0,
                             },
                         });
                     }
 
                     return tx.domain.create({
                         data: {
-                            deploymentId,
+                            deploymentId: routeDeploymentId,
                             vpsId: vps.id,
                             domainName: cleanDomain,
                             status: 'ACTIVE',
-                            sslStatus: 'ISSUED',
+                            sslStatus: 'PENDING',
                         },
                     });
                 });
 
+                await queueTLSVerification(savedDomain.id);
                 return savedDomain;
             } catch (err: any) {
                 if (err?.code === 'P2002' || (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
@@ -238,14 +249,14 @@ export class DomainService {
                     }
                 ]
             },
-            include: { vps: true, deployment: { include: { project: true } } },
+            include: { vps: true, deployment: { include: { project: { include: { activeRelease: true } } } } },
         });
         if (!domain) throw Object.assign(new Error('Domain not found'), { statusCode: 404 });
 
         const vps = domain.vps;
         const deployment = domain.deployment;
 
-        if (vps && deployment && deployment.status === 'RUNNING' && deployment.containerId) {
+        if (vps && deployment && (deployment.project.activeRelease || (deployment.status === 'RUNNING' && deployment.containerId))) {
             const ssh = new SSHService();
             try {
                 const auth = vps.authType === 'key'
@@ -256,11 +267,13 @@ export class DomainService {
 
                 const safeProjectName = deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
                 const shortDeployId = deployment.id.slice(0, 8);
-                const fallbackDomain = `${safeProjectName}-${shortDeployId}.${vps.ipAddress}.sslip.io`;
+                const fallbackDomain = `${safeProjectName}-${deployment.projectId.slice(0, 8)}.${vps.ipAddress}.sslip.io`;
                 const routerId = `df-${deployment.projectId}`;
                 const isStatic = deployment.type === 'STATIC' || ['STATIC', 'VITE_REACT', 'ASTRO'].includes(deployment.framework || '');
 
-                if (isStatic) {
+                if (deployment.project.activeRelease) {
+                    await ReleaseService.updateDomainRoute(ssh, deployment.projectId, fallbackDomain, routerId);
+                } else if (deployment.containerId && isStatic) {
                     const staticContainerName = `df-static-${safeProjectName}-${shortDeployId}`;
                     const staticDir = `/home/${vps.username}/deployforge/projects/${deployment.projectId}/static/${deployment.lastStableVersion || shortDeployId}`;
                     await ssh.execute(`docker rm -f ${shellQuote(staticContainerName)} 2>/dev/null || true`);
@@ -280,7 +293,7 @@ export class DomainService {
                     if (newCId.trim()) {
                         await prisma.deployment.update({ where: { id: deployment.id }, data: { containerId: newCId.trim() } });
                     }
-                } else if (!deployment.containerId.startsWith('compose:')) {
+                } else if (deployment.containerId && !deployment.containerId.startsWith('compose:')) {
                     const { stdout: inspectOut } = await ssh.execute(`docker inspect --format '{{.Config.Image}}' ${shellQuote(deployment.containerId)}`).catch(() => ({ stdout: '' }));
                     const imageTag = inspectOut.trim();
                     if (imageTag) {
@@ -310,8 +323,9 @@ export class DomainService {
                         }
                     }
                 }
-            } catch {
-                // Non-fatal
+            } catch (error) {
+                if (deployment.project.activeRelease) throw error;
+                // Legacy label-based route repair remains best-effort.
             } finally {
                 ssh.disconnect();
             }
@@ -388,11 +402,15 @@ export class DomainService {
             ssh.disconnect();
         }
 
-        await prisma.domain.update({ where: { id: domainId }, data: { sslStatus: 'ISSUED' } });
-        return { success: true, sslStatus: 'ISSUED' };
+        await prisma.domain.update({
+            where: { id: domainId },
+            data: { sslStatus: 'PENDING', sslVerifiedAt: null, sslExpiresAt: null, sslIssuer: null, sslError: null, sslRetryCount: 0, sslNextRetryAt: new Date() },
+        });
+        await queueTLSVerification(domainId);
+        return { success: true, sslStatus: 'PENDING' };
     }
 
-    static async setAutoHttps(userId: string, domainId: string, enabled: boolean) {
+    static async setAutoHttps(userId: string, domainId: string, _enabled: boolean) {
         const domain = await prisma.domain.findFirst({
             where: {
                 id: domainId,

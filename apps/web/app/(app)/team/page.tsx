@@ -2,9 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-    Users, UserPlus, Mail, Shield, Trash2, Check, X, Clock, 
-    ChevronDown, AlertCircle, Loader2 
-} from 'lucide-react';
+    Users, UserPlus, Trash2, Check, X, Clock, Loader2
+} from '@/components/icons';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { 
     useProjects, useProjectMembers, useInvitations, 

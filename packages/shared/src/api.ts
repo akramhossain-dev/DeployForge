@@ -14,6 +14,8 @@ export type ApiErrorPayload = {
     code: ApiErrorCode | string;
     message: string;
     stage?: string;
+    requestId?: string;
+    details?: Record<string, unknown>;
 };
 
 export type ApiSuccessResponse<T> = {
@@ -68,13 +70,21 @@ export function createApiMessage(message: string): ApiSuccessResponse<{ message:
     return createApiSuccess({ message });
 }
 
-export function createApiError(code: ApiErrorCode | string, message: string, stage?: string): ApiErrorResponse {
+export function createApiError(
+    code: ApiErrorCode | string,
+    message: string,
+    stage?: string,
+    details?: Record<string, unknown>,
+    requestId?: string,
+): ApiErrorResponse {
     return {
         success: false,
         error: {
             code,
             message,
             ...(stage ? { stage } : {}),
+            ...(requestId ? { requestId } : {}),
+            ...(details ? { details } : {}),
         },
     };
 }

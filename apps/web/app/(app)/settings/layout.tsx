@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Shield, Bell, AlertTriangle, Clock } from 'lucide-react';
+import { User, Shield, Bell, AlertTriangle, Clock } from '@/components/icons';
 import { PageHeader } from '@/components/ui';
 
 interface SettingsLayoutProps {

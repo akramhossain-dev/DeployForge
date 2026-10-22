@@ -29,8 +29,8 @@ export default async function terminalRoutes(fastify: FastifyInstance) {
             rows = query.rows;
             if (!token) throw new Error('Missing token');
         } catch (err: any) {
-            connection.socket.send(JSON.stringify({ event: 'terminal:error', message: 'Invalid parameters or query' }));
-            connection.socket.close();
+            connection.send(JSON.stringify({ event: 'terminal:error', message: 'Invalid parameters or query' }));
+            connection.close();
             return;
         }
 
@@ -42,8 +42,8 @@ export default async function terminalRoutes(fastify: FastifyInstance) {
         }
 
         if (!userId) {
-            connection.socket.send(JSON.stringify({ event: 'terminal:error', message: 'Unauthorized' }));
-            connection.socket.close();
+            connection.send(JSON.stringify({ event: 'terminal:error', message: 'Unauthorized' }));
+            connection.close();
             return;
         }
 

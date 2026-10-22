@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useMemo, useEffect } from 'react';
-import { Calendar, Cpu, HardDrive, Server, RefreshCw, BarChart2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Server, RefreshCw, BarChart2 } from '@/components/icons';
 import clsx from 'clsx';
 import { useVpsHealthHistory } from '@/hooks/useDeployForgeData';
 
@@ -14,9 +14,6 @@ type RangeOption = '24h' | '7d' | '30d' | 'custom';
 
 export default function HistoryMonitorTab({ vps, useHistoryMetricsHook }: HistoryMonitorTabProps) {
     const [range, setRange] = useState<RangeOption>('24h');
-    const [customFrom, setCustomFrom] = useState('');
-    const [customTo, setCustomTo] = useState('');
-
     const [queryParams, setQueryParams] = useState({
         range: '24h' as RangeOption,
         from: undefined as string | undefined,

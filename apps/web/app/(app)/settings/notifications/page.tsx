@@ -1,11 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Save, Cpu, MemoryStick, HardDrive, Database, Mail, Monitor, Wifi, Loader2 } from 'lucide-react';
+import { Save, Loader2 } from '@/components/icons';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 import { useAlertSettings, useUpdateAlertSettings } from '@/hooks/useNotifications';
-import clsx from 'clsx';
 
 export default function NotificationsPage() {
     const addToast = useToastStore((state) => state.addToast);
@@ -38,7 +37,7 @@ export default function NotificationsPage() {
                     setEmailSecurity(response.data.emailSecurity ?? true);
                     setEmailNewsletter(response.data.emailNewsletter ?? true);
                 }
-            } catch (err: any) {
+            } catch {
             } finally {
                 setIsLoading(false);
             }

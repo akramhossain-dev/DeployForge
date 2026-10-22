@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import {
     Plus, Edit2, Trash2, Check, X, Search, ArrowUpDown, Copy
-} from 'lucide-react';
+} from '@/components/icons';
 import type { EnvFile } from '@/hooks/useDeployForgeData';
 import { useToastStore } from '@/lib/store/useToastStore';
 import { INPUT_STYLE, PasswordInput } from '@/components/ui';

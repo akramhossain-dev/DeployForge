@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { KeyRound, Shield, RefreshCw, Monitor, Smartphone, Tablet, XCircle, LogOut, Loader2 } from 'lucide-react';
+import { KeyRound, Shield, RefreshCw, Monitor, Smartphone, Tablet, XCircle, LogOut, Loader2 } from '@/components/icons';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 import type { AuditLog, UserSession as Session } from '@/lib/api/types';
 import { INPUT_STYLE } from '@/components/ui';
+import { useRouter } from 'next/navigation';
 
 export default function SecurityPage() {
+    const router = useRouter();
     const addToast = useToastStore((state) => state.addToast);
 
     const currentPasswordRef = useRef<HTMLInputElement>(null);
@@ -173,7 +175,7 @@ export default function SecurityPage() {
             await api.delete('/sessions/logout-all');
             addToast({ title: 'Success', description: 'All sessions logged out successfully', severity: 'success' });
             setTimeout(() => {
-                window.location.assign('/');
+                router.push('/');
             }, 1000);
         } catch (err: any) {
             addToast({ title: 'Error', description: err.message || 'Failed to revoke all sessions', severity: 'error' });

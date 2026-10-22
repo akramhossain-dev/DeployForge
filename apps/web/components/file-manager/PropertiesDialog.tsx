@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X } from 'lucide-react';
+import { X } from '@/components/icons';
 import { useFileProperties } from '@/hooks/useFileManager';
 import { formatSize, formatDate } from './utils';
 

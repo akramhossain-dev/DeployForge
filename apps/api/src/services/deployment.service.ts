@@ -1,6 +1,8 @@
 import prisma from '@deployforge/database';
 import { SSHService } from '@deployforge/vps';
 import { deploymentQueue } from '../utils/queue';
+import { queueTLSVerification } from '../utils/queue';
+import { deploymentJobPayload } from '../utils/deployment-job';
 import { LoggingService } from './logging.service';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -14,6 +16,9 @@ import { EnvironmentService } from './deployment/environment.service';
 import { ValidationService } from './deployment/validation.service';
 import { runCommand } from './deployment/runner';
 import { RuntimeManagerService } from './runtime-manager';
+import { ComposePolicyService } from './deployment/compose-policy.service';
+import { ReleaseService } from './release.service';
+import { EffectiveResourcePolicy, ResourcePolicyService, tierForRuntime } from './resource-policy.service';
 
 import {
     shellQuote,
@@ -45,7 +50,7 @@ export {
 export class DeploymentService {
     static async deployProject(userId: string, source: DeploymentSource) {
         const projectId = source.projectId;
-        const lockKey = `project-deploy:${projectId}`;
+        const lockKey = `project-enqueue:${projectId}`;
         const release = await CacheService.acquireLock(lockKey, 300000);
         if (!release) {
             throw new Error('A deployment is already running for this project. Please wait.');
@@ -60,6 +65,9 @@ export class DeploymentService {
                     domainName: source.domainName,
                     env: source.env,
                     mode: source.mode,
+                    composeService: source.composeService,
+                    composePort: source.composePort,
+                    resourceTier: source.resourceTier,
                 });
             }
 
@@ -69,13 +77,16 @@ export class DeploymentService {
                 domainName: source.domainName,
                 env: source.env,
                 mode: source.mode,
+                composeService: source.composeService,
+                composePort: source.composePort,
+                resourceTier: source.resourceTier,
             });
         } finally {
             await release();
         }
     }
 
-    static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: any; mode?: string } = {}) {
+    static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: any; mode?: string; composeService?: string; composePort?: number; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' } = {}) {
         const project = await prisma.project.findFirst({
             where: {
                 id: projectId,
@@ -99,7 +110,7 @@ export class DeploymentService {
         if (!vps) throw new DeploymentError('pending', 'VPS not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
 
         const mode = metadata.mode === 'sandbox' ? 'sandbox' : 'production';
-        const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, metadata.domainName);
+        const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, metadata.domainName, projectId);
         const encryptedEnv = EnvironmentService.encryptEnv(metadata.env);
 
         const githubAccount = await prisma.gitHubAccount.findFirst({
@@ -109,7 +120,6 @@ export class DeploymentService {
         });
         if (!githubAccount) throw new DeploymentError('pending', 'GitHub account not connected', 'GITHUB_NOT_CONNECTED');
 
-        const accessToken = EnvironmentService.decrypt(githubAccount.accessToken);
         const deployment = await prisma.deployment.create({
             data: {
                 userId,
@@ -128,36 +138,37 @@ export class DeploymentService {
                 domain: domainName || null,
                 hostType: domainName ? 'domain' : 'ip',
                 mode,
+                composeService: metadata.composeService || null,
+                composePort: metadata.composePort || null,
+                requestedResourceTier: metadata.resourceTier || null,
             },
         });
 
-        if (mode === 'production' && !metadata.skipWebhookRegistration) {
-            await GitHubDeploymentService.ensureRepositoryWebhook(githubAccount.userId, project.repositoryUrl, deployment.id);
+        try {
+            await ResourcePolicyService.reserve(deployment.id, await ResourcePolicyService.resolve(projectId, metadata.resourceTier));
+        } catch (error) {
+            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
+            throw error;
         }
 
-        await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from GitHub for ${project.repositoryUrl} on branch ${branch}` : `Deployment queued from GitHub for ${project.repositoryUrl} on branch ${branch}`, 'system');
-        await deploymentQueue.add('deploy', {
-            deploymentId: deployment.id,
-            source: {
-                type: 'github_repo',
-                projectId,
-                vpsId,
-                branch,
-                accessToken,
-                commitHash: metadata.commitHash,
-                commitMessage: metadata.commitMessage,
-                domainName,
-                env: metadata.env,
-                mode: mode as any,
-            } satisfies GitHubDeploymentSource,
-        }, {
-            jobId: `${mode === 'sandbox' ? 'sandbox' : 'deploy'}-${projectId}-${branch}-${Date.now()}`,
-        });
+        try {
+            if (mode === 'production' && !metadata.skipWebhookRegistration) {
+                await GitHubDeploymentService.ensureRepositoryWebhook(githubAccount.userId, project.repositoryUrl, deployment.id);
+            }
+            await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from GitHub for ${project.repositoryUrl} on branch ${branch}` : `Deployment queued from GitHub for ${project.repositoryUrl} on branch ${branch}`, 'system');
+            await deploymentQueue.add('deploy', deploymentJobPayload(deployment.id, 'deploy'), {
+                jobId: `${mode === 'sandbox' ? 'sandbox' : 'deploy'}-${projectId}-${branch}-${Date.now()}`,
+            });
+        } catch (error) {
+            await ResourcePolicyService.releaseReservation(deployment.id);
+            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
+            throw error;
+        }
 
         return deployment;
     }
 
-    static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: any; mode?: string }) {
+    static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: any; mode?: string; composeService?: string; composePort?: number; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' }) {
         const project = await prisma.project.findFirst({
             where: {
                 id: projectId,
@@ -180,7 +191,7 @@ export class DeploymentService {
         });
         if (!vps) throw new DeploymentError('uploading', 'VPS not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
         const mode = upload.mode === 'sandbox' ? 'sandbox' : 'production';
-        const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, upload.domainName);
+        const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, upload.domainName, projectId);
         const encryptedEnv = EnvironmentService.encryptEnv(upload.env);
 
         ValidationService.validateUploadFile(upload.originalFileName);
@@ -201,31 +212,39 @@ export class DeploymentService {
                 domain: domainName || null,
                 hostType: domainName ? 'domain' : 'ip',
                 mode,
+                composeService: upload.composeService || null,
+                composePort: upload.composePort || null,
+                requestedResourceTier: upload.resourceTier || null,
             },
         });
 
-        const uploadWorkspace = await this.prepareUploadWorkspace(deployment.id, upload.uploadPath, upload.originalFileName);
-        await prisma.deployment.update({
-            where: { id: deployment.id },
-            data: { uploadPath: uploadWorkspace.archivePath },
-        });
+        try {
+            await ResourcePolicyService.reserve(deployment.id, await ResourcePolicyService.resolve(projectId, upload.resourceTier));
+        } catch (error) {
+            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
+            await fs.rm(path.dirname(upload.uploadPath), { recursive: true, force: true }).catch(() => undefined);
+            throw error;
+        }
 
-        await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from uploaded archive ${upload.originalFileName}` : `Deployment queued from uploaded archive ${upload.originalFileName}`, 'system');
-        await deploymentQueue.add('deploy', {
-            deploymentId: deployment.id,
-            source: {
-                type: 'uploaded_file',
-                projectId,
-                vpsId,
-                uploadPath: uploadWorkspace.archivePath,
-                originalFileName: uploadWorkspace.archiveName,
-                domainName,
-                env: upload.env,
-                mode: mode as any,
-            } satisfies UploadedFileDeploymentSource,
-        }, {
-            jobId: `${mode === 'sandbox' ? 'sandbox-upload' : 'deploy-upload'}-${projectId}-${Date.now()}`,
-        });
+        let preparedUploadPath = upload.uploadPath;
+        try {
+            const uploadWorkspace = await this.prepareUploadWorkspace(deployment.id, upload.uploadPath, upload.originalFileName);
+            preparedUploadPath = uploadWorkspace.archivePath;
+            await prisma.deployment.update({
+                where: { id: deployment.id },
+                data: { uploadPath: uploadWorkspace.archivePath },
+            });
+            await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from uploaded archive ${upload.originalFileName}` : `Deployment queued from uploaded archive ${upload.originalFileName}`, 'system');
+            await deploymentQueue.add('deploy', deploymentJobPayload(deployment.id, 'deploy'), {
+                jobId: `${mode === 'sandbox' ? 'sandbox-upload' : 'deploy-upload'}-${projectId}-${Date.now()}`,
+            });
+        } catch (error) {
+            await ResourcePolicyService.releaseReservation(deployment.id);
+            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
+            await this.cleanupDeploymentWorkspace(deployment.id, preparedUploadPath);
+            await fs.rm(path.dirname(upload.uploadPath), { recursive: true, force: true }).catch(() => undefined);
+            throw error;
+        }
 
         return deployment;
     }
@@ -254,10 +273,27 @@ export class DeploymentService {
         const imageTag = `deployforge/${safeProjectName}:${releaseId}`;
         const isSandbox = deployment.mode === 'sandbox' || source.mode === 'sandbox';
         const domainName = source.domainName?.trim();
-        const effectiveDomain = domainName || (isSandbox ? `sandbox-${safeProjectName}-${shortDeployId}.${vps.ipAddress}.sslip.io` : `${safeProjectName}-${shortDeployId}.${vps.ipAddress}.sslip.io`);
+        const previousActiveDeployment = !isSandbox ? await prisma.deployment.findFirst({
+            where: { projectId: project.id, status: { in: ['RUNNING', 'ROLLED_BACK'] }, id: { not: deploymentId } },
+            orderBy: { updatedAt: 'desc' },
+            select: { domain: true },
+        }) : null;
+        const effectiveDomain = domainName
+            || previousActiveDeployment?.domain
+            || (isSandbox ? `sandbox-${safeProjectName}-${shortDeployId}.${vps.ipAddress}.sslip.io` : `${safeProjectName}-${project.id.slice(0, 8)}.${vps.ipAddress}.sslip.io`);
         const routerId = isSandbox ? `df-sandbox-${shortDeployId}` : `df-${project.id}`;
         let createdContainerId = '';
-        let staticHosting: StaticHostingResult | null = null;
+        let deploymentReleaseId = '';
+        let releaseActivated = false;
+        let composeIngress: { service: string; port: number; dependencyFile: string | null; dependencyFingerprint: string; managedPrefix: string } | null = null;
+        let resourcePolicy: EffectiveResourcePolicy = {
+            tier: deployment.resourceTier as any,
+            cpuMillis: deployment.cpuLimitMillis,
+            memoryMiB: deployment.memoryLimitMiB,
+            pids: deployment.pidsLimit,
+            storageMiB: deployment.storageLimitMiB,
+        };
+        let hardStorageLimit = false;
 
         try {
             await this.setStatus(deploymentId, source.type === 'github_repo' ? 'CLONING' : 'UPLOADING');
@@ -268,9 +304,11 @@ export class DeploymentService {
                 username: vps.username,
                 ...this.getVpsAuth(vps),
             });
+            hardStorageLimit = await ResourcePolicyService.supportsHardStorageLimit(ssh);
 
             // Ensure Traefik Ingress Gateway & deployforge-net network
             await this.ensureTraefikGateway(ssh, deploymentId, vps);
+            if (!isSandbox) await ReleaseService.reconcileProject(ssh, deploymentId, project.id, effectiveDomain, routerId);
 
             await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(releasesDir)} ${shellQuote(baseDir)}`);
 
@@ -284,7 +322,8 @@ export class DeploymentService {
             }
 
             await BuildService.normalizeProjectRoot(ssh, deploymentId, workDir);
-            await runCommand(ssh, deploymentId, 'system', `ln -sfn ${shellQuote(workDir)} ${shellQuote(currentLink)}`);
+            await ResourcePolicyService.assertWorkspaceBudget(ssh, deploymentId, project.id, vps.username, resourcePolicy.storageMiB);
+            if (isSandbox) await runCommand(ssh, deploymentId, 'system', `ln -sfn ${shellQuote(workDir)} ${shellQuote(currentLink)}`);
 
             // ── Environment Preparation (Runtime Detection & Provisioning) ─────────
             await LoggingService.log(deploymentId, 'Scanning VPS environment...', 'system');
@@ -319,6 +358,33 @@ export class DeploymentService {
 
             await LoggingService.log(deploymentId, 'Validating project structure', 'build');
             const detected = await BuildService.detectProject(ssh, deploymentId, workDir);
+            resourcePolicy = await ResourcePolicyService.reconcileDetectedTier(
+                deploymentId,
+                tierForRuntime(detected.deploymentType, detected.framework),
+            );
+            if (detected.framework === ('DOCKER_COMPOSE' as any)) {
+                const safeCompose = await this.prepareSafeCompose(
+                    ssh,
+                    deploymentId,
+                    workDir,
+                    detected.lockfile || 'docker-compose.yml',
+                    source.composeService,
+                    source.composePort,
+                    `df-${project.id}`,
+                    isSandbox,
+                    resourcePolicy,
+                    hardStorageLimit,
+                );
+                detected.lockfile = safeCompose.fileName;
+                composeIngress = {
+                    service: safeCompose.service,
+                    port: safeCompose.port,
+                    dependencyFile: safeCompose.dependencyFile,
+                    dependencyFingerprint: safeCompose.dependencyFingerprint,
+                    managedPrefix: safeCompose.managedPrefix,
+                };
+                await LoggingService.log(deploymentId, `Compose policy accepted ingress service ${safeCompose.service}:${safeCompose.port}`, 'build');
+            }
 
             await prisma.deployment.update({
                 where: { id: deploymentId },
@@ -327,8 +393,38 @@ export class DeploymentService {
                     type: detected.deploymentType,
                     buildCommand: detected.buildCommand,
                     startCommand: detected.startCommand,
+                    ...(composeIngress ? { composeService: composeIngress.service, composePort: composeIngress.port } : {}),
+                    resourceTier: resourcePolicy.tier,
+                    cpuLimitMillis: resourcePolicy.cpuMillis,
+                    memoryLimitMiB: resourcePolicy.memoryMiB,
+                    pidsLimit: resourcePolicy.pids,
+                    storageLimitMiB: resourcePolicy.storageMiB,
                 },
             });
+
+            if (!isSandbox) {
+                const release = await ReleaseService.begin({
+                    deploymentId,
+                    projectId: project.id,
+                    vpsId: vps.id,
+                    kind: detected.framework === ('DOCKER_COMPOSE' as any) ? 'COMPOSE' : detected.deploymentType === 'STATIC' ? 'STATIC' : 'CONTAINER',
+                    version: source.type === 'github_repo' ? source.commitHash || releaseId : releaseId,
+                    ingressPort: detected.deploymentType === 'STATIC' ? 80 : composeIngress?.port || detected.appPort,
+                    imageTag: detected.deploymentType === 'STATIC' || detected.framework === ('DOCKER_COMPOSE' as any) ? undefined : imageTag,
+                    artifactPath: detected.deploymentType === 'STATIC' ? staticDir : undefined,
+                    workspacePath: workDir,
+                    manifestPath: detected.framework === ('DOCKER_COMPOSE' as any) ? `${workDir}/${detected.lockfile || 'docker-compose.yml'}` : undefined,
+                    composeService: composeIngress?.service,
+                    composePort: composeIngress?.port,
+                    env: deployment.env,
+                    resourceTier: resourcePolicy.tier,
+                    cpuLimitMillis: resourcePolicy.cpuMillis,
+                    memoryLimitMiB: resourcePolicy.memoryMiB,
+                    pidsLimit: resourcePolicy.pids,
+                    storageLimitMiB: resourcePolicy.storageMiB,
+                });
+                deploymentReleaseId = release.id;
+            }
 
             let lockfileHash = 'nolock';
             const isDockerProject = detected.framework === 'DOCKER' || detected.framework === 'DOCKER_COMPOSE';
@@ -428,8 +524,8 @@ export class DeploymentService {
                     }
 
                     await this.setStatus(deploymentId, 'DEPLOYING');
-                    await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(`${baseDir}/static`)} && ln -sfn ${shellQuote(staticDir)} ${shellQuote(currentStaticLink)}`);
-                    await LoggingService.log(deploymentId, 'Launching static micro-container on deployforge-net', 'system');
+                    await runCommand(ssh, deploymentId, 'system', `mkdir -p ${shellQuote(`${baseDir}/static`)}`);
+                    await LoggingService.log(deploymentId, isSandbox ? 'Launching sandbox static container' : 'Launching static candidate on the private validation network', 'system');
 
                     const staticContainerName = `df-static-${safeProjectName}-${shortDeployId}`;
                     createdContainerId = await this.deployStaticContainer(
@@ -439,28 +535,20 @@ export class DeploymentService {
                         staticContainerName,
                         effectiveDomain,
                         routerId,
-                        isSandbox
+                        isSandbox,
+                        deploymentReleaseId ? ReleaseService.alias(deploymentReleaseId) : undefined,
+                        resourcePolicy,
+                        hardStorageLimit,
                     );
 
-                    staticHosting = {
-                        url: `https://${effectiveDomain}`,
-                        port: null,
-                        hostType: domainName ? 'domain' : 'ip',
-                        domainActivated: Boolean(domainName),
-                    };
-
-                    if (domainName) {
-                        await this.persistDomainBinding(deploymentId, vps.id, domainName);
-                    }
-
                     try {
-                        await ValidationService.healthCheckStatic(ssh, deploymentId, createdContainerId);
-                        await ValidationService.validateStaticAssets(ssh, deploymentId, staticHosting, vps, domainName);
+                        if (isSandbox) await ValidationService.healthCheckStatic(ssh, deploymentId, createdContainerId);
+                        else await ValidationService.healthCheckCandidate(ssh, deploymentId, ReleaseService.alias(deploymentReleaseId), 80);
                     } catch (err) {
                         await LoggingService.log(deploymentId, 'Static health check failed. Retrying once...', 'system', 'warn');
                         await new Promise((resolve) => setTimeout(resolve, 5000));
-                        await ValidationService.healthCheckStatic(ssh, deploymentId, createdContainerId);
-                        await ValidationService.validateStaticAssets(ssh, deploymentId, staticHosting, vps, domainName);
+                        if (isSandbox) await ValidationService.healthCheckStatic(ssh, deploymentId, createdContainerId);
+                        else await ValidationService.healthCheckCandidate(ssh, deploymentId, ReleaseService.alias(deploymentReleaseId), 80);
                     }
                 } else {
                     const isCompose = detected.framework === ('DOCKER_COMPOSE' as any);
@@ -486,35 +574,36 @@ export class DeploymentService {
                         if (isCompose) {
                             await LoggingService.log(deploymentId, isSandbox ? 'Starting sandbox Docker Compose stack' : 'Starting deployment Docker Compose stack', 'system');
                             const composeFile = detected.lockfile || 'docker-compose.yml';
-                            createdContainerId = await this.deployCompose(ssh, deploymentId, workDir, composeFile, dockerName, effectiveDomain, routerId);
+                            if (!composeIngress) throw new DeploymentError('compose_validation', 'Compose ingress selection is missing', 'COMPOSE_INGRESS_NOT_FOUND');
+                            createdContainerId = await this.deployCompose(ssh, deploymentId, workDir, composeFile, dockerName, effectiveDomain, routerId, composeIngress.service, composeIngress.port, isSandbox, deploymentReleaseId ? ReleaseService.alias(deploymentReleaseId) : undefined, composeIngress.dependencyFile, composeIngress.dependencyFingerprint, composeIngress.managedPrefix, baseDir);
                         } else {
                             await LoggingService.log(deploymentId, isSandbox ? 'Creating sandbox container' : 'Creating deployment container', 'system');
                             createdContainerId = await this.deployContainer(
                                 ssh,
                                 vps.username,
                                 deploymentId,
-                                workDir,
                                 dockerName,
                                 imageTag,
                                 detected.appPort,
                                 effectiveDomain,
                                 routerId,
                                 hasEnv,
-                                isSandbox
+                                isSandbox,
+                                deploymentReleaseId ? ReleaseService.alias(deploymentReleaseId) : undefined,
+                                resourcePolicy,
+                                hardStorageLimit,
                             );
-                            await LoggingService.log(deploymentId, `Container started on deployforge-net: ${createdContainerId.slice(0, 12)}`, 'system');
-                        }
-
-                        if (domainName) {
-                            await this.persistDomainBinding(deploymentId, vps.id, domainName);
+                            await LoggingService.log(deploymentId, `Candidate container started: ${createdContainerId.slice(0, 12)}`, 'system');
                         }
 
                         try {
-                            await ValidationService.healthCheck(ssh, deploymentId, createdContainerId, detected.appPort);
+                            if (isSandbox) await ValidationService.healthCheck(ssh, deploymentId, createdContainerId, composeIngress?.port || detected.appPort);
+                            else await ValidationService.healthCheckCandidate(ssh, deploymentId, ReleaseService.alias(deploymentReleaseId), composeIngress?.port || detected.appPort);
                         } catch (err) {
                             await LoggingService.log(deploymentId, 'Health check failed. Retrying once...', 'system', 'warn');
                             await new Promise((resolve) => setTimeout(resolve, 5000));
-                            await ValidationService.healthCheck(ssh, deploymentId, createdContainerId, detected.appPort);
+                            if (isSandbox) await ValidationService.healthCheck(ssh, deploymentId, createdContainerId, composeIngress?.port || detected.appPort);
+                            else await ValidationService.healthCheckCandidate(ssh, deploymentId, ReleaseService.alias(deploymentReleaseId), composeIngress?.port || detected.appPort);
                         }
                     } catch (err: any) {
                         throw err;
@@ -525,6 +614,19 @@ export class DeploymentService {
                     const envTarget = detected.framework === ('DOCKER_COMPOSE' as any) ? '.env' : '.env.deployforge';
                     await ssh.execute(`rm -f ${shellQuote(`${workDir}/${envTarget}`)}`).catch(() => undefined);
                 }
+            }
+
+            await ResourcePolicyService.assertWorkspaceBudget(ssh, deploymentId, project.id, vps.username, resourcePolicy.storageMiB);
+
+            if (!isSandbox) {
+                await ReleaseService.recordRuntime(deploymentReleaseId, createdContainerId, createdContainerId.startsWith('compose:') ? undefined : createdContainerId);
+                await ReleaseService.activate(ssh, { releaseId: deploymentReleaseId, deploymentId, domain: effectiveDomain, routerId });
+                releaseActivated = true;
+                await runCommand(ssh, deploymentId, 'system', `ln -sfn ${shellQuote(workDir)} ${shellQuote(currentLink)}`);
+                if (detected.deploymentType === 'STATIC') {
+                    await runCommand(ssh, deploymentId, 'system', `ln -sfn ${shellQuote(staticDir)} ${shellQuote(currentStaticLink)}`);
+                }
+                if (domainName) await this.persistDomainBinding(deploymentId, vps.id, domainName);
             }
 
             await prisma.deployment.update({
@@ -541,7 +643,7 @@ export class DeploymentService {
                 },
             });
 
-            // Zero-downtime Blue-Green: stop superseded container after new one is verified healthy
+            // The old runtime remains intact for rollback; only its legacy deployment state changes.
             if (!isSandbox) {
                 const previousActiveDeployment = await prisma.deployment.findFirst({
                     where: {
@@ -551,9 +653,6 @@ export class DeploymentService {
                     },
                 });
                 if (previousActiveDeployment) {
-                    if (previousActiveDeployment.containerId) {
-                        await this.removeContainerIfExists(ssh, deploymentId, previousActiveDeployment.containerId, `Removed superseded container ${previousActiveDeployment.containerId.slice(0, 12)}`, false);
-                    }
                     await prisma.deployment.update({
                         where: { id: previousActiveDeployment.id },
                         data: { status: 'STOPPED' },
@@ -575,7 +674,7 @@ export class DeploymentService {
                 await LoggingService.log(deploymentId, `Deployment live at https://${effectiveDomain}`, 'system');
             } else {
                 await LoggingService.log(deploymentId, `Sandbox live at https://${effectiveDomain}; auto cleanup scheduled in 30 minutes`, 'system');
-                await deploymentQueue.add('sandbox-cleanup', { deploymentId }, {
+                await deploymentQueue.add('sandbox-cleanup', deploymentJobPayload(deploymentId, 'sandbox-cleanup'), {
                     jobId: `sandbox-cleanup-${deploymentId}`,
                     delay: 30 * 60 * 1000,
                     attempts: 1,
@@ -584,7 +683,10 @@ export class DeploymentService {
         } catch (err: any) {
             const stage = err.stage || 'deploying';
             const message = err.message || 'Deployment failed';
-            if (createdContainerId) {
+            if (deploymentReleaseId && !releaseActivated) {
+                await ReleaseService.markReadinessFailed(deploymentReleaseId, err);
+            }
+            if (createdContainerId && !releaseActivated) {
                 await this.captureContainerLogs(ssh, deploymentId, createdContainerId);
                 await this.removeContainerQuietly(ssh, deploymentId, createdContainerId);
             }
@@ -609,12 +711,38 @@ export class DeploymentService {
 
         // 1. Ensure external network
         await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
+        await ssh.execute('docker network inspect deployforge-gateway >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-gateway');
+        await ssh.execute('docker network inspect deployforge-validation >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-validation');
 
         // 2. Ensure ACME directory & permissions
-        await ssh.execute('mkdir -p /etc/deployforge/traefik/acme && touch /etc/deployforge/traefik/acme/acme.json && chmod 600 /etc/deployforge/traefik/acme/acme.json');
+        await ssh.execute('mkdir -p /etc/deployforge/traefik/acme /etc/deployforge/traefik/dynamic && touch /etc/deployforge/traefik/acme/acme.json && chmod 600 /etc/deployforge/traefik/acme/acme.json');
 
-        // 3. Ensure Traefik container is running
+        // 3. Ensure the allowlisted Docker socket proxy is running.
+        const proxyRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-socket-proxy 2>/dev/null");
+        if (proxyRunning.stdout.trim() !== 'true') {
+            await ssh.execute('docker rm -f deployforge-socket-proxy 2>/dev/null || true');
+            await runCommand(ssh, deploymentId, 'system', `docker run -d \\
+                --name deployforge-socket-proxy \\
+                --restart always \\
+                --network deployforge-gateway \\
+                -e LOG_LEVEL=warning \\
+                -e CONTAINERS=1 -e EVENTS=1 -e INFO=1 -e NETWORKS=1 \\
+                -e SERVICES=1 -e TASKS=1 -e VERSION=1 -e POST=0 \\
+                -v /var/run/docker.sock:/var/run/docker.sock:ro \\
+                tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459`, 'deploying', 'SOCKET_PROXY_START_FAILED');
+        }
+
+        // 4. Ensure Traefik is running with the proxy endpoint.
         const traefikRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-traefik 2>/dev/null");
+        const proxyConfigured = await ssh.execute("docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'deployforge-socket-proxy:2375'");
+        const phase3Configured = await ssh.execute("docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'providers.file.directory=/dynamic'");
+        if (traefikRunning.stdout.trim() === 'true' && (proxyConfigured.code !== 0 || phase3Configured.code !== 0)) {
+            await prisma.vPS.update({
+                where: { id: vps.id },
+                data: { gatewayStatus: 'DEGRADED', gatewayCheckedAt: new Date(), gatewayError: 'Gateway requires the queued bootstrap upgrade' },
+            }).catch(() => undefined);
+            throw new DeploymentError('deploying', 'Gateway must be upgraded through the VPS bootstrap operation before zero-downtime deployments', 'GATEWAY_PHASE3_UPGRADE_REQUIRED');
+        }
         if (traefikRunning.stdout.trim() !== 'true') {
             await LoggingService.log(deploymentId, 'Starting deployforge-traefik container...', 'system');
             await ssh.execute('docker rm -f deployforge-traefik 2>/dev/null || true');
@@ -624,14 +752,17 @@ export class DeploymentService {
                 --network deployforge-net \\
                 -p 80:80 \\
                 -p 443:443 \\
-                -v /var/run/docker.sock:/var/run/docker.sock:ro \\
                 -v /etc/deployforge/traefik/acme/acme.json:/acme.json \\
-                traefik:v3.1 \\
+                -v /etc/deployforge/traefik/dynamic:/dynamic:ro \\
+                traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d \\
                 --global.sendAnonymousUsage=false \\
                 --api.dashboard=false \\
                 --providers.docker=true \\
+                --providers.docker.endpoint=tcp://deployforge-socket-proxy:2375 \\
                 --providers.docker.exposedbydefault=false \\
                 --providers.docker.network=deployforge-net \\
+                --providers.file.directory=/dynamic \\
+                --providers.file.watch=true \\
                 --entrypoints.web.address=:80 \\
                 --entrypoints.web.http.redirections.entrypoint.to=websecure \\
                 --entrypoints.web.http.redirections.entrypoint.scheme=https \\
@@ -643,6 +774,25 @@ export class DeploymentService {
 
             await runCommand(ssh, deploymentId, 'system', runTraefikCmd, 'deploying', 'TRAEFIK_START_FAILED');
         }
+        await ssh.execute('docker network connect deployforge-gateway deployforge-traefik 2>/dev/null || true');
+        const gatewayCheck = await ssh.execute("test \"$(docker inspect -f '{{.State.Running}}' deployforge-traefik 2>/dev/null)\" = true && test \"$(docker inspect -f '{{.State.Running}}' deployforge-socket-proxy 2>/dev/null)\" = true");
+        if (gatewayCheck.code !== 0) {
+            await prisma.vPS.update({
+                where: { id: vps.id },
+                data: { gatewayStatus: 'DEGRADED', gatewayCheckedAt: new Date(), gatewayError: 'Gateway verification failed during deployment' },
+            }).catch(() => undefined);
+            throw new DeploymentError('deploying', 'Ingress gateway verification failed', 'GATEWAY_NOT_READY');
+        }
+        const version = await ssh.execute("docker inspect -f '{{.Config.Image}}' deployforge-traefik 2>/dev/null");
+        await prisma.vPS.update({
+            where: { id: vps.id },
+            data: {
+                gatewayStatus: 'READY',
+                gatewayVersion: version.stdout.trim() || 'traefik:unknown',
+                gatewayCheckedAt: new Date(),
+                gatewayError: null,
+            },
+        });
     }
 
     private static async verifyDeploymentAndRole(userId: string, deploymentId: string, allowedRoles: ('OWNER' | 'ADMIN' | 'DEVELOPER' | 'VIEWER')[]): Promise<any> {
@@ -843,7 +993,6 @@ export class DeploymentService {
                     ssh,
                     deployment.vps.username,
                     deploymentId,
-                    resumeDir,
                     dockerName,
                     deployment.history[0].imageTag!,
                     appPort,
@@ -930,11 +1079,12 @@ export class DeploymentService {
                 ]
             },
             include: {
-                project: true,
+                project: { include: { activeRelease: true, candidateRelease: true, releases: { where: { status: 'SUPERSEDED', runtimeRef: { not: null } }, take: 1, orderBy: { createdAt: 'desc' } } } },
                 vps: true,
                 domains: true,
                 deploymentLogs: { take: 25, orderBy: { createdAt: 'desc' } },
                 history: { take: 5, orderBy: { createdAt: 'desc' } },
+                jobs: { take: 1, orderBy: { createdAt: 'desc' } },
             },
         });
         if (!deployment) throw new DeploymentError('status', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
@@ -952,20 +1102,36 @@ export class DeploymentService {
         dockerName: string,
         effectiveDomain: string,
         routerId: string,
-        isSandbox = false
+        isSandbox = false,
+        releaseAlias?: string,
+        resourcePolicy: EffectiveResourcePolicy = { tier: 'STATIC', cpuMillis: 250, memoryMiB: 256, pids: 128, storageMiB: 5120 },
+        hardStorageLimit = false,
     ): Promise<string> {
         await this.removeContainerIfExists(ssh, deploymentId, dockerName, 'Removed previous static container', false);
         const restartPolicy = isSandbox ? 'no' : 'unless-stopped';
-        const createCommand = `docker create \\
-            --name ${shellQuote(dockerName)} \\
-            --restart ${restartPolicy} \\
-            --network deployforge-net \\
+        const network = isSandbox ? 'deployforge-net' : 'deployforge-validation';
+        const aliasFlag = releaseAlias ? ` --network-alias ${shellQuote(releaseAlias)}` : '';
+        const labels = isSandbox ? `
             --label "traefik.enable=true" \\
             --label "traefik.http.routers.${routerId}.rule=Host(\`${effectiveDomain}\`)" \\
             --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
             --label "traefik.http.routers.${routerId}.tls=true" \\
             --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
-            --label "traefik.http.services.${routerId}.loadbalancer.server.port=80" \\
+            --label "traefik.http.services.${routerId}.loadbalancer.server.port=80" \\` : '';
+        const createCommand = `docker create \\
+            --name ${shellQuote(dockerName)} \\
+            --restart ${restartPolicy} \\
+            --network ${network}${aliasFlag} \
+            --label "com.deployforge.managed=true" \
+            --label "com.deployforge.deployment=${deploymentId}" \
+            ${ResourcePolicyService.dockerFlags(resourcePolicy, hardStorageLimit)} \\${labels}
+            --read-only \\
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \\
+            --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=32m \\
+            --tmpfs /var/run:rw,noexec,nosuid,size=8m \\
+            --security-opt no-new-privileges \\
+            --cap-drop ALL \\
+            --cap-add CHOWN --cap-add SETGID --cap-add SETUID --cap-add NET_BIND_SERVICE \\
             -v ${shellQuote(staticDir)}:/usr/share/nginx/html:ro \\
             nginx:1.27-alpine`;
 
@@ -990,28 +1156,36 @@ export class DeploymentService {
         ssh: SSHService,
         username: string,
         deploymentId: string,
-        workDir: string,
         dockerName: string,
         imageTag: string,
         appPort: number,
         effectiveDomain: string,
         routerId: string,
         hasEnv: boolean,
-        isSandbox = false
+        isSandbox = false,
+        releaseAlias?: string,
+        resourcePolicy: EffectiveResourcePolicy = { tier: 'SERVER', cpuMillis: 1000, memoryMiB: 1024, pids: 256, storageMiB: 5120 },
+        hardStorageLimit = false,
     ) {
         await this.removeContainerIfExists(ssh, deploymentId, dockerName, 'Removed previous container with matching Docker name', false);
         const envFlag = hasEnv ? ` --env-file ${shellQuote(EnvironmentService.getEnvPath(username, deploymentId))}` : '';
         const restartPolicy = isSandbox ? 'no' : 'unless-stopped';
-        const createCommand = `docker create \\
-            --name ${shellQuote(dockerName)} \\
-            --restart ${restartPolicy} \\
-            --network deployforge-net \\
+        const network = isSandbox ? 'deployforge-net' : 'deployforge-validation';
+        const aliasFlag = releaseAlias ? ` --network-alias ${shellQuote(releaseAlias)}` : '';
+        const labels = isSandbox ? `
             --label "traefik.enable=true" \\
             --label "traefik.http.routers.${routerId}.rule=Host(\`${effectiveDomain}\`)" \\
             --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
             --label "traefik.http.routers.${routerId}.tls=true" \\
             --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
-            --label "traefik.http.services.${routerId}.loadbalancer.server.port=${appPort}" \\
+            --label "traefik.http.services.${routerId}.loadbalancer.server.port=${appPort}" \\` : '';
+        const createCommand = `docker create \\
+            --name ${shellQuote(dockerName)} \\
+            --restart ${restartPolicy} \\
+            --network ${network}${aliasFlag} \
+            --label "com.deployforge.managed=true" \
+            --label "com.deployforge.deployment=${deploymentId}" \
+            ${ResourcePolicyService.dockerFlags(resourcePolicy, hardStorageLimit)} \\${labels}
             --read-only \\
             --tmpfs /tmp:rw,noexec,nosuid,size=128m \\
             --tmpfs /app/.next/cache:rw,noexec,nosuid,size=128m \\
@@ -1048,6 +1222,65 @@ export class DeploymentService {
         }
     }
 
+    private static async prepareSafeCompose(
+        ssh: SSHService,
+        deploymentId: string,
+        workDir: string,
+        composeFile: string,
+        composeService?: string,
+        composePort?: number,
+        managedPrefix = 'deployforge-managed',
+        isSandbox = false,
+        resourcePolicy?: EffectiveResourcePolicy,
+        hardStorageLimit = false,
+    ) {
+        const sourcePath = `${workDir}/${composeFile}`;
+        const readResult = await ssh.execute(`base64 -w0 ${shellQuote(sourcePath)}`);
+        if (readResult.code !== 0 || !readResult.stdout.trim()) {
+            throw new DeploymentError('compose_validation', 'Compose file could not be read', 'COMPOSE_FILE_MISSING');
+        }
+
+        let sanitized;
+        try {
+            const source = Buffer.from(readResult.stdout.trim(), 'base64').toString('utf8');
+            sanitized = ComposePolicyService.sanitize(source, { composeService, composePort }, managedPrefix, resourcePolicy, hardStorageLimit, deploymentId);
+        } catch (error: any) {
+            const candidates = Array.isArray(error?.candidates) ? error.candidates : [];
+            throw new DeploymentError(
+                'compose_validation',
+                error?.message || 'Compose policy rejected the file',
+                error?.errorCode || 'COMPOSE_POLICY_REJECTED',
+                error?.statusCode || 422,
+                candidates.length ? { candidates } : undefined,
+            );
+        }
+
+        const fileName = 'docker-compose.deployforge.sanitized.yml';
+        const remotePath = `${workDir}/${fileName}`;
+        const localPath = path.join('/tmp', `deployforge-compose-${deploymentId}-${crypto.randomUUID()}.yml`);
+        try {
+            await fs.writeFile(localPath, isSandbox ? sanitized.yaml : sanitized.candidateYaml, { mode: 0o600 });
+            await ssh.uploadFile(localPath, remotePath);
+        } finally {
+            await fs.rm(localPath, { force: true }).catch(() => undefined);
+        }
+
+        let dependencyFile: string | null = null;
+        if (sanitized.dependencyYaml && !isSandbox) {
+            dependencyFile = 'docker-compose.deployforge.dependencies.yml';
+            const dependencyRemotePath = `${workDir}/${dependencyFile}`;
+            const dependencyLocalPath = path.join('/tmp', `deployforge-compose-dependencies-${deploymentId}-${crypto.randomUUID()}.yml`);
+            try {
+                await fs.writeFile(dependencyLocalPath, sanitized.dependencyYaml, { mode: 0o600 });
+                await ssh.uploadFile(dependencyLocalPath, dependencyRemotePath);
+            } finally {
+                await fs.rm(dependencyLocalPath, { force: true }).catch(() => undefined);
+            }
+        }
+
+        return { fileName, service: sanitized.service, port: sanitized.port, dependencyFile, dependencyFingerprint: sanitized.dependencyFingerprint, managedPrefix };
+    }
+
     private static async deployCompose(
         ssh: SSHService,
         deploymentId: string,
@@ -1055,146 +1288,68 @@ export class DeploymentService {
         composeFile: string,
         projectName: string,
         effectiveDomain: string,
-        routerId: string
+        routerId: string,
+        targetService: string,
+        targetPort: number,
+        isSandbox = false,
+        releaseAlias?: string,
+        dependencyFile?: string | null,
+        dependencyFingerprint?: string,
+        managedPrefix = 'deployforge-managed',
+        baseDir?: string,
     ) {
         const overrideFile = 'docker-compose.deployforge.yml';
         const overridePath = `${workDir}/${overrideFile}`;
-        const genScript = `
-import sys
-
-compose_path = sys.argv[1]
-router_id = sys.argv[2]
-effective_domain = sys.argv[3]
-override_path = sys.argv[4]
-
-services = []
-current_service = None
-service_ports = {}
-in_services = False
-services_indent = -1
-in_ports = False
-ports_indent = -1
-
-with open(compose_path, 'r') as f:
-    lines = f.readlines()
-
-for line in lines:
-    stripped = line.strip()
-    if not stripped or stripped.startswith('#'):
-        continue
-    indent = len(line) - len(line.lstrip())
-    
-    if in_services and indent <= services_indent:
-        in_services = False
-        current_service = None
-        
-    if stripped == 'services:':
-        in_services = True
-        services_indent = indent
-        continue
-        
-    if in_services:
-        if in_ports and indent <= ports_indent:
-            in_ports = False
-            
-        if in_ports:
-            if stripped.startswith('-'):
-                pval = stripped.lstrip('-').strip().strip('"').strip("'")
-                parts = pval.split(':')
-                target_port = parts[-1].split('/')[0]
-                target_port = ''.join(c for c in target_port if c.isdigit())
-                if target_port and current_service:
-                    service_ports.setdefault(current_service, []).append(int(target_port))
-            continue
-            
-        if stripped == 'ports:':
-            in_ports = True
-            ports_indent = indent
-            continue
-            
-        if indent == services_indent + 2 or (services_indent == -1 and indent == 2):
-            if stripped.endswith(':'):
-                current_service = stripped[:-1].strip()
-                if current_service not in services:
-                    services.append(current_service)
-
-target_svc = None
-for s in services:
-    if any(k in s.lower() for k in ['client', 'frontend', 'web', 'app']):
-        target_svc = s
-        break
-
-if not target_svc:
-    for s in services:
-        if not any(k in s.lower() for k in ['db', 'mongo', 'postgres', 'redis', 'mysql', 'broker', 'queue', 'mariadb', 'elasticsearch', 'memcached']):
-            target_svc = s
-            break
-
-if not target_svc and services:
-    target_svc = services[0]
-
-port = 80
-if target_svc and service_ports.get(target_svc):
-    port = service_ports[target_svc][0]
-elif target_svc:
-    port = 3000
-
-if not target_svc:
-    target_svc = "app"
-
-override_content = f"""networks:
-  deployforge-net:
+        const managedNetwork = isSandbox ? 'deployforge-net' : 'deployforge-validation';
+        if (!isSandbox && dependencyFile) {
+            const composeStateDir = `${baseDir || workDir}/compose`;
+            const fingerprintPath = `${composeStateDir}/dependencies.sha256`;
+            const dependencyProject = `${managedPrefix}-dependencies`;
+            const fingerprint = dependencyFingerprint || '';
+            const check = await ssh.execute(`mkdir -p ${shellQuote(composeStateDir)} && if [ -f ${shellQuote(fingerprintPath)} ] && [ "$(cat ${shellQuote(fingerprintPath)})" != ${shellQuote(fingerprint)} ]; then exit 42; fi`);
+            if (check.code === 42) {
+                throw new DeploymentError('compose_validation', 'Compose dependency changes require an explicit maintenance deployment', 'COMPOSE_DEPENDENCY_CHANGE_REQUIRES_MAINTENANCE');
+            }
+            if (check.code !== 0) throw new DeploymentError('compose_validation', 'Compose dependency state could not be verified', 'COMPOSE_DEPENDENCY_STATE_FAILED');
+            const fingerprintExists = await ssh.execute(`[ -f ${shellQuote(fingerprintPath)} ]`);
+            if (fingerprintExists.code !== 0) {
+                await runCommand(ssh, deploymentId, 'system', `cd ${shellQuote(workDir)} && docker compose -p ${shellQuote(dependencyProject)} -f ${shellQuote(dependencyFile)} up -d --build`, 'container_create', 'DOCKER_COMPOSE_DEPENDENCY_FAILED');
+                await runCommand(ssh, deploymentId, 'system', `printf %s ${shellQuote(fingerprint)} > ${shellQuote(fingerprintPath)}`);
+            }
+        }
+        const overrideContent = `networks:
+  ${managedNetwork}:
     external: true
 
 services:
-  {target_svc}:
+  ${targetService}:
     networks:
-      - default
-      - deployforge-net
+      ${dependencyFile ? 'deployforge-dependencies' : 'default'}: {}
+      ${managedNetwork}:
+        ${releaseAlias ? `
+        aliases:
+          - ${releaseAlias}` : '{}'}${isSandbox ? `
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.{router_id}.rule=Host(\`{effective_domain}\`)"
-      - "traefik.http.routers.{router_id}.entrypoints=websecure"
-      - "traefik.http.routers.{router_id}.tls=true"
-      - "traefik.http.routers.{router_id}.tls.certresolver=letsencrypt"
-      - "traefik.http.services.{router_id}.loadbalancer.server.port={port}"
-"""
-
-with open(override_path, 'w') as f:
-    f.write(override_content)
+      - "traefik.http.routers.${routerId}.rule=Host(\`${effectiveDomain}\`)"
+      - "traefik.http.routers.${routerId}.entrypoints=websecure"
+      - "traefik.http.routers.${routerId}.tls=true"
+      - "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${routerId}.loadbalancer.server.port=${targetPort}"` : ''}
 `;
-
-        const genScriptPath = `/tmp/gen_compose_override_${deploymentId}.py`;
-        await ssh.execute(`cat > ${shellQuote(genScriptPath)} <<'EOF'\n${genScript}\nEOF`);
-        await runCommand(ssh, deploymentId, 'system', `python3 ${shellQuote(genScriptPath)} ${shellQuote(`${workDir}/${composeFile}`)} ${shellQuote(routerId)} ${shellQuote(effectiveDomain)} ${shellQuote(overridePath)}`);
-        await ssh.execute(`rm -f ${shellQuote(genScriptPath)}`).catch(() => undefined);
+        const localOverridePath = path.join('/tmp', `deployforge-compose-override-${deploymentId}-${crypto.randomUUID()}.yml`);
+        try {
+            await fs.writeFile(localOverridePath, overrideContent, { mode: 0o600 });
+            await ssh.uploadFile(localOverridePath, overridePath);
+        } finally {
+            await fs.rm(localOverridePath, { force: true }).catch(() => undefined);
+        }
 
         await runCommand(ssh, deploymentId, 'system', `docker compose -p ${shellQuote(projectName)} -f ${shellQuote(`${workDir}/${composeFile}`)} -f ${shellQuote(overridePath)} down >/dev/null 2>&1 || true`);
-        await LoggingService.log(deploymentId, 'Starting Docker Compose stack on deployforge-net...', 'system');
+        await LoggingService.log(deploymentId, `Starting Docker Compose stack on ${managedNetwork}...`, 'system');
         const startCommand = `cd ${shellQuote(workDir)} && docker compose -p ${shellQuote(projectName)} -f ${shellQuote(composeFile)} -f ${shellQuote(overrideFile)} up -d`;
 
-        let retries = 5;
-        while (retries > 0) {
-            try {
-                await runCommand(ssh, deploymentId, 'system', startCommand, 'container_create', 'DOCKER_COMPOSE_UP_FAILED');
-                break;
-            } catch (error: any) {
-                const errorMsg = error?.message || '';
-                if (/Conflict\..*container.*already in use/i.test(errorMsg)) {
-                    const conflictMatch = errorMsg.match(/already in use by container "([a-f0-9]+)"/i)
-                        || errorMsg.match(/The container name "\/?([^"]+)" is already in use/i);
-
-                    if (conflictMatch) {
-                        const offendingIdOrName = conflictMatch[1];
-                        await LoggingService.log(deploymentId, `Detected container name conflict for: "${offendingIdOrName}". Automatically removing conflicting container...`, 'system', 'warn');
-                        await ssh.execute(`docker rm -f ${shellQuote(offendingIdOrName)}`).catch(() => undefined);
-                        retries--;
-                        continue;
-                    }
-                }
-                throw error;
-            }
-        }
+        await runCommand(ssh, deploymentId, 'system', startCommand, 'container_create', 'DOCKER_COMPOSE_UP_FAILED');
 
         const { stdout: psOut } = await runCommand(ssh, deploymentId, 'system', `docker compose -p ${shellQuote(projectName)} -f ${shellQuote(`${workDir}/${composeFile}`)} -f ${shellQuote(overridePath)} ps -q`, 'container_create', 'DOCKER_COMPOSE_PS_FAILED');
         const containerIds = psOut.trim().split('\n').map(id => id.trim()).filter(Boolean);
@@ -1202,7 +1357,7 @@ with open(override_path, 'w') as f:
             throw new DeploymentError('container_create', 'Docker Compose did not start any containers', 'DOCKER_COMPOSE_NO_CONTAINERS');
         }
 
-        await LoggingService.log(deploymentId, `Docker Compose started ${containerIds.length} containers attached to deployforge-net`, 'system');
+        await LoggingService.log(deploymentId, `Docker Compose started ${containerIds.length} containers`, 'system');
         return `compose:${projectName}`;
     }
 
@@ -1428,10 +1583,16 @@ with open(override_path, 'w') as f:
                     deploymentId,
                     vpsId,
                     status: 'ACTIVE',
-                    sslStatus: 'ISSUED',
+                    sslStatus: 'PENDING',
+                    sslVerifiedAt: null,
+                    sslExpiresAt: null,
+                    sslIssuer: null,
+                    sslError: null,
+                    sslRetryCount: 0,
                 },
             });
             await prisma.deployment.update({ where: { id: deploymentId }, data: { domain: domainName, hostType: 'domain' } });
+            await queueTLSVerification(existing.id);
             return;
         }
 
@@ -1441,9 +1602,11 @@ with open(override_path, 'w') as f:
                 vpsId,
                 domainName,
                 status: 'ACTIVE',
-                sslStatus: 'ISSUED',
+                sslStatus: 'PENDING',
             },
         });
+        const created = await prisma.domain.findUnique({ where: { domainName } });
+        if (created) await queueTLSVerification(created.id);
         await prisma.deployment.update({ where: { id: deploymentId }, data: { domain: domainName, hostType: 'domain' } });
     }
 }

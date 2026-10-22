@@ -5,27 +5,17 @@ import Link from 'next/link';
 import {
     ArrowRight,
     CheckCircle2,
-    Cpu,
-    Database,
-    FileText,
     GitCommit,
     Github,
-    Globe,
-    HardDrive,
     KeyRound,
     Lock,
-    Rocket,
-    Server,
     ShieldCheck,
     Sliders,
     Terminal,
-    Zap,
     Activity,
     FolderKanban,
-    RotateCcw,
-    Check,
-    ChevronRight
-} from 'lucide-react';
+    Check
+} from '@/components/icons';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 import clsx from 'clsx';
 
@@ -57,41 +47,37 @@ await connection.exec("docker run -d --name app-v1.4.2 app:v1.4.2");`
     {
         id: 'bluegreen',
         name: 'Blue-Green Deployments',
-        tag: 'ZERO-DOWNTIME',
-        title: 'Zero-Downtime Traffic Switching & Instant Rollbacks',
-        description: 'Every release builds inside a new parallel container. DeployForge runs HTTP health checks against the new container before updating Nginx upstream targets, ensuring existing connections are never dropped.',
+        tag: 'VALIDATED SWITCH',
+        title: 'Blue-Green Traffic Switching & Safe Rollbacks',
+        description: 'Supported stateless releases build as private candidates. HTTP readiness and a Traefik canary probe pass before the stable route changes; stateful dependency changes require maintenance.',
         highlights: [
             'Parallel container isolation during build and verification steps',
             'Automated HTTP health check verification before traffic switch',
-            'Instant single-click rollbacks to previous container release images',
-            'Zero-downtime Nginx reload with active connection draining'
+            'Rollback candidate validation before traffic moves',
+            'Atomic stable route replacement with automatic restore on probe failure'
         ],
-        codeSnippet: `// Nginx Upstream Traffic Switch
-upstream deployforge_app {
-    # Blue (Active): Container app_v1.4.1 -> Draining
-    # Green (New):    Container app_v1.4.2 -> 100% Traffic
-    server 127.0.0.1:3002 max_fails=3 fail_timeout=5s;
-}`
+        codeSnippet: `# Stable Traefik release target
+http:
+  services:
+    deployforge-app:
+      loadBalancer:
+        servers:
+          - url: http://df-release-01:3000`
     },
     {
         id: 'networking',
-        name: 'Nginx & Let\'s Encrypt',
-        tag: 'DYNAMIC PROXY',
-        title: 'Zero-Config Reverse Proxy & Automatic SSL',
-        description: 'DeployForge automatically generates Nginx vhost configurations and manages Let’s Encrypt SSL/TLS certificates via Certbot, including automatic 90-day background renewal.',
+        name: 'Traefik & Verified TLS',
+        tag: 'MANAGED INGRESS',
+        title: 'Stable Routing & Verified ACME TLS',
+        description: 'DeployForge writes stable Traefik routes, queues ACME verification, and marks TLS issued only after a trusted hostname and expiry check.',
         highlights: [
-            'Dynamic Nginx server block generation per domain',
+            'Stable Traefik file-provider route per domain',
             'Automated HTTP-01 ACME challenge for Let\'s Encrypt TLS',
-            'Automatic SSL certificate renewal background cron workers',
-            'Custom domain aliases and wildcard routing options'
+            'Trusted SNI hostname, chain, issuer, and expiry verification',
+            'Custom domain and managed fallback-domain routing'
         ],
-        codeSnippet: `// Dynamic VHost Template
-server {
-    listen 443 ssl http2;
-    server_name app.example.com;
-    ssl_certificate /etc/letsencrypt/live/app.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
-}`
+        codeSnippet: `PENDING -> trusted SNI verification -> ISSUED
+       invalid / expired / hostname mismatch -> FAILED or EXPIRED`
     },
     {
         id: 'envvault',
@@ -131,21 +117,21 @@ CONTAINER ID   IMAGE        STATUS
     },
     {
         id: 'monitoring',
-        name: 'Metrics & Backups',
+        name: 'Metrics & Local Utilities',
         tag: 'SYSTEM VISIBILITY',
-        title: 'Server Resource Metrics & Automated Database Backups',
-        description: 'Track CPU, RAM, Disk, and Network metrics in real time. Set custom alert thresholds and trigger automated database backup exports with one-click restore capabilities.',
+        title: 'Server Resource Metrics & Experimental Local Exports',
+        description: 'Track CPU, RAM, Disk, and Network metrics in real time and configure custom alert thresholds. Local backup utilities remain experimental and require an independent production backup strategy.',
         highlights: [
             'Real-time CPU, RAM, Disk, and Swap metrics collection',
             'Configurable per-user resource usage alert thresholds',
-            'Automated PostgreSQL database dump exports to local storage',
-            'One-click database backup restoration workflow'
+            'Manual PostgreSQL database dump exports to local storage',
+            'Experimental local database export and restore utilities'
         ],
         codeSnippet: `// System Health & Threshold Status
 CPU Usage:    12.4%  [Normal]
 RAM Usage:    412 MB / 4096 MB (10.0%) [Normal]
 Disk Space:   14.2 GB / 80.0 GB (17.7%) [Normal]
-Backup Status: Automated daily dump complete (24.1 MB)`
+Backup Utilities: Experimental manual export only`
     }
 ];
 
@@ -171,9 +157,9 @@ const PIPELINE_STEPS = [
     },
     {
         number: '04',
-        title: 'Zero-Downtime Release',
-        sub: 'NGINX ROUTING',
-        desc: 'HTTP health check confirms container readiness. Nginx reloads upstream routes, switching live traffic with 0ms downtime.'
+        title: 'Validated Release Switch',
+        sub: 'TRAEFIK ROUTING',
+        desc: 'HTTP readiness and a Traefik canary probe pass before the stable route changes atomically.'
     }
 ];
 
@@ -217,7 +203,7 @@ export default function FeaturesPage() {
                         {/* Supporting Description */}
                         <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
                             DeployForge connects your source repositories to Virtual Private Servers over agentless SSH.
-                            Orchestrate container builds, dynamic Nginx routing, encrypted secrets, and zero-downtime releases from a single interface.
+                            Orchestrate immutable container builds, Traefik routing, encrypted secrets, and validated release switching from a single interface.
                         </p>
 
                         {/* Actions */}
@@ -243,7 +229,7 @@ export default function FeaturesPage() {
                                 <CheckCircle2 size={13} className="text-white" /> Agentless SSH2
                             </span>
                             <span className="flex items-center gap-1.5">
-                                <CheckCircle2 size={13} className="text-white" /> Blue-Green Zero Downtime
+                                <CheckCircle2 size={13} className="text-white" /> Validated Blue-Green Switching
                             </span>
                             <span className="flex items-center gap-1.5">
                                 <CheckCircle2 size={13} className="text-white" /> Auto Certbot SSL
@@ -397,7 +383,7 @@ export default function FeaturesPage() {
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-[#A1A1A1]">Strategy</span>
-                                            <span className="text-emerald-400">Blue-Green Zero-Downtime</span>
+                                            <span className="text-emerald-400">Validated Blue-Green</span>
                                         </div>
                                     </div>
                                 </div>
@@ -519,9 +505,9 @@ export default function FeaturesPage() {
                             <div className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-white">
                                 <Activity size={14} />
                             </div>
-                            <h3 className="mt-3 text-sm font-semibold text-white">Alerts & Database Backups</h3>
+                            <h3 className="mt-3 text-sm font-semibold text-white">Alerts & Local Export Utilities</h3>
                             <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">
-                                Track CPU, RAM, and Disk metrics. Set threshold alerts and execute scheduled PostgreSQL backups with one-click restoration triggers.
+                                Track CPU, RAM, and Disk metrics and set threshold alerts. Experimental local PostgreSQL export/restore utilities are not an offsite or disaster-recovery system.
                             </p>
                         </div>
                     </div>
@@ -571,7 +557,7 @@ export default function FeaturesPage() {
                             Operate self-hosted infrastructure with DeployForge.
                         </h2>
                         <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">
-                            Connect your GitHub repositories to Virtual Private Servers over SSH. Automate builds, TLS certificates, and zero-downtime releases today.
+                            Connect your GitHub repositories to Virtual Private Servers over SSH. Automate builds, verified TLS, and validated Blue-Green releases today.
                         </p>
                         <div className="mt-6 flex flex-wrap gap-3">
                             <Link

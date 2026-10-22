@@ -23,13 +23,11 @@ declare module 'fastify' {
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 const adminTokenService = new TokenService(config.auth.adminJwtSecret);
-const adminRoles = new Set(['SUPER_ADMIN', 'ADMIN', 'MODERATOR']);
-
 function tokenHash(token: string) {
     return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-const authPlugin: FastifyPluginCallback = (fastify, opts, done) => {
+const authPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
     fastify.decorateRequest('user', null);
 
     fastify.decorate('authGuard', async (request: FastifyRequest, reply: FastifyReply) => {

@@ -27,9 +27,9 @@ import type {
     VpsConnectionResult,
     VpsServerInfo,
     VpsLiveMetrics,
+    VpsOperation,
     VpsEnvironmentScan,
     InstallRuntimeResponse,
-    PreflightResult,
     RuntimeName,
 } from '@/lib/api/types';
 
@@ -92,7 +92,6 @@ export const queryKeys = {
     invitations: ['invitations'] as const,
     // Runtime Manager
     vpsEnvironment: (vpsId: string) => ['vps', vpsId, 'environment'] as const,
-    vpsPreflight: (vpsId: string, deploymentId?: string) => ['vps', vpsId, 'preflight', deploymentId || ''] as const,
     allowedRuntimes: ['runtime', 'runtimes'] as const,
 };
 
@@ -240,7 +239,7 @@ export function useDomains(enabled = true) {
         queryKey: queryKeys.domains,
         queryFn: () => api.get<Domain[]>('/domain/list'),
         enabled,
-        refetchInterval: 30000,
+        refetchInterval: (query) => query.state.data?.some((domain) => domain.sslStatus === 'PENDING') ? 5000 : 30000,
     });
 }
 
@@ -265,8 +264,7 @@ export function useVerifyDns(domainName?: string, vpsIp?: string, enabled = true
         }>(`/domain/verify-dns/${encodeURIComponent(domainName!)}?vpsIp=${encodeURIComponent(vpsIp!)}`),
         enabled: !!domainName && !!vpsIp && enabled,
         retry: false,
-        // MEDIUM FIX #12: Raise staleTime to 60s (was 10s) and disable refetch on
-        // window focus so expanding multiple cards doesn't self-rate-limit at 30/min.
+        // Avoid self-rate-limiting when several domain cards are expanded.
         staleTime: 60000,
         refetchOnWindowFocus: false,
     });
@@ -303,9 +301,9 @@ export function useRemoveDomain() {
 export function useIssueSSL() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (domainId: string) => api.post<{ message: string }>(`/domain/ssl/issue/${domainId}`),
+        mutationFn: (domainId: string) => api.post<{ message: string; status?: string }>(`/domain/ssl/issue/${domainId}`),
         onSuccess: () => {
-            handleMutationSuccess('SSL Issued', 'SSL certificate has been successfully issued via Certbot.');
+            handleMutationSuccess('TLS Verification Queued', 'Certificate state becomes ISSUED only after trusted SNI verification passes.');
             queryClient.invalidateQueries({ queryKey: queryKeys.domains });
         },
         onError: (err) => handleMutationError('SSL Issuance Failed', err),
@@ -331,7 +329,7 @@ export function useToggleAutoHttps() {
 export function useCreateGithubDeployment() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (payload: { repositoryId: string; vpsId: string; branch: string; environment: 'production' | 'development'; autoDeploy: boolean; domainName?: string; env?: any; mode?: 'production' | 'sandbox' }) =>
+        mutationFn: (payload: { repositoryId: string; vpsId: string; branch: string; environment: 'production' | 'development'; autoDeploy: boolean; domainName?: string; env?: any; mode?: 'production' | 'sandbox'; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK'; composeService?: string; composePort?: number }) =>
             api.post<Deployment>('/deploy/github', payload),
         onSuccess: (deployment) => {
             handleMutationSuccess('Deployment Triggered', 'GitHub deployment has been successfully queued.');
@@ -346,12 +344,15 @@ export function useCreateGithubDeployment() {
 export function useCreateUploadDeployment() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (payload: { file: File; vpsId: string; projectId?: string; name: string; environment: 'production' | 'development'; domainName?: string; env?: any; mode?: 'production' | 'sandbox' }) => {
+        mutationFn: (payload: { file: File; vpsId: string; projectId?: string; name: string; environment: 'production' | 'development'; domainName?: string; env?: any; mode?: 'production' | 'sandbox'; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK'; composeService?: string; composePort?: number }) => {
             const form = new FormData();
             form.set('vpsId', payload.vpsId);
             form.set('name', payload.name);
             form.set('environment', payload.environment);
             form.set('mode', payload.mode || 'production');
+            if (payload.resourceTier) form.set('resourceTier', payload.resourceTier);
+            if (payload.composeService) form.set('composeService', payload.composeService);
+            if (payload.composePort) form.set('composePort', String(payload.composePort));
             if (payload.projectId) form.set('projectId', payload.projectId);
             if (payload.domainName) form.set('domainName', payload.domainName);
             if (payload.env) {
@@ -437,9 +438,9 @@ export function useResumeDeployment() {
 export function useRollbackDeployment() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, historyId }: { id: string; historyId?: string }) => api.post<{ success: boolean; version: string }>(`/deployments/${id}/rollback`, historyId ? { historyId } : undefined),
+        mutationFn: ({ id, historyId, releaseId }: { id: string; historyId?: string; releaseId?: string }) => api.post<{ queued: boolean; candidateReleaseId: string }>(`/deployments/${id}/rollback`, releaseId ? { releaseId } : historyId ? { historyId } : {}),
         onSuccess: (_data, payload) => {
-            handleMutationSuccess('Rollback Succeeded', 'Successfully reverted to the selected deployment version.');
+            handleMutationSuccess('Rollback Queued', 'The selected release is being validated before traffic is switched.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
             queryClient.invalidateQueries({ queryKey: queryKeys.deployment(payload.id) });
         },
@@ -458,16 +459,35 @@ export function useDeploymentLogStream(deploymentId?: string, enabled = true) {
 
     useEffect(() => {
         if (!deploymentId || !enabled) return;
-        const socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/logs`));
-        socket.onopen = () => setIsConnected(true);
-        socket.onclose = () => setIsConnected(false);
-        socket.onmessage = (event) => {
-            const payload = JSON.parse(event.data);
-            if (payload.event === 'deployment:log' && payload.data) {
-                setLogs((current) => current.some((log) => log.id === payload.data.id) ? current : [...current, payload.data]);
-            }
+        let socket: WebSocket | null = null;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let disposed = false;
+        let attempts = 0;
+        const connect = () => {
+            if (disposed) return;
+            socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/logs`));
+            socket.onopen = () => { attempts = 0; setIsConnected(true); };
+            socket.onclose = () => {
+                setIsConnected(false);
+                if (!disposed && attempts < 5) {
+                    timer = setTimeout(connect, Math.min(15000, 1000 * (2 ** attempts++)));
+                }
+            };
+            socket.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.event === 'deployment:log' && payload.data) {
+                        setLogs((current) => current.some((log) => log.id === payload.data.id) ? current : [...current, payload.data]);
+                    }
+                } catch { /* Ignore malformed stream frames. */ }
+            };
         };
-        return () => socket.close();
+        connect();
+        return () => {
+            disposed = true;
+            if (timer) clearTimeout(timer);
+            socket?.close();
+        };
     }, [deploymentId, enabled]);
 
     useEffect(() => setLogs([]), [deploymentId]);
@@ -479,12 +499,30 @@ export function useDeploymentStatusStream(deploymentId?: string) {
 
     useEffect(() => {
         if (!deploymentId) return;
-        const socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/status`));
-        socket.onmessage = (event) => {
-            const payload = JSON.parse(event.data);
-            if (payload.event === 'deployment:status') setStatus(payload.data);
+        let socket: WebSocket | null = null;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let disposed = false;
+        let attempts = 0;
+        const connect = () => {
+            if (disposed) return;
+            socket = new WebSocket(wsUrl(`/ws/deployments/${deploymentId}/status`));
+            socket.onopen = () => { attempts = 0; };
+            socket.onclose = () => {
+                if (!disposed && attempts < 5) timer = setTimeout(connect, Math.min(15000, 1000 * (2 ** attempts++)));
+            };
+            socket.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.event === 'deployment:status') setStatus(payload.data);
+                } catch { /* HTTP polling remains the fallback. */ }
+            };
         };
-        return () => socket.close();
+        connect();
+        return () => {
+            disposed = true;
+            if (timer) clearTimeout(timer);
+            socket?.close();
+        };
     }, [deploymentId]);
 
     return useMemo(() => status, [status]);
@@ -493,17 +531,60 @@ export function useDeploymentStatusStream(deploymentId?: string) {
 export function useVpsList(enabled = true) {
     return useQuery({
         queryKey: queryKeys.vps,
-        queryFn: () => api.get<Vps[]>('/vps/list'),
+        queryFn: async () => {
+            const list = await api.get<Vps[]>('/vps/list');
+            if (typeof window === 'undefined') return list;
+            const pending = readGatewayOperations();
+            if (!Object.keys(pending).length) return list;
+            await Promise.all(list.map(async (vps) => {
+                const operationId = pending[vps.id];
+                if (!operationId) return;
+                try {
+                    const operation = await api.get<VpsOperation>(`/vps/${vps.id}/operations/${operationId}`);
+                    if (operation.status === 'QUEUED' || operation.status === 'RUNNING') {
+                        vps.gatewayStatus = 'PROVISIONING';
+                    } else {
+                        delete pending[vps.id];
+                        if (operation.status === 'FAILED') {
+                            vps.gatewayStatus = 'FAILED';
+                            vps.gatewayError = operation.error || 'Gateway operation failed';
+                        }
+                    }
+                } catch {
+                    delete pending[vps.id];
+                }
+            }));
+            writeGatewayOperations(pending);
+            return list;
+        },
         enabled,
-        refetchInterval: 30000,
+        refetchInterval: (query) => query.state.data?.some((item) => item.gatewayStatus === 'PROVISIONING') ? 2000 : 30000,
     });
+}
+
+const GATEWAY_OPERATIONS_KEY = 'deployforge:gateway-operations';
+
+function readGatewayOperations(): Record<string, string> {
+    if (typeof window === 'undefined') return {};
+    try {
+        const value = JSON.parse(window.localStorage.getItem(GATEWAY_OPERATIONS_KEY) || '{}');
+        return value && typeof value === 'object' ? value : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeGatewayOperations(value: Record<string, string>) {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(GATEWAY_OPERATIONS_KEY, JSON.stringify(value));
 }
 
 export function useTestVpsConnection() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (payload: VpsConnectionPayload | { id: string }) => api.post<VpsConnectionResult>('/vps/test-connection', payload),
+        mutationFn: (payload: VpsConnectionPayload | { id: string }) =>
+            api.post<VpsConnectionResult>('/vps/test-connection', payload, { timeoutMs: 30_000 }),
         onSuccess: (data, payload) => {
             if (data.success) {
                 handleMutationSuccess('Connection Succeeded', 'VPS connection test completed successfully.');
@@ -549,10 +630,19 @@ export function useBootstrapVps() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, email }: { id: string; email?: string }) =>
-            api.post<{ success: boolean; message: string }>(`/vps/${id}/bootstrap`, { email }),
-        onSuccess: (data) => {
-            handleMutationSuccess('Gateway Ready', data?.message || 'VPS Traefik Ingress Gateway and deployforge-net initialized successfully.');
+        mutationFn: async ({ id, email }: { id: string; email?: string }) => {
+            const queued = await api.post<{ operationId: string; status: VpsOperation['status'] }>(
+                `/vps/${id}/bootstrap`,
+                { email },
+                { timeoutMs: 30_000 },
+            );
+            const pending = readGatewayOperations();
+            pending[id] = queued.operationId;
+            writeGatewayOperations(pending);
+            return queued;
+        },
+        onSuccess: () => {
+            handleMutationSuccess('Gateway Repair Queued', 'Gateway status will update after remote verification completes.');
             queryClient.invalidateQueries({ queryKey: queryKeys.vps });
         },
         onError: (err) => handleMutationError('Gateway Setup Failed', err),
@@ -797,8 +887,8 @@ export function useDeploymentEnvHistory(deploymentId?: string) {
 export function useRedeploy() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (deploymentId: string) =>
-            api.post<Deployment>(`/deployments/${deploymentId}/redeploy`, {}),
+        mutationFn: ({ deploymentId, composeService, composePort, resourceTier }: { deploymentId: string; composeService?: string; composePort?: number; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' }) =>
+            api.post<Deployment>(`/deployments/${deploymentId}/redeploy`, { composeService, composePort, resourceTier }),
         onSuccess: (newDeployment) => {
             handleMutationSuccess('Redeployment Triggered', 'Redeployment job successfully created.');
             queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
@@ -920,7 +1010,7 @@ export function useDeclineInvitation() {
 export function useVpsEnvironment(vpsId?: string) {
     return useQuery({
         queryKey: queryKeys.vpsEnvironment(vpsId || 'none'),
-        queryFn: () => api.get<{ data: VpsEnvironmentScan }>(`/vps/${vpsId}/environment`).then((r: any) => r.data),
+        queryFn: () => api.get<{ data: VpsEnvironmentScan }>(`/vps/${vpsId}/environment`, { timeoutMs: 60_000 }).then((r: any) => r.data),
         enabled: !!vpsId,
         staleTime: 60_000,
         retry: 1,
@@ -932,25 +1022,12 @@ export function useInstallRuntime(vpsId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (runtimes: RuntimeName[]) =>
-            api.post<{ data: InstallRuntimeResponse }>(`/vps/${vpsId}/install-runtime`, { runtimes }).then((r: any) => r.data),
+            api.post<{ data: InstallRuntimeResponse }>(`/vps/${vpsId}/install-runtime`, { runtimes }, { timeoutMs: 360_000 }).then((r: any) => r.data),
         onSuccess: () => {
             handleMutationSuccess('Installation Complete', 'Runtimes were installed and verified successfully.');
             queryClient.invalidateQueries({ queryKey: queryKeys.vpsEnvironment(vpsId || 'none') });
         },
         onError: (err) => handleMutationError('Installation Failed', err),
-    });
-}
-
-/** Get deployment preflight checklist for a VPS. */
-export function useVpsPreflight(vpsId?: string, deploymentId?: string) {
-    return useQuery({
-        queryKey: queryKeys.vpsPreflight(vpsId || 'none', deploymentId),
-        queryFn: () => api.get<{ data: { preflight: PreflightResult; scan: VpsEnvironmentScan } }>(
-            `/runtime/${vpsId}/preflight${deploymentId ? `?deploymentId=${deploymentId}` : ''}`
-        ).then((r: any) => r.data),
-        enabled: !!vpsId,
-        staleTime: 30_000,
-        retry: 1,
     });
 }
 

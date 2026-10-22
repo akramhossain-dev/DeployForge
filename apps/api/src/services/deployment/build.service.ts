@@ -189,7 +189,7 @@ export class BuildService {
             await runCommand(ssh, deploymentId, 'build', `cat > ${shellQuote(`${workDir}/Dockerfile`)} <<'EOF'\n${generatedDockerfile(detected)}\nEOF`);
         }
 
-        await runCommand(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && docker build --pull -t ${shellQuote(imageTag)} .`, 'building', 'DOCKER_BUILD_FAILED');
+        await runCommand(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && docker build --pull --label com.deployforge.managed=true --label ${shellQuote(`com.deployforge.deployment=${deploymentId}`)} -t ${shellQuote(imageTag)} .`, 'building', 'DOCKER_BUILD_FAILED');
     }
 
     static async buildStaticArtifact(ssh: SSHService, deploymentId: string, workDir: string, staticDir: string, detected: DetectedProject, hasEnv: boolean) {

@@ -3,19 +3,11 @@
 import Link from 'next/link';
 import {
     ArrowRight,
-    CheckCircle2,
-    Cpu,
-    Database,
     Github,
-    Globe,
-    KeyRound,
     Lock,
-    Rocket,
     Server,
-    ShieldCheck,
-    Terminal,
     Zap
-} from 'lucide-react';
+} from '@/components/icons';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 
 const TECH_STACK = [
@@ -38,8 +30,8 @@ const PRACTICAL_PROBLEMS = [
         description: 'Avoid arbitrary per-app or per-bandwidth pricing penalties. Run high-density workloads on fixed-cost cloud servers or bare metal.'
     },
     {
-        title: 'Zero-Downtime Reliability',
-        description: 'Blue-Green deployments isolate new container builds, verify HTTP health check endpoints, and update Nginx upstream routes without dropping connections.'
+        title: 'Validated Release Reliability',
+        description: 'Supported stateless Blue-Green deployments isolate candidates, verify readiness, and atomically switch stable Traefik routes.'
     },
     {
         title: 'Zero-Trust Data Protection',
@@ -50,7 +42,7 @@ const PRACTICAL_PROBLEMS = [
 const PHILOSOPHY = [
     {
         title: 'Developer Control',
-        description: 'Infrastructure management should feel transparent. Operators retain full root access and visibility into underlying Docker containers and Nginx configs.'
+        description: 'Infrastructure management should feel transparent. Operators retain full root access and visibility into Docker containers and managed Traefik routes.'
     },
     {
         title: 'Agentless Architecture',
@@ -87,7 +79,7 @@ export default function AboutPage() {
 
                         {/* Description */}
                         <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
-                            DeployForge bridges the gap between polished platform ergonomics and complete server sovereignty. Connect repositories, manage VPS fleets over agentless SSH, and release applications with zero downtime.
+                            DeployForge bridges the gap between polished platform ergonomics and complete server sovereignty. Connect repositories, manage VPS fleets over agentless SSH, and use validated traffic switching for supported stateless releases.
                         </p>
 
                         {/* CTAs */}
@@ -123,7 +115,7 @@ export default function AboutPage() {
                                 DeployForge is an open-source, self-hosted Platform-as-a-Service designed to automate application building, deployment, and operational monitoring on your Virtual Private Servers (VPS).
                             </p>
                             <p className="text-sm leading-relaxed text-[#A1A1A1]">
-                                It connects GitHub repositories directly to your infrastructure. Pushing code triggers container builds, dynamic Nginx reverse proxy updates, Let’s Encrypt TLS certificate generation, and zero-downtime Blue-Green releases without relying on third-party cloud lock-in.
+                                It connects GitHub repositories directly to your infrastructure. Pushing code triggers immutable container builds, stable Traefik route updates, verified TLS, and Blue-Green releases without third-party cloud lock-in.
                             </p>
                         </div>
 
@@ -145,7 +137,7 @@ export default function AboutPage() {
                                     <div className="flex items-start gap-3 rounded border border-[#1F1F1F] bg-[#000000] p-3">
                                         <Zap size={15} className="text-white shrink-0 mt-0.5" />
                                         <div>
-                                            <p className="font-semibold text-white">Blue-Green Zero Downtime</p>
+                                            <p className="font-semibold text-white">Validated Blue-Green Switching</p>
                                             <p className="text-[11px] text-[#A1A1A1]">Parallel container deployments with HTTP health checks before Nginx route switching.</p>
                                         </div>
                                     </div>

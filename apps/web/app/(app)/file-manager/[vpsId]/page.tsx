@@ -4,7 +4,7 @@ import { FileManager } from '@/components/file-manager/FileManager';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api/client';
 import type { Vps } from '@/lib/api/types';
-import { Server, ArrowLeft, Loader2 } from 'lucide-react';
+import { Server, ArrowLeft, Loader2 } from '@/components/icons';
 import Link from 'next/link';
 
 interface PageProps {

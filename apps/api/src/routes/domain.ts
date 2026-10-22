@@ -40,7 +40,7 @@ const verifyDnsParamsSchema = z.object({
 });
 
 const verifyDnsQuerySchema = z.object({
-    vpsIp: z.string().ip({ message: 'A valid VPS IP address is required' }),
+    vpsIp: z.union([z.ipv4(), z.ipv6()], { error: 'A valid VPS IP address is required' }),
 });
 
 export default async function domainRoutes(fastify: FastifyInstance) {
@@ -103,8 +103,8 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         try {
             const { domainId } = sslIssueParamsSchema.parse(request.params);
             await verifyDomainOwnership(request.user.id, domainId, request);
-            await DomainService.issueSSL(request.user.id, domainId);
-            return { success: true, data: { message: 'SSL certificate issued successfully' } };
+            const result = await DomainService.issueSSL(request.user.id, domainId);
+            return reply.status(202).send({ success: true, data: { message: 'SSL verification queued', ...result } });
         } catch (err: any) {
             const status = err.statusCode || 400;
             return reply.status(status).send({
@@ -162,13 +162,11 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         return { success: true, data: domains.map(sanitizeDomain).filter(Boolean) };
     });
 
-    // List subdomains for a specific deployment
     fastify.get('/subdomains/:deploymentId', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, _reply) => {
         const { deploymentId } = z.object({ deploymentId: z.string().uuid() }).parse(request.params);
-        // MEDIUM FIX #13: Exclude DELETED records — they were previously returned and
-        // required the frontend to filter, leaking soft-deleted data unnecessarily.
+        // Soft-deleted domains must not leak into active deployment responses.
         const domains = await prisma.domain.findMany({
             where: {
                 deploymentId,

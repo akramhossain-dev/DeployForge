@@ -1,7 +1,7 @@
 'use client';
 
 import { useToastStore } from '@/lib/store/useToastStore';
-import { X, CheckCircle, Copy, AlertOctagon, Terminal } from 'lucide-react';
+import { X, CheckCircle, Copy, AlertOctagon, Terminal } from '@/components/icons';
 import { useState } from 'react';
 import { StatusBadge } from '@/components/ui';
 

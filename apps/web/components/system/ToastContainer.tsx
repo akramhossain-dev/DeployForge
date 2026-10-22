@@ -1,8 +1,7 @@
 'use client';
 
 import { useToastStore, Toast } from '@/lib/store/useToastStore';
-import { AlertCircle, CheckCircle2, Info, AlertTriangle, X, Loader2 } from 'lucide-react';
-import clsx from 'clsx';
+import { AlertCircle, CheckCircle2, Info, AlertTriangle, X, Loader2 } from '@/components/icons';
 
 export function ToastContainer() {
     const { toasts, removeToast } = useToastStore();

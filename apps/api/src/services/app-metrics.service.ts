@@ -1,5 +1,6 @@
 import prisma from '@deployforge/database';
 import { logger } from '../utils/logger';
+import { deploymentQueue, gatewayQueue, maintenanceQueue, tlsVerificationQueue, webhookQueue } from '../utils/queue';
 
 interface ApiRequestStats {
     totalRequests: number;
@@ -22,8 +23,10 @@ export class AppMetricsService {
     private static cachedDeploymentStats: Record<string, number> = {};
     private static lastDeploymentStatsFetch = 0;
     private static CACHE_TTL_MS = 10000; 
+    private static cachedOperationalStats: Record<string, unknown> = {};
+    private static lastOperationalStatsFetch = 0;
 
-    public static recordRequest(method: string, path: string, statusCode: number, responseTimeMs: number) {
+    public static recordRequest(statusCode: number, responseTimeMs: number) {
         this.stats.totalRequests++;
 
         const codeStr = String(statusCode);
@@ -100,6 +103,7 @@ export class AppMetricsService {
         }
 
         const deployments = await this.getDeploymentStats();
+        const operations = await this.getOperationalStats();
 
         return {
             status: 'ok',
@@ -124,6 +128,44 @@ export class AppMetricsService {
                 averageResponseTimeMs: avgResponseTimeMs,
             },
             deployments,
+            operations,
         };
+    }
+
+    private static async getOperationalStats() {
+        const now = Date.now();
+        if (now - this.lastOperationalStatsFetch < this.CACHE_TTL_MS && Object.keys(this.cachedOperationalStats).length) {
+            return this.cachedOperationalStats;
+        }
+        try {
+            const queueList = [
+                ['deployments', deploymentQueue],
+                ['webhooks', webhookQueue],
+                ['gateway', gatewayQueue],
+                ['tls', tlsVerificationQueue],
+                ['maintenance', maintenanceQueue],
+            ] as const;
+            const [queueCounts, gateways, releases, tls, reservations, cleanupFailures] = await Promise.all([
+                Promise.all(queueList.map(async ([name, queue]) => [name, await queue.getJobCounts('waiting', 'active', 'delayed', 'failed')] as const)),
+                prisma.vPS.groupBy({ by: ['gatewayStatus'], _count: true }),
+                prisma.deploymentRelease.groupBy({ by: ['status'], _count: true }),
+                prisma.domain.groupBy({ by: ['sslStatus'], _count: true }),
+                prisma.capacityReservation.groupBy({ by: ['status'], _count: true }),
+                prisma.deploymentRelease.count({ where: { purgeError: { not: null }, purgedAt: null } }),
+            ]);
+            this.cachedOperationalStats = {
+                queues: Object.fromEntries(queueCounts),
+                gatewayStates: Object.fromEntries(gateways.map((item) => [item.gatewayStatus, item._count])),
+                releaseStates: Object.fromEntries(releases.map((item) => [item.status, item._count])),
+                tlsStates: Object.fromEntries(tls.map((item) => [item.sslStatus, item._count])),
+                capacityReservations: Object.fromEntries(reservations.map((item) => [item.status, item._count])),
+                cleanupFailures,
+            };
+            this.lastOperationalStatsFetch = now;
+            return this.cachedOperationalStats;
+        } catch (err) {
+            logger.warn({ err }, 'Failed to collect operational metrics, returning cache');
+            return this.cachedOperationalStats;
+        }
     }
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Github, PackagePlus, RefreshCw, Rocket, Search, Zap, XCircle, CheckCircle2, Clock, GitBranch, Globe, Server, BarChart3, ChevronDown, AlertTriangle, Gauge, ArrowRight } from 'lucide-react';
+import { Github, PackagePlus, RefreshCw, Rocket, Search, Zap, XCircle, CheckCircle2, Clock, GitBranch, Server, BarChart3, Gauge, ArrowRight } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';

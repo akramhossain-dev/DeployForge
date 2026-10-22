@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api/client';
-import { Server, FolderOpen, Search, Wifi, WifiOff, AlertCircle, ArrowRight, Loader2, HardDrive } from 'lucide-react';
+import { Server, FolderOpen, ArrowRight, HardDrive } from '@/components/icons';
 import type { Vps } from '@/lib/api/types';
 import clsx from 'clsx';
 

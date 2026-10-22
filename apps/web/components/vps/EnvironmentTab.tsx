@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { RefreshCw, Download, Cpu, HardDrive, MemoryStick, Clock, ChevronDown, ChevronUp, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Download, Cpu, HardDrive, MemoryStick, Clock, ChevronDown, ChevronUp, CheckCircle, XCircle, AlertTriangle } from '@/components/icons';
 import { useVpsEnvironment } from '@/hooks/useDeployForgeData';
 import { Vps, InstalledRuntime, ServiceStatus } from '@/lib/api/types';
 import { InstallRuntimeModal } from './InstallRuntimeModal';

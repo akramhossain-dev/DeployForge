@@ -91,7 +91,7 @@ export default async function profileRoutes(fastify: FastifyInstance) {
 
     fastify.delete('/', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { passwordConfirm } = deleteAccountSchema.parse(request.body);
         await AccountService.deleteAccount(request.user.id, passwordConfirm, request.ip, request.headers['user-agent']);
         return { success: true, data: { message: 'Account deleted successfully' } };

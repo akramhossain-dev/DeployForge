@@ -9,11 +9,7 @@ const wsParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid ID format' }),
 });
 
-const wsQuerySchema = z.object({
-    token: z.string().min(1, 'Token is required').optional(),
-});
-
-// H-7: Per-user WebSocket connection tracking to prevent resource exhaustion
+// Bound per-user connections to prevent WebSocket resource exhaustion.
 const MAX_WS_PER_USER = 20;
 const userConnectionCounts = new Map<string, number>();
 
@@ -37,10 +33,11 @@ export default async function wsRoutes(fastify: FastifyInstance) {
     fastify.get('/deployments/:id/logs', { websocket: true }, async (connection, request) => {
         const session = await authorizeDeploymentSocket(request, connection);
         if (!session) return;
+        const accessTimer = bindAccessRevalidation(session, connection);
 
         if (!acquireWsSlot(session.userId)) {
-            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Too many concurrent connections' }));
-            connection.socket.close();
+            connection.send(JSON.stringify({ event: 'deployment:error', message: 'Too many concurrent connections' }));
+            connection.close();
             return;
         }
 
@@ -53,7 +50,7 @@ export default async function wsRoutes(fastify: FastifyInstance) {
             });
             for (const log of logs) {
                 lastSeen = log.createdAt;
-                connection.socket.send(JSON.stringify({ event: 'deployment:log', data: log }));
+                connection.send(JSON.stringify({ event: 'deployment:log', data: log }));
             }
         };
 
@@ -62,7 +59,7 @@ export default async function wsRoutes(fastify: FastifyInstance) {
                 const logTime = new Date(log.createdAt);
                 if (logTime > lastSeen) {
                     lastSeen = logTime;
-                    connection.socket.send(JSON.stringify({ event: 'deployment:log', data: log }));
+                    connection.send(JSON.stringify({ event: 'deployment:log', data: log }));
                 }
             }
         };
@@ -70,11 +67,12 @@ export default async function wsRoutes(fastify: FastifyInstance) {
         deploymentEventEmitter.on(DEPLOYMENT_EVENTS.LOG_ADDED, onLogAdded);
 
         await sendLogs().catch((err) => {
-            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
+            connection.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
         });
 
-        connection.socket.on('close', () => {
+        connection.on('close', () => {
             deploymentEventEmitter.off(DEPLOYMENT_EVENTS.LOG_ADDED, onLogAdded);
+            clearInterval(accessTimer);
             releaseWsSlot(session.userId);
         });
     });
@@ -82,10 +80,11 @@ export default async function wsRoutes(fastify: FastifyInstance) {
     fastify.get('/deployments/:id/status', { websocket: true }, async (connection, request) => {
         const session = await authorizeDeploymentSocket(request, connection);
         if (!session) return;
+        const accessTimer = bindAccessRevalidation(session, connection);
 
         if (!acquireWsSlot(session.userId)) {
-            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: 'Too many concurrent connections' }));
-            connection.socket.close();
+            connection.send(JSON.stringify({ event: 'deployment:error', message: 'Too many concurrent connections' }));
+            connection.close();
             return;
         }
 
@@ -93,7 +92,13 @@ export default async function wsRoutes(fastify: FastifyInstance) {
         let lastUpdatedAt = '';
         const sendStatus = async () => {
             const deployment = await prisma.deployment.findFirst({
-                where: { id: session.deploymentId, userId: session.userId },
+                where: {
+                    id: session.deploymentId,
+                    OR: [
+                        { userId: session.userId },
+                        { project: { OR: [{ userId: session.userId }, { members: { some: { userId: session.userId } } }] } },
+                    ],
+                },
                 select: { id: true, status: true, updatedAt: true, containerId: true, port: true, commitHash: true, commitMessage: true },
             });
             if (!deployment) return;
@@ -101,7 +106,7 @@ export default async function wsRoutes(fastify: FastifyInstance) {
             if (deployment.status !== lastStatus || updatedAt !== lastUpdatedAt) {
                 lastStatus = deployment.status;
                 lastUpdatedAt = updatedAt;
-                connection.socket.send(JSON.stringify({ event: 'deployment:status', data: deployment }));
+                connection.send(JSON.stringify({ event: 'deployment:status', data: deployment }));
             }
         };
 
@@ -111,7 +116,7 @@ export default async function wsRoutes(fastify: FastifyInstance) {
                 if (deployment.status !== lastStatus || updatedAt !== lastUpdatedAt) {
                     lastStatus = deployment.status;
                     lastUpdatedAt = updatedAt;
-                    connection.socket.send(JSON.stringify({ event: 'deployment:status', data: deployment }));
+                    connection.send(JSON.stringify({ event: 'deployment:status', data: deployment }));
                 }
             }
         };
@@ -119,44 +124,44 @@ export default async function wsRoutes(fastify: FastifyInstance) {
         deploymentEventEmitter.on(DEPLOYMENT_EVENTS.STATUS_UPDATED, onStatusUpdated);
 
         await sendStatus().catch((err) => {
-            connection.socket.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
+            connection.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
         });
 
-        connection.socket.on('close', () => {
+        connection.on('close', () => {
             deploymentEventEmitter.off(DEPLOYMENT_EVENTS.STATUS_UPDATED, onStatusUpdated);
+            clearInterval(accessTimer);
             releaseWsSlot(session.userId);
         });
     });
 
     // Real-time notification push for authenticated users
     fastify.get('/notifications', { websocket: true }, async (connection, request) => {
-        const { token: queryToken } = wsQuerySchema.parse(request.query);
-        const token = socketToken(request, queryToken);
+        const token = socketToken(request);
         const session = await verifySocketUser(token);
 
         if (!session) {
-            connection.socket.send(JSON.stringify({ event: 'notification:error', message: 'Unauthorized' }));
-            connection.socket.close();
+            connection.send(JSON.stringify({ event: 'notification:error', message: 'Unauthorized' }));
+            connection.close();
             return;
         }
 
         const userId = session.userId;
 
         if (!acquireWsSlot(userId)) {
-            connection.socket.send(JSON.stringify({ event: 'notification:error', message: 'Too many concurrent connections' }));
-            connection.socket.close();
+            connection.send(JSON.stringify({ event: 'notification:error', message: 'Too many concurrent connections' }));
+            connection.close();
             return;
         }
 
         // Send initial unread count
         const unreadCount = await prisma.notification.count({ where: { userId, isRead: false } });
-        connection.socket.send(JSON.stringify({ event: 'notification:unread_count', data: { count: unreadCount } }));
+        connection.send(JSON.stringify({ event: 'notification:unread_count', data: { count: unreadCount } }));
 
         // Listen for new alerts targeted at this user
         const onAlertCreated = (alertUserId: string, notification: any) => {
             if (alertUserId === userId) {
                 try {
-                    connection.socket.send(JSON.stringify({ event: 'notification:new', data: notification }));
+                    connection.send(JSON.stringify({ event: 'notification:new', data: notification }));
                 } catch {
                     // Connection may have closed
                 }
@@ -165,7 +170,7 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 
         monitoringEventEmitter.on(MONITORING_EVENTS.ALERT_CREATED, onAlertCreated);
 
-        connection.socket.on('close', () => {
+        connection.on('close', () => {
             monitoringEventEmitter.off(MONITORING_EVENTS.ALERT_CREATED, onAlertCreated);
             releaseWsSlot(userId);
         });
@@ -175,14 +180,26 @@ export default async function wsRoutes(fastify: FastifyInstance) {
 async function authorizeDeploymentSocket(request: any, connection: any) {
     try {
         const { id } = wsParamsSchema.parse(request.params);
-        const { token: queryToken } = wsQuerySchema.parse(request.query);
-        const session = await verifyDeploymentSocketAccess(id, socketToken(request, queryToken));
+        const token = socketToken(request);
+        const session = await verifyDeploymentSocketAccess(id, token);
         if (!session) throw new Error('Unauthorized');
-        return session;
+        return { ...session, token };
     } catch (err: any) {
-        connection.socket.send(JSON.stringify({ event: 'deployment:error', message: err.message || 'Unauthorized' }));
-        connection.socket.close();
+        connection.send(JSON.stringify({ event: 'deployment:error', message: err.message || 'Unauthorized' }));
+        connection.close();
         return null;
     }
+}
+
+function bindAccessRevalidation(session: { userId: string; deploymentId: string; token: string }, connection: any) {
+    const timer = setInterval(async () => {
+        const access = await verifyDeploymentSocketAccess(session.deploymentId, session.token).catch(() => null);
+        if (!access) {
+            connection.send(JSON.stringify({ event: 'deployment:error', message: 'Access revoked' }));
+            connection.close();
+        }
+    }, 60_000);
+    timer.unref();
+    return timer;
 }
 

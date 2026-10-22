@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { AlertCircle, Eye, EyeOff, Loader2, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Loader2, RefreshCw, X } from '@/components/icons';
 import { ReactNode, useEffect, useState, forwardRef } from 'react';
 
 export const INPUT_STYLE =

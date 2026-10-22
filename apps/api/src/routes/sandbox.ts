@@ -12,7 +12,7 @@ export default async function sandboxRoutes(fastify: FastifyInstance) {
 
     fastify.post('/analyze/:deploymentId', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { deploymentId } = sandboxParamsSchema.parse(request.params);
         const deployment = await verifyDeploymentOwnership(request.user.id, deploymentId, request);
         await verifyVpsOwnership(request.user.id, deployment.vpsId, request);
@@ -22,7 +22,7 @@ export default async function sandboxRoutes(fastify: FastifyInstance) {
 
     fastify.get('/:deploymentId/result', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { deploymentId } = sandboxParamsSchema.parse(request.params);
         const result = await verifySandboxOwnership(request.user.id, deploymentId, request);
         return { success: true, data: result };

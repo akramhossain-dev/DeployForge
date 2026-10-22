@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
     CheckCircle2, Loader2, UploadCloud
-} from 'lucide-react';
+} from '@/components/icons';
 import {
     useCreateUploadDeployment,
     useVpsList,
@@ -16,6 +16,8 @@ import { validateEnvFiles } from '@/lib/utils/envValidation';
 import { ExecutionModeSelector } from './ExecutionModeSelector';
 import { HostingConfiguration, isValidDomainInput } from './HostingConfiguration';
 import { EnvironmentVariablesEditor } from './EnvironmentVariablesEditor';
+import { ResourcePolicyFields, type ResourceTier } from './ResourcePolicyFields';
+import { DeploymentRequestError } from './DeploymentRequestError';
 
 type EnvName = 'production' | 'development';
 type ExecutionMode = 'production' | 'sandbox';
@@ -38,6 +40,9 @@ export function UploadDeployForm() {
     const [mode, setMode] = useState<ExecutionMode>('production');
     const [useEnv, setUseEnv] = useState(false);
     const [envFiles, setEnvFiles] = useState<EnvFile[]>([{ path: '.env', variables: {} }]);
+    const [resourceTier, setResourceTier] = useState<ResourceTier | ''>('');
+    const [composeService, setComposeService] = useState('');
+    const [composePort, setComposePort] = useState('');
 
     const isValid = !!file && /\.(zip|tar\.gz|tgz)$/i.test(file.name);
     const progress = deploy.isPending ? 75 : deploy.isSuccess ? 100 : file ? 35 : 0;
@@ -98,10 +103,13 @@ export function UploadDeployForm() {
                 environment,
                 domainName: mode === 'production' && hostType === 'domain' ? domainName : undefined,
                 env: useEnv ? { version: 2, files: envFiles } : { version: 2, files: [] },
-                mode
+                mode,
+                resourceTier: resourceTier || undefined,
+                composeService: composeService.trim() || undefined,
+                composePort: composePort ? Number(composePort) : undefined,
             });
             router.push(`/deployments/${deployment.id}`);
-        } catch (err) {}
+        } catch {}
     }
 
     if (vps.isLoading) {
@@ -115,9 +123,7 @@ export function UploadDeployForm() {
     return (
         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-6 font-mono text-xs">
             {deploy.isError && (
-                <div className="rounded border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
-                    Upload deployment failed: {(deploy.error as Error)?.message}
-                </div>
+                <DeploymentRequestError error={deploy.error} prefix="Upload deployment failed" />
             )}
 
             {/* Drag & Drop Box */}
@@ -238,6 +244,16 @@ export function UploadDeployForm() {
 
             {/* Execution Mode Selector */}
             <ExecutionModeSelector mode={mode} setMode={setMode} />
+
+            <ResourcePolicyFields
+                resourceTier={resourceTier}
+                setResourceTier={setResourceTier}
+                composeService={composeService}
+                setComposeService={setComposeService}
+                composePort={composePort}
+                setComposePort={setComposePort}
+                disabled={isSubmitting}
+            />
 
             {/* Hosting Configuration */}
             {mode === 'production' ? (

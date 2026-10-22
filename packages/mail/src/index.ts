@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import type { SendMailOptions, Transporter } from 'nodemailer';
 
 export interface MailConfig {
     host: string;
@@ -46,7 +47,7 @@ function structuredLog(log: StructuredLog, customLogger?: MailConfig['logger']) 
 }
 
 export class MailService {
-    private transporter: nodemailer.Transporter;
+    private transporter: Transporter;
     private fromEmail: string;
     private customLogger?: MailConfig['logger'];
 
@@ -84,7 +85,7 @@ export class MailService {
             socketTimeout: 15000,
         });
 
-        this.transporter.verify((error) => {
+        this.transporter.verify((error: Error | null) => {
             if (error) {
                 structuredLog({
                     stage: 'smtp',
@@ -104,7 +105,7 @@ export class MailService {
         });
     }
 
-    private async sendWithRetry(mailOptions: nodemailer.SendMailOptions, retries = 3, delay = 1000): Promise<any> {
+    private async sendWithRetry(mailOptions: SendMailOptions, retries = 3, delay = 1000): Promise<any> {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
                  const info = await this.transporter.sendMail(mailOptions);

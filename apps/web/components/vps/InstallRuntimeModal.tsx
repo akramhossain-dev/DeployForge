@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Download, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { X, Download, CheckCircle, XCircle } from '@/components/icons';
 import { useInstallRuntime, useAllowedRuntimes } from '@/hooks/useDeployForgeData';
 import { Vps, RuntimeName, VpsRuntimeLog } from '@/lib/api/types';
 

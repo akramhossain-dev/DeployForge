@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import {
-    Activity, CheckCircle2, Cpu, GitBranch, Github,
+    Activity, CheckCircle2, Cpu, Github,
     Globe, Server, ShieldCheck, Terminal, Zap,
-} from 'lucide-react';
+} from '@/components/icons';
 import {
     LandingHeroButtons,
     LandingConsolePreview,
@@ -12,7 +11,7 @@ import {
 
 export const metadata: Metadata = {
     title: 'DeployForge — Self-Hosted PaaS & VPS Deployment Platform',
-    description: 'DeployForge connects your GitHub repositories to Virtual Private Servers over agentless SSH. Automate container builds, dynamic Nginx routing, and zero-downtime releases.',
+    description: 'DeployForge connects GitHub repositories to Virtual Private Servers over agentless SSH with immutable builds, Traefik routing, and validated release switching.',
     alternates: {
         canonical: '/',
     },
@@ -36,7 +35,7 @@ const CORE_FEATURES = [
     },
     {
         title: 'Blue-Green Deployments',
-        description: 'Deploy new application releases into parallel containers, execute health checks, and switch live traffic with zero downtime.',
+        description: 'Deploy supported stateless releases into parallel containers, execute readiness checks, and atomically switch live traffic.',
         icon: Zap,
     },
     {
@@ -69,8 +68,8 @@ const WORKFLOW_STEPS = [
     },
     {
         step: '04',
-        title: 'Zero-Downtime Route Switch',
-        description: 'Nginx dynamically updates traffic routes with active SSL certificate renewal.',
+        title: 'Validated Route Switch',
+        description: 'Traefik canary probes and an atomic route-file update move supported stateless traffic.',
     },
 ];
 
@@ -96,7 +95,7 @@ export default function HomePage() {
                         {/* Description */}
                         <p className="mt-5 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
                             DeployForge connects your GitHub repositories to Virtual Private Servers over agentless SSH.
-                            Automate container builds, dynamic Nginx routing, and zero-downtime releases without vendor lock-in.
+                            Automate immutable container builds, Traefik routing, and validated release switching without vendor lock-in.
                         </p>
 
                         {/* Interactive CTAs */}
@@ -108,7 +107,7 @@ export default function HomePage() {
                                 <CheckCircle2 size={13} className="text-white" /> Agentless SSH Protocol
                             </span>
                             <span className="flex items-center gap-1.5">
-                                <CheckCircle2 size={13} className="text-white" /> Blue-Green Zero Downtime
+                                <CheckCircle2 size={13} className="text-white" /> Validated Blue-Green Switching
                             </span>
                             <span className="flex items-center gap-1.5">
                                 <CheckCircle2 size={13} className="text-white" /> Automated Certbot SSL
@@ -261,7 +260,7 @@ export default function HomePage() {
   "deployment": {
     "protocol": "ssh2",
     "strategy": "blue-green",
-    "proxy": "nginx-certbot",
+    "proxy": "traefik-file-provider-acme",
     "isolation": "docker-sandbox"
   }
 }`}
@@ -279,7 +278,7 @@ export default function HomePage() {
                             Deploy on your own infrastructure today.
                         </h2>
                         <p className="mt-3 text-xs leading-relaxed text-[#A1A1A1]">
-                            Connect your GitHub repositories to your Virtual Private Servers with automated builds and zero-downtime releases.
+                            Connect your GitHub repositories to your Virtual Private Servers with automated builds and validated Blue-Green releases.
                         </p>
                         <LandingCtaButtons />
                     </div>

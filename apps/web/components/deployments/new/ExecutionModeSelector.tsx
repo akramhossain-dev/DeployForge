@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { Rocket, Shield } from 'lucide-react';
+import { Rocket, Shield } from '@/components/icons';
 
 type ExecutionMode = 'production' | 'sandbox';
 

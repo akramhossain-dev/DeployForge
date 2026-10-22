@@ -2,7 +2,7 @@
 
 import { ReactNode, Suspense, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Chrome, Loader2 } from 'lucide-react';
+import { Chrome, Loader2 } from '@/components/icons';
 import api from '@/lib/api/client';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 

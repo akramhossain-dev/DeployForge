@@ -3,7 +3,7 @@
 import { useState, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { KeyRound, ArrowLeft, CheckCircle2, ShieldAlert, Loader2, Lock, ArrowRight, Shield } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ShieldAlert, Loader2, Lock, ArrowRight, Shield } from '@/components/icons';
 import clsx from 'clsx';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';

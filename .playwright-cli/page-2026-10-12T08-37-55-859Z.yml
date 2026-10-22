@@ -1,0 +1,269 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - link "DeployForge home" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e13]: DeployForge
+          - navigation [ref=e14]:
+            - link "Overview" [ref=e15] [cursor=pointer]:
+              - /url: /
+            - link "Features" [ref=e16] [cursor=pointer]:
+              - /url: /features
+            - link "About" [ref=e17] [cursor=pointer]:
+              - /url: /about
+            - link "Docs" [ref=e18] [cursor=pointer]:
+              - /url: /docs
+        - link "GitHub repository" [ref=e20] [cursor=pointer]:
+          - /url: https://github.com/akramhossain-dev/DeployForge
+          - generic [ref=e25]: GitHub
+    - main [ref=e27]:
+      - main [ref=e28]:
+        - generic [ref=e31]:
+          - generic [ref=e32]: DEPLOYFORGE — DOCUMENTATION
+          - heading "DeployForge Documentation" [level=1] [ref=e36]
+          - paragraph [ref=e37]: Technical reference guide for connecting source repositories, provisioning VPS servers, configuring zero-downtime Blue-Green releases, and managing encrypted secrets.
+          - textbox "Search documentation (e.g. SSH, Nginx, Blue-Green, Vault)..." [ref=e42]
+        - generic [ref=e44]:
+          - complementary [ref=e45]:
+            - generic [ref=e46]:
+              - generic [ref=e47]:
+                - paragraph [ref=e48]: CATEGORIES
+                - generic [ref=e49]:
+                  - button "all" [ref=e50] [cursor=pointer]
+                  - button "FOUNDATION" [ref=e51] [cursor=pointer]
+                  - button "GETTING STARTED" [ref=e52] [cursor=pointer]
+                  - button "SOURCE CONTROL" [ref=e53] [cursor=pointer]
+                  - button "INFRASTRUCTURE" [ref=e54] [cursor=pointer]
+                  - button "DEPLOYMENT" [ref=e55] [cursor=pointer]
+                  - button "NETWORKING" [ref=e56] [cursor=pointer]
+                  - button "SECURITY" [ref=e57] [cursor=pointer]
+                  - button "OPERATIONS" [ref=e58] [cursor=pointer]
+                  - button "ADMINISTRATION" [ref=e59] [cursor=pointer]
+              - generic [ref=e60]:
+                - paragraph [ref=e61]: NAVIGATION
+                - navigation [ref=e62]:
+                  - link "Platform Architecture & Overview" [ref=e63] [cursor=pointer]:
+                    - /url: "#overview"
+                  - link "Getting Started Quickstart" [ref=e67] [cursor=pointer]:
+                    - /url: "#getting-started"
+                  - link "GitHub OAuth & Webhook Automation" [ref=e71] [cursor=pointer]:
+                    - /url: "#github-integration"
+                  - link "VPS Provisioning & SSH Driver" [ref=e75] [cursor=pointer]:
+                    - /url: "#vps-management"
+                  - link "Docker Build Engine & Blue-Green Releases" [ref=e79] [cursor=pointer]:
+                    - /url: "#deployment-engine"
+                  - link "Traefik Routing & Verified TLS" [ref=e83] [cursor=pointer]:
+                    - /url: "#nginx-ssl"
+                  - link "Secrets Vault & Environment Variables" [ref=e87] [cursor=pointer]:
+                    - /url: "#secrets-env"
+                  - link "Web Terminal, Logs & VPS File Explorer" [ref=e91] [cursor=pointer]:
+                    - /url: "#terminal-logs"
+                  - link "Admin Control Panel & Security Hardening" [ref=e95] [cursor=pointer]:
+                    - /url: "#admin-security"
+          - generic [ref=e99]:
+            - article [ref=e100]:
+              - generic [ref=e101]:
+                - generic [ref=e102]: FOUNDATION
+                - link "#overview" [ref=e103] [cursor=pointer]:
+                  - /url: "#overview"
+              - heading "Platform Architecture & Overview" [level=2] [ref=e104]
+              - paragraph [ref=e105]: DeployForge is an open-source, self-hosted PaaS orchestrator designed for GitHub-connected projects running on VPS infrastructure you control.
+              - generic [ref=e106]:
+                - generic [ref=e107]: Bridges the gap between modern cloud platform developer experience and full server ownership.
+                - generic [ref=e112]: Decouples the control plane (Fastify API, Prisma PostgreSQL, BullMQ Redis queues) from runtime execution on target servers.
+                - generic [ref=e117]: Communicates with target servers strictly over secure agentless SSH2 — zero proprietary daemons or agents required on target VPS nodes.
+              - generic [ref=e122]:
+                - generic [ref=e123]:
+                  - generic [ref=e124]: deployforge.config.json
+                  - generic [ref=e125]: json
+                - generic [ref=e126]: "{ \"platform\": \"deployforge\", \"version\": \"1.0.0\", \"controlPlane\": { \"apiEngine\": \"fastify-prisma\", \"queueDriver\": \"bullmq-redis\", \"vaultEncryption\": \"aes-256-gcm\" }, \"runtime\": { \"protocol\": \"ssh2\", \"isolation\": \"docker-sandbox\", \"strategy\": \"blue-green\", \"proxy\": \"nginx-certbot\" } }"
+            - article [ref=e127]:
+              - generic [ref=e128]:
+                - generic [ref=e129]: GETTING STARTED
+                - link "#getting-started" [ref=e130] [cursor=pointer]:
+                  - /url: "#getting-started"
+              - heading "Getting Started Quickstart" [level=2] [ref=e131]
+              - paragraph [ref=e132]: Follow this 4-step path to connect your identity, source code, VPS server target, and launch your first release.
+              - generic [ref=e133]:
+                - generic [ref=e134]: "1. Account Setup & GitHub OAuth: Sign in to DeployForge console and authorize GitHub OAuth to grant repository read access."
+                - generic [ref=e139]: "2. Provision Target VPS: Attach your Ubuntu 22.04 LTS server credentials over SSH and verify host key connectivity."
+                - generic [ref=e144]: "3. Configure Project: Select a synchronized GitHub repository, branch, build command, and environment secret values."
+                - generic [ref=e149]: "4. Trigger First Deployment: Launch build job to compile Docker container, run health check, and route Nginx traffic."
+              - generic [ref=e154]:
+                - generic [ref=e155]:
+                  - generic [ref=e156]: local-setup.sh
+                  - generic [ref=e157]: bash
+                - generic [ref=e158]: "# 1. Clone repository & install dependencies git clone https://github.com/akramhossain-dev/DeployForge.git cd DeployForge && pnpm install # 2. Sync database schema & generate Prisma Client pnpm db:push && pnpm db:generate # 3. Launch development servers (API: 3001, Web: 3000) pnpm dev"
+            - article [ref=e159]:
+              - generic [ref=e160]:
+                - generic [ref=e161]: SOURCE CONTROL
+                - link "#github-integration" [ref=e162] [cursor=pointer]:
+                  - /url: "#github-integration"
+              - heading "GitHub OAuth & Webhook Automation" [level=2] [ref=e163]
+              - paragraph [ref=e164]: GitHub serves as the source control provider for repository synchronization and automated continuous deployment triggers.
+              - generic [ref=e165]:
+                - generic [ref=e166]: OAuth authorization stores scoped access tokens in the AES-256 vault for repository tree listing and branch detection.
+                - generic [ref=e171]: Automatic webhook receivers listen for branch push events and validate HMAC SHA-256 signatures before queueing build jobs.
+                - generic [ref=e176]: Multi-branch deployment mapping supports separate environments (.env.production for main branch, .env.staging for dev branch).
+              - generic [ref=e181]:
+                - generic [ref=e182]:
+                  - generic [ref=e183]: webhook-signature.ts
+                  - generic [ref=e184]: typescript
+                - generic [ref=e185]: "// Validate GitHub Webhook HMAC Signature import crypto from 'node:crypto'; export function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean { const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(payload).digest('hex'); return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected)); }"
+            - article [ref=e186]:
+              - generic [ref=e187]:
+                - generic [ref=e188]: INFRASTRUCTURE
+                - link "#vps-management" [ref=e189] [cursor=pointer]:
+                  - /url: "#vps-management"
+              - heading "VPS Provisioning & SSH Driver" [level=2] [ref=e190]
+              - paragraph [ref=e191]: Servers are managed as first-class deployment targets with automated SSH key validation and connection pooling.
+              - generic [ref=e192]:
+                - generic [ref=e193]: Connect any standard Ubuntu server (20.04/22.04/24.04 LTS) by supplying IP, port, username, and SSH private key credentials.
+                - generic [ref=e198]: "Agentless driver executes remote commands (`docker build`, `docker run`, `nginx -s reload`) without installing background daemons."
+                - generic [ref=e203]: Connection pool maintains persistent SSH sessions with automatic health checks and reconnect backoff logic.
+              - generic [ref=e208]:
+                - generic [ref=e209]:
+                  - generic [ref=e210]: ssh-probe.sh
+                  - generic [ref=e211]: bash
+                - generic [ref=e212]: "# Verification command executed during VPS connection test: ssh -i ~/.ssh/deployforge_key -p 22 root@192.168.1.100 \\ \"docker --version && nginx -v && ufw status\" # Expected Output: # Docker version 26.0.0, build 2ae908d # nginx version: nginx/1.24.0 # Status: active"
+            - article [ref=e213]:
+              - generic [ref=e214]:
+                - generic [ref=e215]: DEPLOYMENT
+                - link "#deployment-engine" [ref=e216] [cursor=pointer]:
+                  - /url: "#deployment-engine"
+              - heading "Docker Build Engine & Blue-Green Releases" [level=2] [ref=e217]
+              - paragraph [ref=e218]: The release engine builds isolated images, validates candidates, and atomically switches supported stateless traffic using Blue-Green routing.
+              - generic [ref=e219]:
+                - generic [ref=e220]: Build detection parses project configuration and generates runtime Dockerfiles for Next.js, Node.js, Fastify, Vite, and Python.
+                - generic [ref=e225]: The candidate starts only on a private validation network while the active release continues serving production traffic.
+                - generic [ref=e230]: HTTP readiness and a secret Traefik canary probe must pass before the stable route file is replaced; stateful dependency changes require maintenance.
+              - generic [ref=e235]:
+                - generic [ref=e236]:
+                  - generic [ref=e237]: project-route.yml
+                  - generic [ref=e238]: yaml
+                - generic [ref=e239]: "# Stable Traefik file-provider release target http: services: deployforge-app: loadBalancer: servers: - url: http://df-release-01:3000"
+            - article [ref=e240]:
+              - generic [ref=e241]:
+                - generic [ref=e242]: NETWORKING
+                - link "#nginx-ssl" [ref=e243] [cursor=pointer]:
+                  - /url: "#nginx-ssl"
+              - heading "Traefik Routing & Verified TLS" [level=2] [ref=e244]
+              - paragraph [ref=e245]: Stable Traefik routing with automated ACME issuance and real hostname, chain, issuer, and expiry verification.
+              - generic [ref=e246]:
+                - generic [ref=e247]: Generates stable route files that target a release-specific network alias.
+                - generic [ref=e252]: Traefik performs ACME issuance while DeployForge keeps the domain in PENDING state.
+                - generic [ref=e257]: A trusted SNI handshake validates hostname, chain, issuer, and expiry before the domain becomes ISSUED.
+              - generic [ref=e262]:
+                - generic [ref=e263]:
+                  - generic [ref=e264]: TLS lifecycle
+                  - generic [ref=e265]: text
+                - generic [ref=e266]: PENDING -> trusted SNI verification -> ISSUED invalid / expired / hostname mismatch -> FAILED or EXPIRED
+            - article [ref=e267]:
+              - generic [ref=e268]:
+                - generic [ref=e269]: SECURITY
+                - link "#secrets-env" [ref=e270] [cursor=pointer]:
+                  - /url: "#secrets-env"
+              - heading "Secrets Vault & Environment Variables" [level=2] [ref=e271]
+              - paragraph [ref=e272]: Multi-environment secret storage protected with AES-256-GCM encryption at rest and deployment-time injection.
+              - generic [ref=e273]:
+                - generic [ref=e274]: Environment values are encrypted using AES-256-GCM before database insertion and decrypted only in worker memory.
+                - generic [ref=e279]: Supports multi-file tabbed management (.env.production, .env.staging, .env.preview) per project.
+                - generic [ref=e284]: Secrets are injected securely into Docker container environment files during build execution without touching disk in plaintext.
+              - generic [ref=e289]:
+                - generic [ref=e290]:
+                  - generic [ref=e291]: encryption-vault.ts
+                  - generic [ref=e292]: typescript
+                - generic [ref=e293]: "// AES-256-GCM Encrypted Secret Vault import crypto from 'node:crypto'; export function encryptSecret(text: string, masterKey: string): { ciphertext: string; iv: string; tag: string } { const iv = crypto.randomBytes(12); const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(masterKey, 'hex'), iv); let encrypted = cipher.update(text, 'utf8', 'hex'); encrypted += cipher.final('hex'); return { ciphertext: encrypted, iv: iv.toString('hex'), tag: cipher.getAuthTag().toString('hex') }; }"
+            - article [ref=e294]:
+              - generic [ref=e295]:
+                - generic [ref=e296]: OPERATIONS
+                - link "#terminal-logs" [ref=e297] [cursor=pointer]:
+                  - /url: "#terminal-logs"
+              - heading "Web Terminal, Logs & VPS File Explorer" [level=2] [ref=e298]
+              - paragraph [ref=e299]: In-browser operational tools for SSH terminal access, container log streaming, and remote file management.
+              - generic [ref=e300]:
+                - generic [ref=e301]: "Web SSH Terminal: Built with xterm.js and WebSockets, enabling full interactive shell access to registered servers."
+                - generic [ref=e306]: "Live Log Streamer: Real-time container log output streaming with regex search and level filtering."
+                - generic [ref=e311]: "VPS File Explorer: Web file manager supporting directory tree browsing, inline code editing, path search, and SFTP transfers."
+              - generic [ref=e316]:
+                - generic [ref=e317]:
+                  - generic [ref=e318]: terminal-stream.sh
+                  - generic [ref=e319]: bash
+                - generic [ref=e320]: "# WebSocket Terminal Session Stream $ ssh root@192.168.1.100 root@vps-prod-01:~# docker logs -f --tail 50 deployforge-api-v1.4.2 [22:45:12] INFO: Fastify server listening on http://0.0.0.0:3001 [22:45:15] INFO: PostgreSQL connection pool active (20 connections) [22:45:18] INFO: BullMQ Redis worker listening for deployment jobs"
+            - article [ref=e321]:
+              - generic [ref=e322]:
+                - generic [ref=e323]: ADMINISTRATION
+                - link "#admin-security" [ref=e324] [cursor=pointer]:
+                  - /url: "#admin-security"
+              - heading "Admin Control Panel & Security Hardening" [level=2] [ref=e325]
+              - paragraph [ref=e326]: Enterprise access controls, admin management surfaces, rate limiting, and brute-force protection.
+              - generic [ref=e327]:
+                - generic [ref=e328]: "Role-Based Access Control (RBAC): Differentiates regular developers from super admins with protected routes."
+                - generic [ref=e333]: "Authentication Security: Argon2id password hashing, double-submit CSRF tokens, and JWT session handling."
+                - generic [ref=e338]: "Brute-Force Lockout & Rate Limiting: Fastify rate limit plugin blocks ip addresses after repeated failed login attempts."
+              - generic [ref=e343]:
+                - generic [ref=e344]:
+                  - generic [ref=e345]: security-headers.ts
+                  - generic [ref=e346]: typescript
+                - generic [ref=e347]: "// Fastify Security & Helmet Configuration await fastify.register(fastifyHelmet, { contentSecurityPolicy: { directives: { defaultSrc: [\"'self'\"], scriptSrc: [\"'self'\", \"'unsafe-inline'\"], frameAncestors: [\"'none'\"] } } });"
+        - generic [ref=e350]:
+          - heading "Ready to launch on your infrastructure?" [level=2] [ref=e351]
+          - paragraph [ref=e352]: Open the console, register your Virtual Private Server, and deploy your first validated application release.
+          - generic [ref=e353]:
+            - link "Get Started" [ref=e354] [cursor=pointer]:
+              - /url: /register
+            - link "Platform Features" [ref=e358] [cursor=pointer]:
+              - /url: /features
+    - contentinfo [ref=e360]:
+      - generic [ref=e361]:
+        - generic [ref=e362]:
+          - generic [ref=e363]:
+            - link "DeployForge home" [ref=e364] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e371]: DeployForge
+            - paragraph [ref=e372]: Production-grade, self-hosted deployment orchestrator automating application builds, VPS deployments, and real-time monitoring.
+            - link "View Repository" [ref=e373] [cursor=pointer]:
+              - /url: https://github.com/akramhossain-dev/DeployForge
+          - generic [ref=e378]:
+            - heading "Platform" [level=3] [ref=e379]
+            - generic [ref=e380]:
+              - link "Overview" [ref=e381] [cursor=pointer]:
+                - /url: /
+              - link "Features" [ref=e382] [cursor=pointer]:
+                - /url: /features
+              - link "About" [ref=e383] [cursor=pointer]:
+                - /url: /about
+              - link "Console" [ref=e384] [cursor=pointer]:
+                - /url: /dashboard
+          - generic [ref=e385]:
+            - heading "Resources" [level=3] [ref=e386]
+            - generic [ref=e387]:
+              - link "Documentation" [ref=e388] [cursor=pointer]:
+                - /url: /docs
+              - link "Contact Support" [ref=e389] [cursor=pointer]:
+                - /url: /contact
+              - link "Security Controls" [ref=e390] [cursor=pointer]:
+                - /url: /docs#security
+          - generic [ref=e391]:
+            - heading "Legal" [level=3] [ref=e392]
+            - generic [ref=e393]:
+              - link "Privacy Policy" [ref=e394] [cursor=pointer]:
+                - /url: /privacy-policy
+              - link "Terms of Service" [ref=e395] [cursor=pointer]:
+                - /url: /terms
+        - generic [ref=e397]:
+          - generic [ref=e398]: © 2026 DeployForge. Open source self-hosted orchestration.
+          - generic [ref=e399]:
+            - link "About" [ref=e400] [cursor=pointer]:
+              - /url: /about
+            - link "Features" [ref=e401] [cursor=pointer]:
+              - /url: /features
+            - link "Docs" [ref=e402] [cursor=pointer]:
+              - /url: /docs
+            - link "Privacy" [ref=e403] [cursor=pointer]:
+              - /url: /privacy-policy
+            - link "Terms" [ref=e404] [cursor=pointer]:
+              - /url: /terms
+  - button "Open Next.js Dev Tools" [ref=e410] [cursor=pointer]

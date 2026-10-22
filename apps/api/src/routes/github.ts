@@ -212,7 +212,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     fastify.get('/profile', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const account = await prisma.gitHubAccount.findUnique({
             where: { userId: request.user.id }
         });
@@ -223,7 +223,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     fastify.get('/repos', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const account = await prisma.gitHubAccount.findUnique({
             where: { userId: request.user.id },
             include: { repositories: { orderBy: { updatedAt: 'desc' } } }
@@ -241,7 +241,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     fastify.post('/repos/sync', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         fastify.log.info({ userId: request.user.id }, 'Repository sync requested');
         const repositories = await GitHubService.syncRepos(request.user.id);
         await AccountService.logAudit(request.user.id, 'GITHUB_SYNC', `Synced ${repositories.length} GitHub repositories.`, request.ip, request.headers['user-agent']);
@@ -251,7 +251,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     fastify.post('/webhooks/create', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { repoFullName } = createWebhookSchema.parse(request.body);
         const result = await GitHubService.createWebhook(request.user.id, repoFullName);
         await AccountService.logAudit(request.user.id, 'GITHUB_WEBHOOK_CREATE', `Created GitHub webhook for repo: ${repoFullName}`, request.ip, request.headers['user-agent']);
@@ -261,7 +261,7 @@ export default async function githubRoutes(fastify: FastifyInstance) {
     fastify.delete('/disconnect', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const account = await prisma.gitHubAccount.findUnique({ where: { userId: request.user.id } });
         if (!account) {
             fastify.log.info({ userId: request.user.id }, 'GitHub disconnect skipped because no account exists');

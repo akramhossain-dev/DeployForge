@@ -6,8 +6,10 @@ import { parseCookies } from './http';
 
 const tokenService = new TokenService(config.auth.jwtSecret);
 
-export function socketToken(request: FastifyRequest, queryToken?: string) {
-    return queryToken || parseCookies(request.headers.cookie).accessToken || '';
+export function socketToken(request: FastifyRequest, _queryToken?: string) {
+    const authorization = request.headers.authorization;
+    const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
+    return bearer || parseCookies(request.headers.cookie).accessToken || '';
 }
 
 export async function verifySocketUser(token: string) {

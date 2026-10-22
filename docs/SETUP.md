@@ -195,34 +195,26 @@ METRICS_TOKEN=<64-hex-chars>
 ```
 
 #### Step 2: Run Infrastructure Services
-Start the core stack (database, cache, API, web):
+Start the production stack. The one-shot `migrate` service applies migrations before API/worker startup:
 ```bash
-docker compose up -d
+docker compose -f docker-compose.yml --profile production up -d
 ```
 
 The Compose stack orchestrates:
 - **`postgres`:** PostgreSQL 16 with health checks and persistent volume.
 - **`redis`:** Redis 7 with password auth, AOF persistence, and health check.
 - **`api`:** Fastify orchestrator in read-only mode, no new privileges, all capabilities dropped.
+- **`worker`:** BullMQ worker, isolated from the API process.
 - **`web`:** Next.js server with telemetry disabled and production optimizations.
 
 #### Step 3: Apply Database Migrations
-On first launch (or after schema updates), run migrations:
-```bash
-docker compose exec api npx prisma migrate deploy --schema /app/prisma/schema.prisma
-```
+Migrations are applied automatically by the one-shot `migrate` service. Do not run schema migration from the API startup process.
 
 #### Step 4: Enable Nginx + SSL (Production Profile)
-Start Nginx and issue Let's Encrypt certificates:
+Nginx first starts with an HTTP-only ACME configuration. Issue the certificate, then restart Nginx so its entrypoint verifies the files and enables TLS:
 ```bash
-# Issue certificate (run once)
-docker compose --profile production run --rm certbot
-
-# Start Nginx reverse proxy
-docker compose --profile production up -d nginx
-
-# Reload Nginx after cert issuance
-docker compose exec nginx nginx -s reload
+DOMAIN=yourdomain.com CERTBOT_EMAIL=you@yourdomain.com \
+  sh docker/bootstrap-production-tls.sh
 ```
 
 > **Note:** Make sure your domain's DNS A record points to your server's IP before running Certbot.

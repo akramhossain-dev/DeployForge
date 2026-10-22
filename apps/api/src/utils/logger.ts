@@ -33,6 +33,12 @@ const redactionPaths = [
     '*.code',
     '*.resetToken',
     '*.verificationToken',
+    'env',
+    '*.env',
+    '*.*.env',
+    '*.encryptedEnv',
+    '*.*.encryptedEnv',
+    'job.data.env',
 ];
 
 export const logger = pino({

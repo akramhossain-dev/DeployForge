@@ -3,6 +3,7 @@ export type ProjectKind = 'DOCKER' | 'DOCKER_COMPOSE' | 'NEXTJS' | 'ASTRO' | 'VI
 export type SourceType = 'github' | 'upload';
 export type DeploymentMode = 'production' | 'sandbox';
 export type DeploymentRuntimeType = 'STATIC' | 'SERVER' | 'FULLSTACK';
+export type ResourceTier = 'STATIC' | 'SERVER' | 'FULLSTACK';
 
 export type StaticHostingResult = {
     url: string;
@@ -23,6 +24,9 @@ export type GitHubDeploymentSource = {
     domainName?: string;
     env?: any;
     mode?: DeploymentMode;
+    composeService?: string;
+    composePort?: number;
+    resourceTier?: ResourceTier;
 };
 
 export type UploadedFileDeploymentSource = {
@@ -34,6 +38,9 @@ export type UploadedFileDeploymentSource = {
     domainName?: string;
     env?: any;
     mode?: DeploymentMode;
+    composeService?: string;
+    composePort?: number;
+    resourceTier?: ResourceTier;
 };
 
 export type DeploymentSource = GitHubDeploymentSource | UploadedFileDeploymentSource;

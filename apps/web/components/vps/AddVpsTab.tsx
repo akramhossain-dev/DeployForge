@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, ReactNode, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, KeyRound, Loader2, Plus, Server, ShieldCheck, Terminal, XCircle } from 'lucide-react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
+import { KeyRound, Loader2, Plus, Server } from '@/components/icons';
 import clsx from 'clsx';
 import { useAddVps, useTestVpsConnection } from '@/hooks/useDeployForgeData';
 import { ApiError } from '@/lib/api/client';

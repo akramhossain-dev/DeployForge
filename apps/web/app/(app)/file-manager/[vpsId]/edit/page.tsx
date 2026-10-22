@@ -5,7 +5,7 @@ import { CodeEditor } from '@/components/file-manager/CodeEditor';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api/client';
 import type { Vps, FileEntry } from '@/lib/api/types';
-import { Server, ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2 } from '@/components/icons';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 

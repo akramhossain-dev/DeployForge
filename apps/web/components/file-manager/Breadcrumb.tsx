@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ChevronRight, HardDrive } from 'lucide-react';
+import { ChevronRight, HardDrive } from '@/components/icons';
 
 interface BreadcrumbProps {
     path: string;

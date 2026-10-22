@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ReactNode } from 'react';
-import { ArrowRight, Braces, Sparkles } from 'lucide-react';
+import { ArrowRight, Braces, Sparkles } from '@/components/icons';
 
 export type LegalSection = {
     title: string;

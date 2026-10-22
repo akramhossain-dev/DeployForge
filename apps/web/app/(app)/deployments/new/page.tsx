@@ -5,7 +5,7 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import {
     Github, UploadCloud, ArrowLeft, Loader2
-} from 'lucide-react';
+} from '@/components/icons';
 import { GithubDeployForm } from '@/components/deployments/new/GithubDeployForm';
 import { UploadDeployForm } from '@/components/deployments/new/UploadDeployForm';
 

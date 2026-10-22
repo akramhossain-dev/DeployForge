@@ -1,12 +1,10 @@
 'use client';
 
-import { CheckCircle2, Github, GitBranch, Lock, RefreshCw, Rocket, Unlock, XCircle, Search, Loader2 } from 'lucide-react';
+import { CheckCircle2, Github, GitBranch, Lock, RefreshCw, Rocket, Unlock, XCircle, Loader2 } from '@/components/icons';
 import { useState } from 'react';
-import clsx from 'clsx';
 import { useGitHubProfile, useRepositories, useSyncRepositories } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import Link from 'next/link';
-import { formatDate } from '@/components/ui';
 
 const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
 

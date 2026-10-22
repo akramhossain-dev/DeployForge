@@ -12,7 +12,14 @@ const deploymentParamsSchema = z.object({
 });
 
 const rollbackBodySchema = z.object({
-    historyId: z.string().uuid({ message: 'Invalid history ID format' }),
+    historyId: z.string().uuid({ message: 'Invalid history ID format' }).optional(),
+    releaseId: z.string().uuid({ message: 'Invalid release ID format' }).optional(),
+}).refine((value) => !(value.historyId && value.releaseId), { message: 'Provide either releaseId or historyId, not both' });
+
+const redeployBodySchema = z.object({
+    composeService: z.string().trim().min(1).max(63).optional(),
+    composePort: z.coerce.number().int().min(1).max(65535).optional(),
+    resourceTier: z.enum(['STATIC', 'SERVER', 'FULLSTACK']).optional(),
 });
 
 export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
@@ -36,11 +43,12 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
                 ]
             },
             include: {
-                project: true,
+                project: { include: { activeRelease: true, candidateRelease: true, releases: { where: { status: 'SUPERSEDED', runtimeRef: { not: null } }, take: 1, orderBy: { createdAt: 'desc' } } } },
                 vps: { include: { healthRecords: { take: 1, orderBy: { checkedAt: 'desc' } } } },
                 deploymentLogs: { take: 1, orderBy: { createdAt: 'desc' } },
                 history: { take: 3, orderBy: { createdAt: 'desc' } },
                 domains: true,
+                jobs: { take: 1, orderBy: { createdAt: 'desc' } },
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -289,6 +297,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
+        const overrides = redeployBodySchema.parse(request.body || {});
         const deployment = await prisma.deployment.findFirst({
             where: {
                 id,
@@ -326,12 +335,16 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
                 skipWebhookRegistration: true,
                 domainName: deployment.domain || undefined,
                 env: decEnv as any,
-                mode: deployment.mode as any
+                mode: deployment.mode as any,
+                composeService: overrides.composeService || deployment.composeService || undefined,
+                composePort: overrides.composePort || deployment.composePort || undefined,
+                resourceTier: overrides.resourceTier || deployment.requestedResourceTier || deployment.resourceTier,
             });
 
             return apiSuccess(result);
         } catch (err: any) {
-            return apiError(reply, 500, 'REDEPLOY_FAILED', err.message || 'Redeployment failed');
+            const status = err.statusCode || (String(err.errorCode || '').includes('CAPACITY') || err.errorCode === 'DEPLOYMENT_LIMIT_REACHED' ? 409 : String(err.errorCode || '').includes('TIER') ? 422 : 500);
+            return apiError(reply, status, err.errorCode || 'REDEPLOY_FAILED', err.message || 'Redeployment failed', { stage: err.stage, details: err.details });
         }
     });
 
@@ -339,10 +352,10 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { id } = deploymentParamsSchema.parse(request.params);
-        const { historyId } = rollbackBodySchema.parse(request.body);
+        const { historyId, releaseId } = rollbackBodySchema.parse(request.body);
         try {
-            const result = await RollbackService.rollback(request.user.id, id, historyId);
-            return apiSuccess(result);
+            const result = await RollbackService.rollback(request.user.id, id, releaseId || historyId);
+            return reply.status(202).send(apiSuccess(result));
         } catch (err: any) {
             const status = err.statusCode || (['ROLLBACK_NOT_SUPPORTED', 'STATIC_ROLLBACK_NOT_SUPPORTED'].includes(err.errorCode) ? 409 : err.message === 'Deployment not found' ? 404 : 500);
             return apiError(reply, status, err.errorCode || 'ROLLBACK_FAILED', err.message || 'Rollback failed');

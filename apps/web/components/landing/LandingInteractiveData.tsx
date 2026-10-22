@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, GitCommit, Rocket, Server, Lock, KeyRound, Github } from 'lucide-react';
+import { ArrowRight, GitCommit, Rocket, Server, Lock, KeyRound, Github } from '@/components/icons';
 import { useAuthSession, useDeployments, usePublicStats, useVpsList } from '@/hooks/useDeployForgeData';
 import { SkeletonBlock, StatusBadge, formatDate } from '@/components/ui';
 

@@ -46,23 +46,19 @@ export default async function runtimeRoutes(fastify: FastifyInstance) {
     });
 
     // ── GET /runtime/:vpsId/preflight ────────────────────────────────────────
-    // Generate a preflight checklist for the given VPS (and optionally a specific deployment).
-    // Used by the frontend PreflightPanel before showing the Deploy button.
+    /** @deprecated Retained for API compatibility; the web client no longer uses this endpoint. */
     fastify.get('/:vpsId/preflight', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 12, timeWindow: '1 minute' } },
     }, async (request, reply) => {
         const { vpsId } = z.object({ vpsId: z.string().uuid() }).parse(request.params);
-        const { deploymentId } = (request.query as any) || {};
-
         const vps = await prisma.vPS.findFirst({ where: { id: vpsId, userId: request.user!.id } });
         if (!vps) {
             return reply.status(404).send({ success: false, error: { code: 'VPS_NOT_FOUND', message: 'VPS not found' } });
         }
 
-        // Project requirements can be passed or detected dynamically; default to empty scan
-        let projectFiles: string[] = [];
-        let fileContents: Record<string, string> = {};
+        const projectFiles: string[] = [];
+        const fileContents: Record<string, string> = {};
 
         const ssh = new SSHService();
         try {

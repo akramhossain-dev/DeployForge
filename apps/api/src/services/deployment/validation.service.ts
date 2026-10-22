@@ -6,9 +6,19 @@ import { LoggingService } from '../logging.service';
 import { DeploymentError } from './error';
 import { StaticHostingResult } from './types';
 import { runCommand } from './runner';
-import { shellQuote, sanitizeFileName, sanitizeDomain } from './utils';
+import { shellQuote, sanitizeFileName } from './utils';
 
 export class ValidationService {
+    static async healthCheckCandidate(ssh: SSHService, deploymentId: string, alias: string, port: number) {
+        if (!/^df-rel-[a-z0-9]+$/.test(alias) || !Number.isInteger(port) || port < 1 || port > 65535) {
+            throw new DeploymentError('deploying', 'Candidate readiness target is invalid', 'HEALTH_CHECK_FAILED');
+        }
+        const urlHealth = `http://${alias}:${port}/health`;
+        const urlRoot = `http://${alias}:${port}/`;
+        const command = `for i in $(seq 1 30); do code=$(docker run --rm --network deployforge-validation curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 3 ${shellQuote(urlHealth)} 2>/dev/null || true); case "$code" in 2*|3*) exit 0;; esac; code=$(docker run --rm --network deployforge-validation curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 3 ${shellQuote(urlRoot)} 2>/dev/null || true); case "$code" in 2*|3*) exit 0;; esac; sleep 2; done; exit 1`;
+        await runCommand(ssh, deploymentId, 'system', command, 'deploying', 'HEALTH_CHECK_FAILED');
+    }
+
     static normalizeCustomDomain(domainName?: string | null) {
         const clean = String(domainName || '').trim().toLowerCase();
         if (!clean) return null;
@@ -29,13 +39,16 @@ export class ValidationService {
         return clean;
     }
 
-    static async validateDomainSelection(userId: string, domainName?: string) {
+    static async validateDomainSelection(_userId: string, domainName?: string, projectId?: string) {
         const clean = this.normalizeCustomDomain(domainName);
         if (!clean) return undefined;
         const existing = await prisma.domain.findFirst({
             where: {
                 domainName: clean,
-                deployment: { status: { not: 'DELETED' } },
+                deployment: {
+                    status: { not: 'DELETED' },
+                    ...(projectId ? { projectId: { not: projectId } } : {}),
+                },
             },
         });
         if (existing) throw new DeploymentError('domain_validation', 'Domain is already assigned to another deployment', 'DOMAIN_ALREADY_EXISTS');
@@ -70,7 +83,7 @@ export class ValidationService {
             return;
         }
         if (typeof containerIdOrPort === 'string') {
-            await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if docker exec ${shellQuote(containerIdOrPort)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/health >/dev/null 2>&1 || docker exec ${shellQuote(containerIdOrPort)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/ >/dev/null 2>&1 || docker exec ${shellQuote(containerIdOrPort)} curl -fs http://127.0.0.1:${port}/ >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' ${shellQuote(containerIdOrPort)} 2>/dev/null)" = "true" ]; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
+            await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 15); do if docker exec ${shellQuote(containerIdOrPort)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/health >/dev/null 2>&1 || docker exec ${shellQuote(containerIdOrPort)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:${port}/ >/dev/null 2>&1 || docker exec ${shellQuote(containerIdOrPort)} curl -fs http://127.0.0.1:${port}/ >/dev/null 2>&1; then exit 0; fi; sleep 2; done; exit 1`, 'deploying', 'HEALTH_CHECK_FAILED');
             return;
         }
         const numericPort = containerIdOrPort;
@@ -79,7 +92,7 @@ export class ValidationService {
 
     static async healthCheckStatic(ssh: SSHService, deploymentId: string, hostingOrContainer: StaticHostingResult | string) {
         if (typeof hostingOrContainer === 'string') {
-            await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 10); do if docker exec ${shellQuote(hostingOrContainer)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:80/ >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' ${shellQuote(hostingOrContainer)} 2>/dev/null)" = "true" ]; then exit 0; fi; sleep 1; done; exit 1`, 'static_hosting', 'STATIC_HEALTH_CHECK_FAILED');
+            await runCommand(ssh, deploymentId, 'system', `for i in $(seq 1 10); do if docker exec ${shellQuote(hostingOrContainer)} wget -qO- --timeout=2 --tries=1 http://127.0.0.1:80/ >/dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1`, 'static_hosting', 'STATIC_HEALTH_CHECK_FAILED');
             return;
         }
         const hosting = hostingOrContainer;

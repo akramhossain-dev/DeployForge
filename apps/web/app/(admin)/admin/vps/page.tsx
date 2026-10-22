@@ -1,34 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import {
-    Activity, Cpu, HardDrive, Info, Loader2,
-    MemoryStick, RefreshCw, Server, Trash2, User, WifiOff,
-    CheckCircle2, XCircle, Clock, BarChart2
-} from 'lucide-react';
+import { RefreshCw, Server, Trash2
+} from '@/components/icons';
 import clsx from 'clsx';
-import { AppModal } from '@/components/ui';
 import { StatusBadge, formatDate } from '@/components/admin/AdminWidgets';
 import {
     useAdminAction,
     useAdminVps,
-    useAdminVpsLiveMetrics,
-    useAdminVpsServerInfo,
     useAdminTestVpsConnection,
-    useAdminVpsHealthHistory,
 } from '@/hooks/useDeployForgeData';
-import LiveMonitorTab from '@/components/vps/LiveMonitorTab';
-import ServerInfoTab from '@/components/vps/ServerInfoTab';
-import HistoryMonitorTab from '@/components/vps/HistoryMonitorTab';
 
 export default function AdminVpsPage() {
     const vps = useAdminVps();
     const action = useAdminAction();
     const testConn = useAdminTestVpsConnection();
 
-    const [monitorVps, setMonitorVps] = useState<any | null>(null);
-    const [infoVps, setInfoVps] = useState<any | null>(null);
-    const [historyVps, setHistoryVps] = useState<any | null>(null);
+    const [, setMonitorVps] = useState<any | null>(null);
+    const [, setInfoVps] = useState<any | null>(null);
     const [testingId, setTestingId] = useState<string | null>(null);
 
     const [confirmModal, setConfirmModal] = useState<{

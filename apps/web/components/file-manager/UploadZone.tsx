@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Upload, X, File as FileIcon, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, X, File as FileIcon, CheckCircle, AlertCircle, Loader2 } from '@/components/icons';
 import { useUploadFile } from '@/hooks/useFileManager';
 
 interface UploadItem {

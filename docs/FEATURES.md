@@ -29,8 +29,8 @@ A robust pipeline supporting automated git workflows and manual asset uploads:
   - **Astro / SvelteKit:** Modern meta-framework environments.
   - **Python / Django / FastAPI:** WSGI/ASGI-compatible builds.
   - **Static HTML:** Pure assets.
-* **Blue-Green Zero-Downtime Releases:** Spin up new builds in secondary containers. The platform runs HTTP health checks on the new port; if healthy, Nginx configuration blocks are rewritten, the proxy reloads, and traffic transfers instantly with zero downtime. If verification fails, the new build is pruned and the existing container remains online.
-* **Instant Rollbacks:** Rollback to any previous successful deployment image with a single click.
+* **Blue-Green Zero-Downtime Releases:** Start an immutable candidate on a private validation network, require HTTP readiness, probe through a secret Traefik canary route, then atomically replace the stable file-provider route. A failed switch restores the previous route and release.
+* **Safe Rollbacks:** Retained releases are started and health-checked as candidates before traffic moves. Automatic zero-downtime deployment is rejected when a Compose deployment changes persistent dependency definitions.
 * **Deployment History:** Full versioned history of all deployments per project, including container ID, image tag, environment snapshot, and status.
 * **Deployment Jobs Tracking:** Each deployment step is tracked as a `DeploymentJob` with retry counts and last error details.
 
@@ -97,13 +97,9 @@ Governance features for system administrators and platform owners:
 
 ---
 
-## 8. Backup & Restore System
+## 8. Experimental Local Backup Utilities
 
-Built-in disaster recovery tools managed from the Admin panel:
-* **Manual Exports:** Trigger backup exports containing the full PostgreSQL database dump, system configurations, and active deployment states.
-* **Automated Retention Cleanup:** Background tasks (running every 24 hours) periodically purge expired backups to manage disk space.
-* **One-Click Restore:** Rollback the entire platform state to a previous backup snapshot in the event of hardware failures.
-* **Scheduled Backups:** Automated backup scheduling runs every 24 hours via the `BackupService`.
+The current admin backup/restore code is internal and experimental. It may create local PostgreSQL/config exports, but it is not an offsite, scheduled, continuous-backup, or disaster-recovery system. Operators must maintain and test an independent production backup strategy.
 
 ---
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, Clock, Container, Cpu, Gauge, HardDrive, MemoryStick, RefreshCw } from 'lucide-react';
+import { Activity, Clock, Container, Gauge, RefreshCw } from '@/components/icons';
 import clsx from 'clsx';
 import { AdminStat, ResourceBars, SmallMeta } from '@/components/admin/AdminWidgets';
 import { useAdminMonitoring } from '@/hooks/useDeployForgeData';

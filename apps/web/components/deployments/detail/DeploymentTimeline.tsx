@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Copy, Check, AlertCircle, ShieldCheck, Lock } from 'lucide-react';
+import { ExternalLink, Copy, Check, AlertCircle, ShieldCheck, Lock } from '@/components/icons';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
 import { useToastStore } from '@/lib/store/useToastStore';
@@ -10,7 +10,6 @@ const TIMELINE = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', '
 export function DeploymentTimeline({
     current,
     activeUrl,
-    isStatic,
     failedStepIndex,
 }: {
     current: any;

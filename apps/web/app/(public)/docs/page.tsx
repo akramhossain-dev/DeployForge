@@ -8,7 +8,7 @@ import {
     CheckCircle2,
     Search,
     ChevronRight
-} from 'lucide-react';
+} from '@/components/icons';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 import clsx from 'clsx';
 
@@ -52,7 +52,7 @@ const DOC_SECTIONS: DocSection[] = [
     "protocol": "ssh2",
     "isolation": "docker-sandbox",
     "strategy": "blue-green",
-    "proxy": "nginx-certbot"
+    "proxy": "traefik-file-provider-acme"
   }
 }`
         }
@@ -66,7 +66,7 @@ const DOC_SECTIONS: DocSection[] = [
             '1. Account Setup & GitHub OAuth: Sign in to DeployForge console and authorize GitHub OAuth to grant repository read access.',
             '2. Provision Target VPS: Attach your Ubuntu 22.04 LTS server credentials over SSH and verify host key connectivity.',
             '3. Configure Project: Select a synchronized GitHub repository, branch, build command, and environment secret values.',
-            '4. Trigger First Deployment: Launch build job to compile Docker container, run health check, and route Nginx traffic.'
+            '4. Trigger First Deployment: Launch the build, validate the candidate, and switch its stable Traefik route.'
         ],
         codeBlock: {
             title: 'local-setup.sh',
@@ -111,7 +111,7 @@ export function verifyWebhookSignature(payload: string, signature: string, secre
         description: 'Servers are managed as first-class deployment targets with automated SSH key validation and connection pooling.',
         items: [
             'Connect any standard Ubuntu server (20.04/22.04/24.04 LTS) by supplying IP, port, username, and SSH private key credentials.',
-            'Agentless driver executes remote commands (\`docker build\`, \`docker run\`, \`nginx -s reload\`) without installing background daemons.',
+            'Agentless driver executes remote Docker and atomic Traefik route-file operations without installing proprietary background agents.',
             'Connection pool maintains persistent SSH sessions with automatic health checks and reconnect backoff logic.'
         ],
         codeBlock: {
@@ -119,11 +119,11 @@ export function verifyWebhookSignature(payload: string, signature: string, secre
             language: 'bash',
             code: `# Verification command executed during VPS connection test:
 ssh -i ~/.ssh/deployforge_key -p 22 root@192.168.1.100 \\
-  "docker --version && nginx -v && ufw status"
+  "docker --version && docker network inspect deployforge-net && ufw status"
 
 # Expected Output:
 # Docker version 26.0.0, build 2ae908d
-# nginx version: nginx/1.24.0
+# deployforge-net scope: local
 # Status: active`
         }
     },
@@ -131,51 +131,40 @@ ssh -i ~/.ssh/deployforge_key -p 22 root@192.168.1.100 \\
         id: 'deployment-engine',
         title: 'Docker Build Engine & Blue-Green Releases',
         category: 'DEPLOYMENT',
-        description: 'The release engine builds isolated Docker images and switches traffic with zero downtime using Blue-Green routing.',
+        description: 'The release engine builds isolated images, validates candidates, and atomically switches supported stateless traffic using Blue-Green routing.',
         items: [
             'Build detection parses project configuration and generates runtime Dockerfiles for Next.js, Node.js, Fastify, Vite, and Python.',
-            'Parallel release container is spawned on an ephemeral host port while the active container continues serving production traffic.',
-            'Automated HTTP health check probes confirm 200 OK responses before Nginx updates upstream pointers and drains old containers.'
+            'The candidate starts only on a private validation network while the active release continues serving production traffic.',
+            'HTTP readiness and a secret Traefik canary probe must pass before the stable route file is replaced; stateful dependency changes require maintenance.'
         ],
         codeBlock: {
-            title: 'nginx-upstream-switch.conf',
-            language: 'nginx',
-            code: `# Dynamic Nginx Blue-Green Upstream Target
-upstream deployforge_app_service {
-    # Blue  (Previous container): 127.0.0.1:3001 [DRAINING]
-    # Green (New release container): 127.0.0.1:3002 [ACTIVE]
-    server 127.0.0.1:3002 max_fails=3 fail_timeout=5s;
-}`
+            title: 'project-route.yml',
+            language: 'yaml',
+            code: `# Stable Traefik file-provider release target
+http:
+  services:
+    deployforge-app:
+      loadBalancer:
+        servers:
+          - url: http://df-release-01:3000`
         }
     },
     {
-        id: 'nginx-ssl',
-        title: 'Nginx Reverse Proxy & Certbot TLS',
+        id: 'traefik-tls',
+        title: 'Traefik Routing & Verified TLS',
         tag: 'NETWORKING',
         category: 'NETWORKING',
-        description: 'Dynamic Nginx reverse proxy generation with automated Let\'s Encrypt SSL/TLS certificate issuance and background renewal.',
+        description: 'Stable Traefik routing with automated ACME issuance and real hostname, chain, issuer, and expiry verification.',
         items: [
-            'Generates hardened Nginx server blocks per domain with HTTP/2, TLS 1.3, and security headers enabled.',
-            'Certbot ACME HTTP-01 challenge handler automatically issues valid TLS certificates for custom domains.',
-            'Background cron job checks certificate expiration and triggers zero-downtime renewals every 60 days.'
+            'Generates stable route files that target a release-specific network alias.',
+            'Traefik performs ACME issuance while DeployForge keeps the domain in PENDING state.',
+            'A trusted SNI handshake validates hostname, chain, issuer, and expiry before the domain becomes ISSUED.'
         ],
         codeBlock: {
-            title: 'nginx-vhost.conf',
-            language: 'nginx',
-            code: `server {
-    listen 443 ssl http2;
-    server_name app.yourdomain.com;
-
-    ssl_certificate /etc/letsencrypt/live/app.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/app.yourdomain.com/privkey.pem;
-
-    location / {
-        proxy_pass http://deployforge_app_service;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-}`
+            title: 'TLS lifecycle',
+            language: 'text',
+            code: `PENDING -> trusted SNI verification -> ISSUED
+       invalid / expired / hostname mismatch -> FAILED or EXPIRED`
         }
     },
     {
@@ -294,7 +283,7 @@ export default function DocsPage() {
 
                         {/* Description */}
                         <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
-                            Technical reference guide for connecting source repositories, provisioning VPS servers, configuring zero-downtime Blue-Green releases, and managing encrypted secrets.
+                            Technical reference guide for connecting source repositories, provisioning VPS servers, validating Blue-Green releases, and managing encrypted secrets.
                         </p>
 
                         {/* Search Input Box */}
@@ -304,7 +293,7 @@ export default function DocsPage() {
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search documentation (e.g. SSH, Nginx, Blue-Green, Vault)..."
+                                placeholder="Search documentation (e.g. SSH, Traefik, Blue-Green, Vault)..."
                                 className="w-full rounded-md border border-[#1F1F1F] bg-[#0A0A0A] py-2 pl-9 pr-4 text-xs font-mono text-white outline-none placeholder:text-[#666666] focus:border-[#333333] focus:ring-1 focus:ring-[#333333]"
                             />
                         </div>
@@ -445,7 +434,7 @@ export default function DocsPage() {
                             Ready to launch on your infrastructure?
                         </h2>
                         <p className="mt-2 text-xs leading-relaxed text-[#A1A1A1]">
-                            Open the console, register your Virtual Private Server, and deploy your first application with zero downtime.
+                            Open the console, register your Virtual Private Server, and deploy your first validated application release.
                         </p>
                         <div className="mt-6 flex flex-wrap gap-3">
                             <Link

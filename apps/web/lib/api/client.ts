@@ -7,19 +7,28 @@ export type ApiErrorShape = {
     message: string;
     context?: string;
     errorCode?: string;
+    stage?: string;
+    requestId?: string;
+    details?: Record<string, unknown>;
 };
 
 export class ApiError extends Error {
     status: number;
     context?: string;
     errorCode?: string;
+    stage?: string;
+    requestId?: string;
+    details?: Record<string, unknown>;
 
-    constructor(message: string, status: number, context?: string, errorCode?: string) {
+    constructor(message: string, status: number, context?: string, errorCode?: string, options: { stage?: string; requestId?: string; details?: Record<string, unknown> } = {}) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
         this.context = context;
         this.errorCode = errorCode;
+        this.stage = options.stage;
+        this.requestId = options.requestId;
+        this.details = options.details;
     }
 }
 
@@ -33,6 +42,10 @@ const API_URL = webConfig.apiUrl;
 const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 let csrfToken: string | null = null;
 
+export type ApiRequestInit = RequestInit & {
+    timeoutMs?: number;
+};
+
 function handleUnauthorized(path: string) {
     if (typeof window === 'undefined') return;
 
@@ -44,7 +57,7 @@ function handleUnauthorized(path: string) {
         document.cookie = 'adminAccessToken=; Path=/; Max-Age=0; SameSite=Lax';
         useAdminAuthStore.getState().logoutAdmin();
         if (!window.location.pathname.startsWith('/admin/login')) {
-            window.location.assign('/admin/login');
+            window.location.assign(new URL('/admin/login', window.location.origin));
         }
         return;
     }
@@ -55,7 +68,7 @@ function handleUnauthorized(path: string) {
     const isPublicPath = currentPath === '/' || publicPaths.some((p) => currentPath.startsWith(p));
     
     if (!isPublicPath) {
-        window.location.assign('/');
+        window.location.assign(new URL('/', window.location.origin));
     }
 }
 
@@ -101,7 +114,8 @@ function apiErrorCode(payload: any) {
     return payload?.error?.code || payload?.errorCode || null;
 }
 
-async function request<T>(path: string, init: RequestInit = {}, hasRetried = false): Promise<T> {
+async function request<T>(path: string, init: ApiRequestInit = {}, hasRetried = false): Promise<T> {
+    const { timeoutMs = 15000, ...fetchInit } = init;
     const headers = new Headers(init.headers);
     const method = (init.method || 'GET').toUpperCase();
     const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
@@ -115,17 +129,13 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
         if (token) headers.set('X-CSRF-Token', token);
     }
 
-    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-        console.debug('[api:request]', { method, path });
-    }
-
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     let response: Response;
     try {
         response = await fetch(`${API_URL}${path}`, {
-            ...init,
+            ...fetchInit,
             headers,
             cache: 'no-store',
             credentials: 'include',
@@ -169,6 +179,9 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
             message: payload?.error?.message || payload?.message || 'Something went wrong. Please try again.',
             context: payload?.context,
             errorCode: payload?.error?.code || payload?.errorCode,
+            stage: payload?.error?.stage,
+            requestId: payload?.error?.requestId || response.headers.get('x-request-id') || undefined,
+            details: payload?.error?.details,
         };
 
         if (response.status === 500 && (!payload || !payload.error?.message)) {
@@ -183,11 +196,11 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
             handleUnauthorized(path);
         }
 
-        throw new ApiError(apiError.message, response.status, apiError.context, apiError.errorCode);
-    }
-
-    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-        console.debug('[api:response]', { method, path, status: response.status });
+        throw new ApiError(apiError.message, response.status, apiError.context, apiError.errorCode, {
+            stage: apiError.stage,
+            requestId: apiError.requestId,
+            details: apiError.details,
+        });
     }
 
     if (payload && typeof payload === 'object' && 'data' in payload) {
@@ -199,14 +212,14 @@ async function request<T>(path: string, init: RequestInit = {}, hasRetried = fal
 
 export const api = {
     baseUrl: API_URL,
-    get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'GET' }),
-    post: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    get: <T>(path: string, init?: ApiRequestInit) => request<T>(path, { ...init, method: 'GET' }),
+    post: <T>(path: string, body?: unknown, init?: ApiRequestInit) =>
         request<T>(path, { ...init, method: 'POST', body: typeof FormData !== 'undefined' && body instanceof FormData ? body : body ? JSON.stringify(body) : undefined }),
-    put: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    put: <T>(path: string, body?: unknown, init?: ApiRequestInit) =>
         request<T>(path, { ...init, method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
-    patch: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    patch: <T>(path: string, body?: unknown, init?: ApiRequestInit) =>
         request<T>(path, { ...init, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
-    delete: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    delete: <T>(path: string, body?: unknown, init?: ApiRequestInit) =>
         request<T>(path, { ...init, method: 'DELETE', body: body ? JSON.stringify(body) : undefined }),
 };
 

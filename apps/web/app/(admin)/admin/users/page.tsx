@@ -1,9 +1,8 @@
 'use client';
 
-import { Search, Shield, ShieldCheck, Trash2, UserCheck, UserMinus, UserPlus, Users, Loader2 } from 'lucide-react';
+import { Shield, ShieldCheck, UserPlus, Users } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { PasswordInput, AppModal } from '@/components/ui';
 import { AdminTable, StatusBadge, formatDate } from '@/components/admin/AdminWidgets';
 import { useAdminAction, useAdminAccounts, useAdminMe, useAdminUsers } from '@/hooks/useDeployForgeData';
 
@@ -22,7 +21,7 @@ export default function AdminUsersPage() {
     const [createError, setCreateError] = useState('');
     const [createSuccess, setCreateSuccess] = useState('');
 
-    const [confirmModal, setConfirmModal] = useState<{
+    const [, setConfirmModal] = useState<{
         open: boolean;
         title: string;
         message: string;
@@ -84,12 +83,6 @@ export default function AdminUsersPage() {
         });
     };
 
-    const handleRoleChange = (id: string, r: 'ADMIN' | 'MODERATOR' | 'USER') => {
-        action.mutate(
-            { method: 'patch', path: `/admin/users/${id}/role`, body: { role: r } },
-            { onSuccess: () => setConfirmModal(prev => ({ ...prev, open: false })) }
-        );
-    };
     const handleStatusChange = (id: string, s: 'ACTIVE' | 'SUSPENDED') => {
         action.mutate(
             { method: 'patch', path: `/admin/platform-users/${id}/status`, body: { status: s } },
@@ -107,17 +100,6 @@ export default function AdminUsersPage() {
             { method: 'delete', path: `/admin/platform-users/${id}` },
             { onSuccess: () => setConfirmModal(prev => ({ ...prev, open: false })) }
         );
-    };
-
-    const triggerRoleChange = (id: string, r: 'ADMIN' | 'MODERATOR' | 'USER') => {
-        setConfirmModal({
-            open: true,
-            title: r === 'USER' ? 'Demote User Role' : `Promote User to ${r}`,
-            message: `Are you sure you want to change this user's role to ${r}?`,
-            actionText: 'Confirm Role Change',
-            variant: 'primary',
-            onConfirm: () => handleRoleChange(id, r),
-        });
     };
 
     const triggerStatusChange = (id: string, s: 'ACTIVE' | 'SUSPENDED') => {

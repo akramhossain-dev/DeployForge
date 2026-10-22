@@ -1,12 +1,9 @@
 import { buildApp } from './app';
 import { config } from './config/env';
-import { deploymentWorker } from './workers/deployment.worker';
-import { HardeningService } from './services/hardening.service';
-import { BackupService } from './services/backup.service';
 import { SuperAdminService } from './services/superadmin.service';
 import { VPSService } from './services/vps.service';
 import prisma from '@deployforge/database';
-import { redisConnection, deploymentQueue, webhookQueue } from './utils/queue';
+import { redisConnection, deploymentQueue, gatewayQueue, maintenanceQueue, tlsVerificationQueue, webhookQueue } from './utils/queue';
 import { logger } from './utils/logger';
 
 async function start() {
@@ -34,13 +31,8 @@ async function start() {
             await app.close();
             logger.info('Fastify server closed.');
 
-            logger.info('Closing BullMQ worker...');
-            await deploymentWorker.close();
-            logger.info('BullMQ worker closed.');
-
             logger.info('Closing BullMQ queues...');
-            await deploymentQueue.close();
-            await webhookQueue.close();
+            await Promise.all([deploymentQueue.close(), webhookQueue.close(), gatewayQueue.close(), tlsVerificationQueue.close(), maintenanceQueue.close()]);
             logger.info('BullMQ queues closed.');
 
             logger.info('Quitting Redis connection...');
@@ -66,15 +58,6 @@ async function start() {
     try {
         const address = await app.listen({ port: config.app.port, host: '0.0.0.0' });
         app.log.info({ address }, 'Server listening');
-
-        void HardeningService.runDataRetentionCleanup();
-        setInterval(() => {
-            void HardeningService.runDataRetentionCleanup();
-        }, 24 * 60 * 60 * 1000);
-
-        setInterval(() => {
-            void BackupService.runScheduledBackup();
-        }, 24 * 60 * 60 * 1000);
 
         VPSService.startScheduledHealthChecks();
     } catch (err) {

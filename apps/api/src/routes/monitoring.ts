@@ -14,15 +14,16 @@ const vpsIdParamsSchema = z.object({
 });
 
 const rollbackBodySchema = z.object({
-    historyId: z.string().uuid({ message: 'Invalid history ID format' }),
-});
+    historyId: z.string().uuid({ message: 'Invalid history ID format' }).optional(),
+    releaseId: z.string().uuid({ message: 'Invalid release ID format' }).optional(),
+}).refine((value) => !(value.historyId && value.releaseId), { message: 'Provide either releaseId or historyId, not both' });
 
 export default async function monitoringRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
     fastify.get('/logs/:deploymentId', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { deploymentId } = deploymentIdParamsSchema.parse(request.params);
         await verifyDeploymentOwnership(request.user.id, deploymentId, request);
         const logs = await LoggingService.getLogs(deploymentId);
@@ -31,7 +32,7 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
 
     fastify.get('/metrics/:vpsId', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { vpsId } = vpsIdParamsSchema.parse(request.params);
         await verifyVpsOwnership(request.user.id, vpsId, request);
         const metrics = await MonitoringService.getMetrics(vpsId);
@@ -40,7 +41,7 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
 
     fastify.post('/metrics/:vpsId/collect', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { vpsId } = vpsIdParamsSchema.parse(request.params);
         await verifyVpsOwnership(request.user.id, vpsId, request);
         const metrics = await MonitoringService.collectMetrics(vpsId);
@@ -49,7 +50,7 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
 
     fastify.get('/history/:deploymentId', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    }, async (request, reply) => {
+    }, async (request, _reply) => {
         const { deploymentId } = deploymentIdParamsSchema.parse(request.params);
         await verifyDeploymentOwnership(request.user.id, deploymentId, request);
         const history = await RollbackService.getHistory(deploymentId);
@@ -60,9 +61,9 @@ export default async function monitoringRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } }, 
     }, async (request, reply) => {
         const { deploymentId } = deploymentIdParamsSchema.parse(request.params);
-        const { historyId } = rollbackBodySchema.parse(request.body);
+        const { historyId, releaseId } = rollbackBodySchema.parse(request.body);
         await verifyDeploymentOwnership(request.user.id, deploymentId, request);
-        const result = await RollbackService.rollback(request.user.id, deploymentId, historyId);
-        return { success: true, data: result };
+        const result = await RollbackService.rollback(request.user.id, deploymentId, releaseId || historyId);
+        return reply.status(202).send({ success: true, data: result });
     });
 }

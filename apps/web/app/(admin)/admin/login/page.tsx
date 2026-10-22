@@ -3,7 +3,7 @@
 import { FormEvent, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LockKeyhole, Rocket, ShieldCheck, ArrowLeft, Loader2 } from 'lucide-react';
+import { LockKeyhole, Rocket, ShieldCheck, ArrowLeft, Loader2 } from '@/components/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import api from '@/lib/api/client';

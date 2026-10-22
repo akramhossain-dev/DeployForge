@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Mail, Rocket } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Mail, Rocket } from '@/components/icons';
 import clsx from 'clsx';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
     Bell, CheckCheck, AlertCircle, AlertTriangle,
     CheckCircle, Info, ExternalLink,
-} from 'lucide-react';
+} from '@/components/icons';
 import {
     useRecentNotifications,
     useUnreadCount,
@@ -128,7 +128,7 @@ export function NotificationDropdown() {
     );
 }
 
-function NotificationItem({ notification: n, onClose }: { notification: AppNotification; onClose: () => void }) {
+function NotificationItem({ notification: n }: { notification: AppNotification; onClose: () => void }) {
     return (
         <div
             className={`flex items-start gap-2.5 border-b border-[#1F1F1F] px-3.5 py-2.5 transition-colors hover:bg-[#111111]/60 ${

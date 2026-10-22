@@ -4,13 +4,13 @@ import { z } from 'zod';
 
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-const url = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`).url(`${name} must be a valid URL`);
+const url = (name: string) => z.string({ error: `${name} is required` }).trim().min(1, `${name} is required`).url(`${name} must be a valid URL`);
 const placeholderPattern = /^(replace_with_|your_|changeme|change_me|secret|password|admin|test)/i;
-const secret = (name: string, min = 32) => z.string({ required_error: `${name} is required` })
+const secret = (name: string, min = 32) => z.string({ error: `${name} is required` })
     .trim()
     .min(min, `${name} must be at least ${min} characters`)
     .refine((value) => !placeholderPattern.test(value), `${name} must not use a placeholder value`);
-const required = (name: string) => z.string({ required_error: `${name} is required` }).trim().min(1, `${name} is required`);
+const required = (name: string) => z.string({ error: `${name} is required` }).trim().min(1, `${name} is required`);
 const optional = () => z.string().trim().optional().default('');
 const envBoolean = (defaultValue: boolean) => z.preprocess((value) => {
     if (typeof value === 'string') {
@@ -75,6 +75,7 @@ const rawEnvSchema = z.object({
     RATE_LIMIT_WINDOW: z.string().trim().min(1).default('1 minute'),
     ADMIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     ADMIN_LOCKOUT_TIME: z.coerce.number().int().positive().default(900),
+    DEPLOYMENT_LOCK_TTL_MS: z.coerce.number().int().min(30000).max(3600000).default(120000),
     SUPER_ADMIN_EMAIL: z.string().email('SUPER_ADMIN_EMAIL must be a valid email address'),
     SUPER_ADMIN_PASSWORD: z.string().min(8, 'SUPER_ADMIN_PASSWORD must be at least 8 characters'),
     
@@ -191,6 +192,7 @@ export const securityConfig = {
     rateLimitWindow: env.RATE_LIMIT_WINDOW,
     adminMaxAttempts: env.ADMIN_MAX_ATTEMPTS,
     adminLockoutTime: env.ADMIN_LOCKOUT_TIME,
+    deploymentLockTtlMs: env.DEPLOYMENT_LOCK_TTL_MS,
     
     metricsToken: env.METRICS_TOKEN || '',
 } as const;
@@ -237,6 +239,7 @@ export const config = {
     RATE_LIMIT_WINDOW: securityConfig.rateLimitWindow,
     ADMIN_MAX_ATTEMPTS: securityConfig.adminMaxAttempts,
     ADMIN_LOCKOUT_TIME: securityConfig.adminLockoutTime,
+    DEPLOYMENT_LOCK_TTL_MS: securityConfig.deploymentLockTtlMs,
     superAdmin: {
         email: env.SUPER_ADMIN_EMAIL,
         password: env.SUPER_ADMIN_PASSWORD,

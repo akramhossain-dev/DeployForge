@@ -1,5 +1,39 @@
 name: deployforge
 
+x-api-environment: &api-environment
+  NODE_ENV: production
+  PORT: ${PORT:-3001}
+  APP_URL: ${APP_URL:?APP_URL is required}
+  API_URL: ${API_URL:?API_URL is required}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+  REDIS_ENABLED: "true"
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+  ADMIN_SECRET: ${ADMIN_SECRET:?ADMIN_SECRET is required}
+  ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?ADMIN_JWT_SECRET is required}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+  MASTER_KEY: ${MASTER_KEY:-}
+  GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?GITHUB_CLIENT_ID is required}
+  GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET is required}
+  GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:?GITHUB_CALLBACK_URL is required}
+  GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}
+  GOOGLE_OAUTH_ENABLED: ${GOOGLE_OAUTH_ENABLED:-true}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-}
+  SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
+  SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required}
+  SMTP_FROM: ${SMTP_FROM:-}
+  RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+  RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
+  ADMIN_MAX_ATTEMPTS: ${ADMIN_MAX_ATTEMPTS:-5}
+  ADMIN_LOCKOUT_TIME: ${ADMIN_LOCKOUT_TIME:-900}
+  DEPLOYMENT_LOCK_TTL_MS: ${DEPLOYMENT_LOCK_TTL_MS:-120000}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,8 +44,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     networks:
       - deployforge_internal
       - deployforge_dev
@@ -25,13 +57,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--requirepass", "${REDIS_PASSWORD:-deployforge_redis_pass_123}"]
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-deployforge_redis_pass_123}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redis_data:/data
-    ports:
-      - "${REDIS_PORT:-6380}:6379"
     networks:
       - deployforge_internal
       - deployforge_dev
@@ -43,53 +73,36 @@ services:
       retries: 5
       start_period: 5s
 
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: migrator
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - deployforge_internal
+
   api:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+      target: runner
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: ${PORT:-3001}
-      APP_URL: ${APP_URL:?APP_URL is required}
-      API_URL: ${API_URL:?API_URL is required}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      REDIS_ENABLED: ${REDIS_ENABLED:-true}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-deployforge_redis_pass_123}@redis:6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      ADMIN_SECRET: ${ADMIN_SECRET:?ADMIN_SECRET is required}
-      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?ADMIN_JWT_SECRET is required}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
-      MASTER_KEY: ${MASTER_KEY:-}
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?GITHUB_CLIENT_ID is required}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET is required}
-      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:?GITHUB_CALLBACK_URL is required}
-      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}
-      GOOGLE_OAUTH_ENABLED: ${GOOGLE_OAUTH_ENABLED:-true}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-}
-      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:?SMTP_USER is required}
-      SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required}
-      SMTP_FROM: ${SMTP_FROM:-}
-      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
-      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1 minute}
-      ADMIN_MAX_ATTEMPTS: ${ADMIN_MAX_ATTEMPTS:-5}
-      ADMIN_LOCKOUT_TIME: ${ADMIN_LOCKOUT_TIME:-900}
-    ports:
-      # In production Nginx handles external traffic. Remove this for production.
-      - "${API_PORT:-3001}:${PORT:-3001}"
+    environment: *api-environment
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/live').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
@@ -110,6 +123,31 @@ services:
       # M-3: Named volume for backups — container fs is read_only, /app/backups must be a writable mount
       - backup_data:/app/backups
 
+  worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: runner
+    command: ["node", "apps/api/dist/worker.js"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment: *api-environment
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - deployforge_internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+
   web:
     build:
       context: .
@@ -123,10 +161,6 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:3001}}
       NEXT_TELEMETRY_DISABLED: "1"
-    ports:
-      # In production Nginx handles public ports. Keep local dev port for convenience.
-      # Remove or comment this out when running behind Nginx in production.
-      - "${WEB_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -162,9 +196,12 @@ services:
       dollar: "$$"
       DOMAIN: ${DOMAIN:-localhost}
     volumes:
-      - ./docker/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./docker/nginx-entrypoint.sh:/opt/deployforge/nginx-entrypoint.sh:ro
+      - ./docker/nginx.bootstrap.conf:/opt/deployforge/nginx.bootstrap.conf:ro
+      - ./docker/nginx.conf:/opt/deployforge/nginx.tls.conf:ro
       - certbot_webroot:/var/www/certbot:ro
       - certbot_certs:/etc/letsencrypt:ro
+    entrypoint: ["/bin/sh", "/opt/deployforge/nginx-entrypoint.sh"]
     depends_on:
       api:
         condition: service_healthy

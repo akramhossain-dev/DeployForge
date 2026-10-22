@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -52,9 +51,44 @@ enum DomainStatus {
 
 enum SSLStatus {
   NONE
+  PENDING
   ISSUED
   EXPIRED
   FAILED
+}
+
+enum ReleaseKind {
+  STATIC
+  CONTAINER
+  COMPOSE
+}
+
+enum ReleaseStatus {
+  BUILDING
+  CANDIDATE
+  READY
+  ACTIVATING
+  ACTIVE
+  SUPERSEDED
+  FAILED
+}
+
+enum ReadinessStatus {
+  UNKNOWN
+  PENDING
+  PASSED
+  FAILED
+}
+
+enum ResourceTier {
+  STATIC
+  SERVER
+  FULLSTACK
+}
+
+enum CapacityReservationStatus {
+  RESERVED
+  RELEASED
 }
 
 enum DeploymentType {
@@ -84,6 +118,21 @@ enum VPSStatus {
   active
   inactive
   failed
+}
+
+enum VPSGatewayStatus {
+  UNKNOWN
+  PROVISIONING
+  READY
+  DEGRADED
+  FAILED
+}
+
+enum VPSOperationStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
 }
 
 enum VPSAuthType {
@@ -166,6 +215,7 @@ model User {
   alertRule               AlertRule?
   projectMemberships      ProjectMember[]
   projectInvitesSent      ProjectInvite[]          @relation("InvitesSent")
+  vpsOperationsRequested  VPSOperation[]
   lastLoginAt             DateTime?
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
@@ -226,6 +276,7 @@ model AdminActivity {
   targetType   String?
   targetId     String?
   ipAddress    String?
+  metadata     Json?
   timestamp    DateTime  @default(now())
   createdAt    DateTime  @default(now())
 
@@ -380,27 +431,34 @@ model WebhookEvent {
 }
 
 model VPS {
-  id                  String            @id @default(uuid())
-  userId              String
-  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  name                String
-  ipAddress           String
-  port                Int               @default(22)
-  username            String            @default("root")
-  authType            VPSAuthType       @default(key)
-  encryptedPrivateKey String?
-  encryptedPassword   String?
-  status              VPSStatus         @default(inactive)
-  lastCheckedAt       DateTime?
-  deployments         Deployment[]
-  healthRecords       VPSHealth[]
-  terminalSessions    TerminalSession[]
-  domains             Domain[]
-  systemMetrics       SystemMetrics[]
-  notifications       Notification[]
-  runtimeScans        VPSRuntimeScan[]
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  id                   String                @id @default(uuid())
+  userId               String
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name                 String
+  ipAddress            String
+  port                 Int                   @default(22)
+  username             String                @default("root")
+  authType             VPSAuthType           @default(key)
+  encryptedPrivateKey  String?
+  encryptedPassword    String?
+  status               VPSStatus             @default(inactive)
+  lastCheckedAt        DateTime?
+  gatewayStatus        VPSGatewayStatus      @default(UNKNOWN)
+  gatewayVersion       String?
+  gatewayCheckedAt     DateTime?
+  gatewayError         String?
+  deployments          Deployment[]
+  healthRecords        VPSHealth[]
+  terminalSessions     TerminalSession[]
+  domains              Domain[]
+  systemMetrics        SystemMetrics[]
+  notifications        Notification[]
+  runtimeScans         VPSRuntimeScan[]
+  operations           VPSOperation[]
+  releases             DeploymentRelease[]
+  capacityReservations CapacityReservation[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   @@index([userId])
   @@index([userId, status])
@@ -409,15 +467,35 @@ model VPS {
   @@index([updatedAt])
 }
 
+model VPSOperation {
+  id            String             @id @default(uuid())
+  vpsId         String
+  vps           VPS                @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  requestedById String
+  requestedBy   User               @relation(fields: [requestedById], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  acmeEmail     String?
+  type          String             @default("GATEWAY_BOOTSTRAP")
+  status        VPSOperationStatus @default(QUEUED)
+  error         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([vpsId, createdAt])
+  @@index([vpsId, status])
+  @@index([requestedById])
+}
+
 model VPSRuntimeScan {
-  id          String   @id @default(uuid())
-  vpsId       String
-  vps         VPS      @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id           String   @id @default(uuid())
+  vpsId        String
+  vps          VPS      @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   deploymentId String?
-  scanResult  String
-  installLogs String   @default("[]")
-  ready       Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  scanResult   String
+  installLogs  String   @default("[]")
+  ready        Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
   @@index([vpsId])
   @@index([vpsId, createdAt])
@@ -442,18 +520,25 @@ model VPSHealth {
 }
 
 model Project {
-  id            String       @id @default(uuid())
-  userId        String
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  name          String
-  repositoryUrl String
-  branch        String       @default("main")
-  framework     String?
-  deployments   Deployment[]
-  members       ProjectMember[]
-  invites       ProjectInvite[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                   String                 @id @default(uuid())
+  userId               String
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name                 String
+  repositoryUrl        String
+  branch               String                 @default("main")
+  framework            String?
+  deployments          Deployment[]
+  releases             DeploymentRelease[]    @relation("ProjectReleases")
+  activeReleaseId      String?                @unique
+  activeRelease        DeploymentRelease?     @relation("ProjectActiveRelease", fields: [activeReleaseId], references: [id], onDelete: SetNull)
+  candidateReleaseId   String?                @unique
+  candidateRelease     DeploymentRelease?     @relation("ProjectCandidateRelease", fields: [candidateReleaseId], references: [id], onDelete: SetNull)
+  resourcePolicy       ProjectResourcePolicy?
+  capacityReservations CapacityReservation[]
+  members              ProjectMember[]
+  invites              ProjectInvite[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
 
   @@index([userId])
   @@index([userId, repositoryUrl])
@@ -462,39 +547,49 @@ model Project {
 }
 
 model Deployment {
-  id                String              @id @default(uuid())
-  userId            String
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  projectId         String
-  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  vpsId             String
-  vps               VPS                 @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  name              String?
-  status            DeploymentStatus    @default(PENDING)
-  framework         String?
-  type              DeploymentType      @default(SERVER)
-  port              Int?
-  buildCommand      String?
-  startCommand      String?
-  env               String?
-  containerId       String?
-  sourceType        SourceType          @default(github)
-  repoUrl           String?
-  branch            String?
-  uploadPath        String?
-  commitHash        String?
-  commitMessage     String?
-  lastStableVersion String?
-  domain            String?
-  hostType          String              @default("ip")
-  mode              String              @default("production")
-  deploymentLogs    DeploymentLog[]
-  history           DeploymentHistory[]
-  sandbox           DeploymentSandbox?
-  domains           Domain[]
-  jobs              DeploymentJob[]
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id                    String               @id @default(uuid())
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  projectId             String
+  project               Project              @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  vpsId                 String
+  vps                   VPS                  @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  name                  String?
+  status                DeploymentStatus     @default(PENDING)
+  framework             String?
+  type                  DeploymentType       @default(SERVER)
+  port                  Int?
+  buildCommand          String?
+  startCommand          String?
+  composeService        String?
+  composePort           Int?
+  requestedResourceTier ResourceTier?
+  resourceTier          ResourceTier         @default(SERVER)
+  cpuLimitMillis        Int                  @default(1000)
+  memoryLimitMiB        Int                  @default(1024)
+  pidsLimit             Int                  @default(256)
+  storageLimitMiB       Int                  @default(5120)
+  env                   String?
+  containerId           String?
+  sourceType            SourceType           @default(github)
+  repoUrl               String?
+  branch                String?
+  uploadPath            String?
+  commitHash            String?
+  commitMessage         String?
+  lastStableVersion     String?
+  domain                String?
+  hostType              String               @default("ip")
+  mode                  String               @default("production")
+  deploymentLogs        DeploymentLog[]
+  history               DeploymentHistory[]
+  releases              DeploymentRelease[]
+  sandbox               DeploymentSandbox?
+  domains               Domain[]
+  jobs                  DeploymentJob[]
+  capacityReservation   CapacityReservation?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
   @@index([userId])
   @@index([userId, status])
@@ -539,6 +634,12 @@ model Domain {
   domainName      String       @unique
   status          DomainStatus @default(PENDING)
   sslStatus       SSLStatus    @default(NONE)
+  sslVerifiedAt   DateTime?
+  sslExpiresAt    DateTime?
+  sslIssuer       String?
+  sslError        String?
+  sslRetryCount   Int          @default(0)
+  sslNextRetryAt  DateTime?
   nginxConfigPath String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -550,6 +651,96 @@ model Domain {
   @@index([status])
   @@index([sslStatus])
   @@index([createdAt])
+}
+
+model DeploymentRelease {
+  id                  String          @id @default(uuid())
+  deploymentId        String
+  deployment          Deployment      @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  projectId           String
+  project             Project         @relation("ProjectReleases", fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  vpsId               String
+  vps                 VPS             @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  kind                ReleaseKind
+  status              ReleaseStatus   @default(BUILDING)
+  version             String
+  runtimeRef          String?
+  containerId         String?
+  imageTag            String?
+  artifactPath        String?
+  workspacePath       String?
+  manifestPath        String?
+  composeService      String?
+  composePort         Int?
+  ingressPort         Int
+  env                 String?
+  resourceTier        ResourceTier    @default(SERVER)
+  cpuLimitMillis      Int             @default(1000)
+  memoryLimitMiB      Int             @default(1024)
+  pidsLimit           Int             @default(256)
+  storageLimitMiB     Int             @default(5120)
+  retentionPinnedAt   DateTime?
+  retentionPinReason  String?
+  purgedAt            DateTime?
+  purgeError          String?
+  purgeRetryCount     Int             @default(0)
+  purgeNextRetryAt    DateTime?
+  readinessStatus     ReadinessStatus @default(UNKNOWN)
+  readinessCheckedAt  DateTime?
+  readinessError      String?
+  activationReason    String          @default("DEPLOY")
+  activatedAt         DateTime?
+  supersededAt        DateTime?
+  activeForProject    Project?        @relation("ProjectActiveRelease")
+  candidateForProject Project?        @relation("ProjectCandidateRelease")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([deploymentId, createdAt])
+  @@index([projectId, status])
+  @@index([vpsId, status])
+  @@index([status])
+  @@index([purgedAt])
+  @@index([purgeNextRetryAt])
+  @@index([retentionPinnedAt])
+}
+
+model ProjectResourcePolicy {
+  id               String        @id @default(uuid())
+  projectId        String        @unique
+  project          Project       @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  resourceTier     ResourceTier?
+  cpuLimitMillis   Int?
+  memoryLimitMiB   Int?
+  pidsLimit        Int?
+  storageLimitMiB  Int?
+  updatedByAdminId String
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([updatedByAdminId])
+}
+
+model CapacityReservation {
+  id           String                    @id @default(uuid())
+  deploymentId String                    @unique
+  deployment   Deployment                @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  projectId    String
+  project      Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  vpsId        String
+  vps          VPS                       @relation(fields: [vpsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  status       CapacityReservationStatus @default(RESERVED)
+  cpuMillis    Int
+  memoryMiB    Int
+  storageMiB   Int
+  expiresAt    DateTime
+  releasedAt   DateTime?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@index([vpsId, status])
+  @@index([projectId, status])
+  @@index([status, expiresAt])
 }
 
 model DeploymentSandbox {
@@ -777,4 +968,3 @@ model ProjectInvite {
   @@index([projectId])
   @@index([email])
 }
-

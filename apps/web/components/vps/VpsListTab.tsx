@@ -1,7 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
-import { Activity, CheckCircle2, Info, KeyRound, LockKeyhole, RefreshCw, Server, Trash2, WifiOff, XCircle, ShieldCheck, Network, Zap } from 'lucide-react';
+import { Activity, Info, RefreshCw, Server, Trash2, WifiOff, XCircle, ShieldCheck, Zap } from '@/components/icons';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
 import { useBootstrapVps } from '@/hooks/useDeployForgeData';
@@ -93,6 +92,10 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                 const disk = Math.round(health?.diskUsage || 0);
                 const lastSeen = server.lastCheckedAt || health?.checkedAt || server.updatedAt;
                 const isBootstrapping = bootstrapVps.isPending && bootstrapVps.variables?.id === server.id;
+                const gatewayStatus = server.gatewayStatus || 'UNKNOWN';
+                const gatewayReady = gatewayStatus === 'READY';
+                const gatewayBusy = gatewayStatus === 'PROVISIONING' || isBootstrapping;
+                const gatewayFailed = gatewayStatus === 'FAILED' || gatewayStatus === 'DEGRADED';
 
                 return (
                     <div key={server.id} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 flex flex-col justify-between space-y-4 hover:border-[#333333] transition-colors">
@@ -109,13 +112,14 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                         </div>
 
                         {/* Ingress Gateway Chip */}
-                        <div className="rounded border border-[#1F1F1F] bg-[#000000] p-2 flex items-center justify-between text-[10px]">
-                            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                                <ShieldCheck size={12} className="shrink-0" />
-                                <span>Traefik Gateway Ready</span>
+                        <div className="rounded border border-[#1F1F1F] bg-[#000000] p-2 flex items-center justify-between gap-2 text-[10px]">
+                            <div className={clsx('flex items-center gap-1.5 font-semibold', gatewayReady ? 'text-emerald-400' : gatewayFailed ? 'text-rose-400' : gatewayBusy ? 'text-cyan-400' : 'text-[#A1A1A1]')}>
+                                {gatewayReady ? <ShieldCheck size={12} className="shrink-0" /> : gatewayFailed ? <XCircle size={12} className="shrink-0" /> : <RefreshCw size={12} className={clsx('shrink-0', gatewayBusy && 'animate-spin')} />}
+                                <span>Gateway {gatewayStatus.toLowerCase()}</span>
                             </div>
-                            <span className="text-[#666666] font-mono">deployforge-net</span>
+                            <span className="text-[#666666] font-mono truncate">{server.gatewayVersion || 'not verified'}</span>
                         </div>
+                        {server.gatewayError ? <p className="text-[10px] text-rose-400 line-clamp-2" title={server.gatewayError}>{server.gatewayError}</p> : null}
 
                         {/* Resource Health Metrics */}
                         {health ? (
@@ -139,11 +143,15 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-[#666666]">MULTI-TENANT</span>
-                                <span className="text-emerald-400 font-semibold">ENABLED</span>
+                                <span className={clsx('font-semibold', gatewayReady ? 'text-emerald-400' : 'text-[#666666]')}>{gatewayReady ? 'VERIFIED' : 'UNAVAILABLE'}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-[#666666]">LAST PROBE</span>
                                 <span>{formatDate(lastSeen)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-[#666666]">GATEWAY CHECK</span>
+                                <span>{server.gatewayCheckedAt ? formatDate(server.gatewayCheckedAt) : 'Not verified'}</span>
                             </div>
                         </div>
 
@@ -165,11 +173,11 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                             </button>
                             <button
                                 onClick={() => bootstrapVps.mutate({ id: server.id })}
-                                disabled={isBootstrapping}
+                                disabled={gatewayBusy}
                                 title="Bootstrap / Repair Ingress Gateway"
                                 className="flex h-8 items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-cyan-400 hover:text-cyan-300 hover:bg-[#1A1A1A] disabled:opacity-50"
                             >
-                                <Zap size={13} className={isBootstrapping ? 'animate-spin' : ''} />
+                                <Zap size={13} className={gatewayBusy ? 'animate-spin' : ''} />
                             </button>
                             <button
                                 onClick={() => onTest(server.id)}

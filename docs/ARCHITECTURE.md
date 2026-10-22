@@ -103,13 +103,13 @@ sequenceDiagram
     W->>V: Connect via SSH & prepare working directory
     W->>V: Clone repo or extract uploaded ZIP
     W->>V: Build new Docker Image (tagged with releaseId)
-    W->>V: Spin up NEW Container on network deployforge-net with Traefik Labels (Blue)
-    W->>V: Perform internal HTTP health check inside deployforge-net
+    W->>V: Spin up candidate on private deployforge-validation network
+    W->>V: Perform HTTP readiness check, then attach a unique release alias
   
     alt Health Check Succeeds
-        Note over V,T: Traefik discovers df-p1-v2 and routes traffic
-        W->>C_OLD: Terminate OLD Container (Green)
-        Note over V,T: Traefik removes df-p1-v1 backend cleanly
+        W->>T: Probe secret canary route and atomically replace stable route file
+        W->>C_OLD: Disconnect OLD release after public probe passes
+        Note over V,T: Old release remains retained for safe rollback
         W->>W: Mark Deployment status as SUCCESS
     else Health Check Fails
         W->>C_NEW: Terminate NEW Container (Blue)

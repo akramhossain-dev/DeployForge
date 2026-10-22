@@ -17,7 +17,7 @@ import {
     LogOut,
     AlertTriangle,
     Loader2
-} from 'lucide-react';
+} from '@/components/icons';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 import type { AuditLog } from '@/lib/api/types';

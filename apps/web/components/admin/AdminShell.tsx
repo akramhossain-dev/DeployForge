@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
     Github, LayoutDashboard, ListFilter, LogOut, Menu,
     Rocket, Server, Settings, ShieldCheck, Users, X, RefreshCw
-} from 'lucide-react';
+} from '@/components/icons';
 import { useAdminAuthStore } from '@/lib/store/useAdminAuthStore';
 import { useAdminMe } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';

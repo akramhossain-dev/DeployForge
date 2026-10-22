@@ -65,7 +65,23 @@ export type Vps = {
     authType: 'password' | 'key' | string;
     status: 'active' | 'inactive' | 'failed' | 'ACTIVE' | 'INACTIVE' | 'ERROR' | string;
     lastCheckedAt?: string | null;
+    gatewayStatus?: 'UNKNOWN' | 'PROVISIONING' | 'READY' | 'DEGRADED' | 'FAILED';
+    gatewayVersion?: string | null;
+    gatewayCheckedAt?: string | null;
+    gatewayError?: string | null;
     healthRecords?: VpsHealth[];
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type VpsOperation = {
+    id: string;
+    vpsId: string;
+    type: 'GATEWAY_BOOTSTRAP' | string;
+    status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+    error?: string | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -77,6 +93,12 @@ export type Domain = {
     domainName: string;
     status: string;
     sslStatus?: string;
+    sslVerifiedAt?: string | null;
+    sslExpiresAt?: string | null;
+    sslIssuer?: string | null;
+    sslError?: string | null;
+    sslRetryCount?: number;
+    sslNextRetryAt?: string | null;
     nginxConfigPath?: string | null;
     /** Whether the HTTP → HTTPS Auto-HTTPS redirect is currently active on the Traefik/nginx config. */
     autoHttps?: boolean;
@@ -172,6 +194,12 @@ export type Deployment = {
     status: 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'PAUSED' | 'FAILED' | 'ROLLED_BACK' | 'STOPPED' | 'DELETING' | 'DELETED' | string;
     framework?: string | null;
     type?: 'STATIC' | 'SERVER' | 'FULLSTACK' | string;
+    requestedResourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' | null;
+    resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK';
+    cpuLimitMillis?: number;
+    memoryLimitMiB?: number;
+    pidsLimit?: number;
+    storageLimitMiB?: number;
     port?: number | null;
     sourceType?: 'github' | 'upload' | string;
     mode?: 'production' | 'sandbox' | string;
@@ -189,12 +217,39 @@ export type Deployment = {
     deploymentLogs?: DeploymentLog[];
     domains?: Domain[];
     history?: Array<{ id: string; version: string; imageTag?: string | null; status: string; createdAt: string }>;
+    activeRelease?: DeploymentRelease | null;
+    candidateRelease?: DeploymentRelease | null;
+    readiness?: 'UNKNOWN' | 'PENDING' | 'PASSED' | 'FAILED' | string;
+    rollbackAvailable?: boolean;
+    operationError?: {
+        message: string;
+        errorCode: string;
+        stage: string;
+        details?: Record<string, unknown>;
+    } | null;
     envPreview?: Array<{ key: string; value: string }>;
     hostType?: 'domain' | 'ip';
     domain?: string | null;
     url?: string | null;
     createdAt: string;
     updatedAt: string;
+};
+
+export type DeploymentRelease = {
+    id: string;
+    version: string;
+    kind: 'STATIC' | 'CONTAINER' | 'COMPOSE';
+    status: 'BUILDING' | 'CANDIDATE' | 'READY' | 'ACTIVATING' | 'ACTIVE' | 'SUPERSEDED' | 'FAILED';
+    readinessStatus: 'UNKNOWN' | 'PENDING' | 'PASSED' | 'FAILED';
+    readinessCheckedAt?: string | null;
+    resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK';
+    cpuLimitMillis?: number;
+    memoryLimitMiB?: number;
+    pidsLimit?: number;
+    storageLimitMiB?: number;
+    purgedAt?: string | null;
+    activatedAt?: string | null;
+    createdAt: string;
 };
 
 export type DeploymentLog = {
@@ -530,17 +585,6 @@ export type VerificationResult = {
     version: string | null;
     ok: boolean;
     error?: string;
-};
-
-export type PreflightCheck = {
-    check: string;
-    ok: boolean;
-    message?: string;
-};
-
-export type PreflightResult = {
-    checks: PreflightCheck[];
-    ready: boolean;
 };
 
 export type InstallRuntimeResponse = {

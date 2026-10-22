@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Calendar, Github, Key, KeyRound, Mail, Save, Shield, User, Loader2 } from 'lucide-react';
+import { KeyRound, Save, Shield, Loader2 } from '@/components/icons';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';

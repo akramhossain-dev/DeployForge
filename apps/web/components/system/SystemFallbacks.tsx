@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle, Home, LayoutDashboard, RefreshCw, SearchX } from 'lucide-react';
+import { AlertTriangle, Home, LayoutDashboard, RefreshCw, SearchX } from '@/components/icons';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 
 // ── Shared wrapper ─────────────────────────────────────────────────────────────

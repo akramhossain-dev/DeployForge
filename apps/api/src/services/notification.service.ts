@@ -1,5 +1,4 @@
-import prisma from '@deployforge/database';
-import { AlertType, Prisma } from '@prisma/client';
+import prisma, { AlertType, Prisma } from '@deployforge/database';
 import { logger } from '../utils/logger';
 
 interface NotificationFilters {

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Chrome, Github, Loader2, Rocket } from 'lucide-react';
+import { ArrowRight, Chrome, Github, Loader2, Rocket } from '@/components/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useAuthStore } from '@/lib/store/useAuthStore';
@@ -86,7 +86,7 @@ export default function LoginPage() {
                     <div className="space-y-2">
                         <button
                             type="button"
-                            onClick={() => { setGoogleLoading(true); window.location.href = `${api.baseUrl}/auth/google`; }}
+                            onClick={() => { setGoogleLoading(true); window.location.assign(new URL('/auth/google', api.baseUrl)); }}
                             disabled={busy}
                             className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] text-xs font-medium text-white transition-colors hover:bg-[#1A1A1A] disabled:opacity-50"
                         >
@@ -95,7 +95,7 @@ export default function LoginPage() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => { setGithubLoading(true); window.location.href = `${api.baseUrl}/auth/github`; }}
+                            onClick={() => { setGithubLoading(true); window.location.assign(new URL('/auth/github', api.baseUrl)); }}
                             disabled={busy}
                             className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] text-xs font-medium text-white transition-colors hover:bg-[#1A1A1A] disabled:opacity-50"
                         >

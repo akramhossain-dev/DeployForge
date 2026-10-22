@@ -4,7 +4,7 @@ import React from 'react';
 import {
     File, Folder, FolderOpen, Image as ImageIcon, Code, FileText, FileCode,
     Archive, Music, Video, Database,
-} from 'lucide-react';
+} from '@/components/icons';
 import type { FileEntry } from '@/lib/api/types';
 import { getFileColor } from './utils';
 

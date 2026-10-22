@@ -8,15 +8,14 @@ import { config, validateOAuthConfig } from './config/env';
 import { redactionPaths } from './utils/logger';
 import { AppMetricsService } from './services/app-metrics.service';
 import { randomUUID } from 'crypto';
-import { EncryptionService } from '@deployforge/security';
 
 const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
-const probePaths = new Set(['/health', '/live', '/liveness', '/ready', '/readiness', '/metrics']);
-
 const app = Fastify({
-    bodyLimit: 1024 * 1024, 
-    trustProxy: true,
+    bodyLimit: 1024 * 1024,
+    // Production traffic has exactly one trusted hop (the internal Nginx
+    // container). Direct API host ports are not published in production.
+    trustProxy: (_address, hop) => config.app.env === 'production' && hop === 0,
     genReqId: (req) => {
         return (req.headers['x-request-id'] as string) || randomUUID();
     },
@@ -32,53 +31,19 @@ const app = Fastify({
     },
 });
 
-import prisma from '@deployforge/database';
+import { registerPrismaMutationListener } from '@deployforge/database';
 import { deploymentEventEmitter, DEPLOYMENT_EVENTS } from './utils/deployment-events';
 
 export async function buildApp() {
     validateOAuthConfig(app.log);
 
-    const encryptionService = new EncryptionService(config.encryption.key);
-    const ENV_MODELS = new Set(['Deployment', 'DeploymentHistory']);
-    const WRITE_ACTIONS = new Set(['create', 'update', 'upsert', 'createMany', 'updateMany']);
-
-    prisma.$use(async (params, next) => {
-        if (params.model && ENV_MODELS.has(params.model) && WRITE_ACTIONS.has(params.action)) {
-            const data = params.args?.data;
-            if (data && typeof data.env === 'string' && data.env) {
-                const parts = data.env.split(':');
-                const isAlreadyEncrypted = parts.length === 3 && parts.every((p: string) => /^[a-f0-9]+$/i.test(p));
-                if (!isAlreadyEncrypted) {
-                    const encrypted = encryptionService.encrypt(data.env);
-                    params.args.data.env = `${encrypted.iv}:${encrypted.tag}:${encrypted.content}`;
-                }
-            }
+    registerPrismaMutationListener(({ model, operation, result }: any) => {
+        if (!result) return;
+        if (model === 'DeploymentLog' && operation === 'create') {
+            deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.LOG_ADDED, result.deploymentId, result);
+        } else if (model === 'Deployment' && ['create', 'update', 'upsert'].includes(operation)) {
+            deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.STATUS_UPDATED, result.id, result);
         }
-
-        const result = await next(params);
-
-        if (params.model && ENV_MODELS.has(params.model) && result) {
-            const decrypt = (record: any) => {
-                if (record && typeof record.env === 'string' && record.env) {
-                    try {
-                        const parts = record.env.split(':');
-                        if (parts.length === 3 && parts.every((p: string) => /^[a-f0-9]+$/i.test(p))) {
-                            const [iv, tag, content] = parts;
-                            record.env = encryptionService.decrypt({ iv, tag, content });
-                        }
-                    } catch { /* already plaintext (legacy) or decrypt failed */ }
-                }
-            };
-            Array.isArray(result) ? result.forEach(decrypt) : decrypt(result);
-        }
-
-        if (params.model === 'DeploymentLog' && params.action === 'create') {
-            if (result) deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.LOG_ADDED, result.deploymentId, result);
-        } else if (params.model === 'Deployment' && (params.action === 'update' || params.action === 'upsert' || params.action === 'create')) {
-            if (result) deploymentEventEmitter.emit(DEPLOYMENT_EVENTS.STATUS_UPDATED, result.id, result);
-        }
-
-        return result;
     });
 
     app.removeContentTypeParser('application/json');
@@ -99,6 +64,7 @@ export async function buildApp() {
         request.log.info({
             audit: false,
             event: 'request_completed',
+            requestId: request.id,
             method: request.method,
             path: request.url,
             statusCode: reply.statusCode,
@@ -106,16 +72,22 @@ export async function buildApp() {
             ip: request.ip,
         }, 'HTTP request completed');
 
-        AppMetricsService.recordRequest(
-            request.method,
-            request.routerPath || request.url,
-            reply.statusCode,
-            reply.elapsedTime
-        );
+        AppMetricsService.recordRequest(reply.statusCode, reply.elapsedTime);
     });
 
     app.addHook('onSend', async (request, reply, payload) => {
         reply.header('X-Request-Id', request.id);
+        if (typeof payload === 'string' && payload.startsWith('{') && reply.statusCode >= 400) {
+            try {
+                const body = JSON.parse(payload);
+                if (body?.success === false && body?.error && typeof body.error === 'object' && !body.error.requestId) {
+                    body.error.requestId = request.id;
+                    return JSON.stringify(body);
+                }
+            } catch {
+                // Non-JSON error payloads retain the response header correlation ID.
+            }
+        }
         return payload;
     });
 
@@ -190,7 +162,7 @@ export async function buildApp() {
     await app.register(rateLimit, {
         max: config.security.rateLimitMax,
         timeWindow: config.security.rateLimitWindow,
-        errorResponseBuilder: (request, context) => ({
+        errorResponseBuilder: () => ({
             statusCode: 429,
             success: false,
             error: {
@@ -213,13 +185,23 @@ export async function buildApp() {
     await app.register(import('./plugins/auth'));
     await app.register(import('./plugins/csrf'));
 
-    app.setErrorHandler((error, request, reply) => {
-        const isValidationError = error instanceof ZodError;
-        let statusCode = isValidationError ? 400 : error.statusCode || 500;
-        let message = error.message || 'Request failed';
-        let code = (error as any).errorCode || (error as any).code || 'INTERNAL_ERROR';
+    app.setNotFoundHandler((request, reply) => reply.status(404).send({
+        success: false,
+        error: {
+            code: 'NOT_FOUND',
+            message: 'Route not found',
+            requestId: request.id,
+        },
+    }));
 
-        const isPrismaError = (error as any).code?.startsWith('P') || error.constructor?.name?.includes('Prisma');
+    app.setErrorHandler((error, request, reply) => {
+        const appError = error as any;
+        const isValidationError = error instanceof ZodError;
+        let statusCode = isValidationError ? 400 : appError.statusCode || 500;
+        let message = appError.message || 'Request failed';
+        let code = appError.errorCode || appError.code || 'INTERNAL_ERROR';
+
+        const isPrismaError = appError.code?.startsWith('P') || appError.constructor?.name?.includes('Prisma');
         if (isPrismaError) {
             const prismaCode = (error as any).code;
             if (prismaCode === 'P2002') {
@@ -298,10 +280,10 @@ export async function buildApp() {
 
         if (isValidationError) {
             code = 'VALIDATION_ERROR';
-            const firstError = (error as ZodError).errors[0];
+            const firstError = (error as ZodError).issues[0];
             if (firstError) {
                 message = firstError.message;
-                if (firstError.code === 'invalid_type' && firstError.received === 'undefined') {
+                if (firstError.code === 'invalid_type' && (firstError as any).input === undefined) {
                     message = `Missing required field: ${firstError.path.join('.')}`;
                 }
             } else {
@@ -338,7 +320,10 @@ export async function buildApp() {
             success: false,
             error: {
                 code,
-                message
+                message,
+                requestId: request.id,
+                ...(appError.stage ? { stage: appError.stage } : {}),
+                ...(finalStatusCode < 500 && appError.details ? { details: appError.details } : {}),
             }
         });
     });

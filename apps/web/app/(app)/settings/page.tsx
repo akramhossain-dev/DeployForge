@@ -1,11 +1,9 @@
 'use client';
 
-import { CheckCircle2, Chrome, Github, MailCheck, Save, Settings, ShieldAlert, ShieldCheck, Unlink, XCircle, Loader2 } from 'lucide-react';
+import { Chrome, Github, MailCheck, Save, Loader2 } from '@/components/icons';
 import { ReactNode, useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { useAuthSession, useDisconnectGitHub, useGitHubProfile, queryKeys } from '@/hooks/useDeployForgeData';
+import { useAuthSession, useDisconnectGitHub, useGitHubProfile } from '@/hooks/useDeployForgeData';
 import api from '@/lib/api/client';
 import { useToastStore } from '@/lib/store/useToastStore';
 
@@ -37,19 +35,14 @@ export default function SettingsPage() {
     const auth = useAuthSession();
     const profile = useGitHubProfile();
     const disconnect = useDisconnectGitHub();
-    const searchParams = useSearchParams();
-    const queryClient = useQueryClient();
     const addToast = useToastStore(s => s.addToast);
 
-    const [connectError, setConnectError] = useState<string | null>(null);
+    const [, setConnectError] = useState<string | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
-    const [isSendingVerification, setIsSending] = useState(false);
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-
-    const githubStatus = searchParams.get('github');
 
     useEffect(() => { if (auth.user) { setName(auth.user.name || ''); setUsername(auth.user.username || ''); setEmail(auth.user.email || ''); } }, [auth.user]);
 

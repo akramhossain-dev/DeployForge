@@ -9,6 +9,7 @@ package-lock.json
 .env.*
 !.env.example
 !.env.production.example
+!.env.phase6.example
 
 # Build outputs
 dist/
@@ -26,6 +27,7 @@ logs/
 # Runtime
 .DS_Store
 *.pid
+.phase6-artifacts/
 
 # Prisma
 *dev.db*

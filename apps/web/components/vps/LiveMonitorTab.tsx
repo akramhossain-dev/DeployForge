@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, ArrowDown, ArrowUp, HardDrive, Thermometer, Wifi, Server } from 'lucide-react';
+import { Activity, ArrowDown, ArrowUp, HardDrive, Server } from '@/components/icons';
 import clsx from 'clsx';
 import { useVpsLiveMetrics } from '@/hooks/useDeployForgeData';
 import type { VpsLiveMetrics } from '@/lib/api/types';
@@ -9,7 +9,7 @@ import type { VpsLiveMetrics } from '@/lib/api/types';
 const MAX_HISTORY = 30;
 
 function MetricCard({
-    label, value, unit, history, sub,
+    label, value, unit, sub,
 }: {
     label: string; value: number | string; unit?: string; history: number[]; sub?: string;
 }) {
