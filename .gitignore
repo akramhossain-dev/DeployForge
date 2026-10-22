@@ -19,6 +19,7 @@ build/
 out/
 *.tsbuildinfo
 packages/*/src/*.js
+.agents/
 
 # Logs
 logs/
