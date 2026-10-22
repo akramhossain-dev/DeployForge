@@ -1,104 +1,153 @@
 name: CD — Deploy to Production
 
-# Triggers: only when CI passes on main AND there is a version tag (e.g. v1.2.3)
-# To trigger a deploy: git tag v1.0.0 && git push origin v1.0.0
+# Production deploys are explicit: create and push a semantic version tag.
+# The release gate requires that exact commit to be on main and have a
+# successful completed CI run before any production environment is touched.
 on:
   push:
     tags:
       - 'v*.*.*'
 
-# Prevent concurrent deploys — cancel in-flight if a newer tag is pushed
+permissions:
+  contents: read
+  actions: read
+
 concurrency:
   group: production-deploy
-  cancel-in-progress: false   # never cancel a running deploy; queue instead
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy to Production VPS
+  validate:
+    name: Validate release
     runs-on: ubuntu-latest
-    environment: production    # requires GitHub Environment "production" to be configured
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # -----------------------------------------------------------------------
-      # Prerequisites: pnpm + Node (needed to run db:migrate via SSH)
-      # -----------------------------------------------------------------------
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
+      - name: Checkout release
+        uses: actions/checkout@v7
         with:
-          version: 8.15.4
+          fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
+      - name: Require release commit on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tag must point to a commit on main." >&2
+            exit 1
+          fi
 
-      # -----------------------------------------------------------------------
-      # SSH into the production server and pull + redeploy
-      # -----------------------------------------------------------------------
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Require successful CI for release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion="$(
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+              -f head_sha="$GITHUB_SHA" \
+              -f event=push \
+              -f status=completed \
+              --jq '.workflow_runs | map(select(.head_branch == "main")) | first | .conclusion // ""'
+          )"
+
+          if [ "$conclusion" != "success" ]; then
+            echo "A successful completed CI run on main is required for $GITHUB_SHA." >&2
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy to Production VPS
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    steps:
+      - name: Validate deployment configuration
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required production secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Deploy release via SSH
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
+          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
+          envs: DEPLOY_PATH,RELEASE_SHA,RELEASE_TAG
           script: |
-            set -e
+            set -eu
 
             echo "==> Navigating to deploy directory"
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd "$DEPLOY_PATH"
 
-            echo "==> Pulling latest code for tag ${{ github.ref_name }}"
-            git fetch --tags
-            git checkout ${{ github.ref_name }}
+            echo "==> Fetching release $RELEASE_TAG"
+            git fetch origin --force \
+              "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
 
-            echo "==> Pulling latest Docker images"
+            tag_sha="$(git rev-list -n 1 "refs/tags/${RELEASE_TAG}")"
+            if [ "$tag_sha" != "$RELEASE_SHA" ]; then
+              echo "Release tag SHA does not match the validated GitHub SHA." >&2
+              exit 1
+            fi
+            git checkout --detach "$RELEASE_SHA"
+
+            echo "==> Validating Docker Compose configuration"
+            docker compose config --quiet
+
+            echo "==> Pulling infrastructure images"
             docker compose pull postgres redis
 
             echo "==> Building application images"
-            docker compose build --no-cache api web
+            docker compose build migrate api worker web
+
+            echo "==> Starting required infrastructure"
+            docker compose up -d --wait postgres redis
 
             echo "==> Applying database migrations"
-            docker compose run --rm --no-deps api \
-              npx prisma migrate deploy --schema /app/prisma/schema.prisma
+            docker compose run --rm migrate
 
-            echo "==> Performing zero-downtime rolling restart"
-            docker compose up -d --no-deps --scale api=1 api
-            docker compose up -d --no-deps --scale web=1 web
+            echo "==> Restarting application services"
+            docker compose up -d --no-deps --wait api worker web
 
-            echo "==> Waiting for API health check"
-            timeout 90 bash -c 'until docker compose exec -T api \
-              node -e "fetch(\"http://127.0.0.1:\"+process.env.PORT+\"/live\").then(r=>process.exit(r.ok?0:1))" \
-              2>/dev/null; do sleep 3; done'
+            echo "==> Verifying service health"
+            docker compose ps
 
             echo "==> Cleaning up unused Docker images"
             docker image prune -f
 
-            echo "==> Deploy complete — ${{ github.ref_name }}"
+            echo "==> Deploy complete — $RELEASE_TAG"
 
-      # -----------------------------------------------------------------------
-      # Notify on failure (requires SLACK_WEBHOOK_URL secret — optional)
-      # -----------------------------------------------------------------------
       - name: Notify Slack on failure
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.26.0
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v4.0.0
         with:
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
           payload: |
-            {
-              "text": "🚨 DeployForge production deploy FAILED for tag ${{ github.ref_name }}",
-              "attachments": [{
-                "color": "danger",
-                "fields": [
-                  { "title": "Repository", "value": "${{ github.repository }}", "short": true },
-                  { "title": "Tag", "value": "${{ github.ref_name }}", "short": true },
-                  { "title": "Run URL", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" }
-                ]
-              }]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+            text: "🚨 DeployForge production deploy FAILED for tag ${{ github.ref_name }}"
+            attachments:
+              - color: danger
+                fields:
+                  - title: Repository
+                    value: ${{ github.repository }}
+                    short: true
+                  - title: Tag
+                    value: ${{ github.ref_name }}
+                    short: true
+                  - title: Run URL
+                    value: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

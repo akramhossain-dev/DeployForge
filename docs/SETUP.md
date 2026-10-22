@@ -234,7 +234,24 @@ curl https://yourdomain.com/live
 
 ---
 
-### 3.2 Manual Production Setup (PM2)
+### 3.2 Automated Tagged Releases (GitHub Actions)
+
+Create a GitHub Environment named `production` and configure these environment secrets:
+
+- Required: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`
+- Optional: `DEPLOY_PORT` (defaults to `22`), `SLACK_WEBHOOK_URL`
+- Recommended: `DEPLOY_HOST_FINGERPRINT` for SSH host verification
+
+The production server's `DEPLOY_PATH` must contain a clone of this repository and a complete `.env` file. A release deploy runs only when the tagged commit is on `main` and the same commit already has a successful completed CI run.
+
+```bash
+git tag -a v1.0.0 -m "DeployForge v1.0.0"
+git push origin v1.0.0
+```
+
+The CD workflow validates the tag and CI result, verifies the Compose configuration, builds the application images, runs the dedicated migration service, restarts API/worker/web services, and waits for their health checks.
+
+### 3.3 Manual Production Setup (PM2)
 
 If running outside Docker:
 
