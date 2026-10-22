@@ -71,7 +71,6 @@ export default function ProfilePage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -84,7 +83,6 @@ export default function ProfilePage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-3">
-                {/* Left: Avatar Card */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 flex flex-col items-center text-center space-y-4">
                     <div className="h-20 w-20 overflow-hidden rounded-full border border-[#1F1F1F] bg-[#000000] flex items-center justify-center">
                         {gitHubAvatar ? (
@@ -114,7 +112,6 @@ export default function ProfilePage() {
                     </div>
                 </div>
 
-                {/* Right: Editable Info Form */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4 lg:col-span-2">
                     <div className="border-b border-[#1F1F1F] pb-3">
                         <h2 className="font-bold text-white text-sm">Account Information</h2>

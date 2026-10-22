@@ -16,10 +16,8 @@ export class AdminService {
             await prisma.verificationToken.deleteMany({ where: { email: user.email } });
         }
 
-        // Clear all session cache patterns from Redis to instantly log out the user from all devices
         await CacheService.clearPattern(`user-session:${userId}:*`);
 
-        // Clear profile cache
         await CacheService.del(`user:profile:${userId}`);
 
         await prisma.user.delete({ where: { id: userId } });

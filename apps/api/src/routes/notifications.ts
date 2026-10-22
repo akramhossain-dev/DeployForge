@@ -20,7 +20,6 @@ const listQuerySchema = z.object({
 export default async function notificationRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    // List notifications with filters
     fastify.get('/', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -29,7 +28,6 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return { success: true, data: result };
     });
 
-    // Get unread count
     fastify.get('/unread-count', {
         config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -37,7 +35,6 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return { success: true, data: { count } };
     });
 
-    // Get recent notifications (for dropdown)
     fastify.get('/recent', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -45,7 +42,6 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return { success: true, data: notifications };
     });
 
-    // Mark single notification as read
     fastify.patch('/:id/read', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -54,7 +50,6 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return { success: true, message: 'Notification marked as read' };
     });
 
-    // Mark all notifications as read
     fastify.patch('/read-all', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -62,7 +57,6 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return { success: true, message: 'All notifications marked as read' };
     });
 
-    // Delete single notification
     fastify.delete('/:id', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -71,7 +65,6 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return { success: true, message: 'Notification deleted' };
     });
 
-    // Delete all notifications
     fastify.delete('/all', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request) => {

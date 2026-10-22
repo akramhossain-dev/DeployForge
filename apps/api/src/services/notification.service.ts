@@ -13,9 +13,6 @@ interface NotificationFilters {
 }
 
 export class NotificationService {
-    /**
-     * List notifications with filtering, search, and pagination.
-     */
     static async list(userId: string, filters: NotificationFilters = {}) {
         const page = Math.max(1, filters.page || 1);
         const limit = Math.min(100, Math.max(1, filters.limit || 20));
@@ -81,18 +78,12 @@ export class NotificationService {
         };
     }
 
-    /**
-     * Get count of unread notifications.
-     */
     static async getUnreadCount(userId: string): Promise<number> {
         return prisma.notification.count({
             where: { userId, isRead: false },
         });
     }
 
-    /**
-     * Mark a single notification as read.
-     */
     static async markAsRead(userId: string, id: string) {
         return prisma.notification.updateMany({
             where: { id, userId },
@@ -100,9 +91,6 @@ export class NotificationService {
         });
     }
 
-    /**
-     * Mark all notifications as read for a user.
-     */
     static async markAllAsRead(userId: string) {
         return prisma.notification.updateMany({
             where: { userId, isRead: false },
@@ -110,27 +98,18 @@ export class NotificationService {
         });
     }
 
-    /**
-     * Delete a single notification.
-     */
     static async delete(userId: string, id: string) {
         return prisma.notification.deleteMany({
             where: { id, userId },
         });
     }
 
-    /**
-     * Delete all notifications for a user.
-     */
     static async deleteAll(userId: string) {
         return prisma.notification.deleteMany({
             where: { userId },
         });
     }
 
-    /**
-     * Get recent notifications (for dropdown).
-     */
     static async getRecent(userId: string, limit = 10) {
         return prisma.notification.findMany({
             where: { userId },
@@ -144,9 +123,6 @@ export class NotificationService {
         });
     }
 
-    /**
-     * Clean up old notifications (older than 30 days).
-     */
     static async cleanupOld(daysOld = 30) {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - daysOld);

@@ -569,7 +569,6 @@ export default function DeploymentDetailsPage() {
 
     return (
         <div className="space-y-4 sm:space-y-6 font-mono text-xs max-w-full overflow-x-hidden">
-            {/* Action Errors */}
             {[start, stop, pauseDeployment, resume, restart, rollback, deleteDeployment].map((m, i) =>
                 m.isError ? (
                     <div key={i} className="rounded border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
@@ -578,7 +577,6 @@ export default function DeploymentDetailsPage() {
                 ) : null
             )}
 
-            {/* ── 1. Page Header & Operations Toolbar ── */}
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-[#1F1F1F] pb-4 sm:pb-5">
                 <div className="flex items-center gap-3">
                     <Link href="/deployments">
@@ -637,7 +635,6 @@ export default function DeploymentDetailsPage() {
                 </div>
             </div>
 
-            {/* ── 2. Structured Error Diagnostic Banner ── */}
             {current.status === 'FAILED' && parsedError ? (
                 <DeploymentErrorBanner
                     parsedError={parsedError}
@@ -690,11 +687,8 @@ export default function DeploymentDetailsPage() {
                 </div>
             </div>
 
-            {/* ── 6. Console Main Column & Sidebar Grid ── */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                {/* Console Log Terminal Box */}
                 <div className={clsx('rounded-md border border-[#1F1F1F] bg-[#0A0A0A] flex flex-col min-w-0', isFullscreen ? 'fixed inset-2 sm:inset-4 z-50' : 'h-[500px] sm:h-[540px]')}>
-                    {/* Terminal Toolbar */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[#1F1F1F] bg-[#111111] px-3.5 py-2.5">
                         <div className="flex flex-wrap items-center gap-2.5">
                             <div className="flex items-center gap-2 font-semibold text-white">
@@ -723,7 +717,6 @@ export default function DeploymentDetailsPage() {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
-                            {/* Filter tabs */}
                             <div className="flex items-center gap-1 overflow-x-auto max-w-full text-[10px]">
                                 {(['all', 'build', 'runtime', 'system', 'error'] as const).map((filter) => {
                                     const count = logs.filter((l) => {
@@ -749,7 +742,6 @@ export default function DeploymentDetailsPage() {
                                 })}
                             </div>
 
-                            {/* Logs Search Input */}
                             <div className="relative flex-1 sm:flex-none">
                                 <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#666666]" />
                                 <input
@@ -760,7 +752,6 @@ export default function DeploymentDetailsPage() {
                                 />
                             </div>
 
-                            {/* Terminal Actions */}
                             <button
                                 onClick={() => setAutoScroll(!autoScroll)}
                                 className={clsx('h-6 rounded border px-2 text-[10px] uppercase shrink-0', autoScroll ? 'border-white bg-[#000000] text-white' : 'border-[#1F1F1F] text-[#666666]')}
@@ -782,7 +773,6 @@ export default function DeploymentDetailsPage() {
                         </div>
                     </div>
 
-                    {/* Console Output Area */}
                     <div className={clsx('flex-1 overflow-hidden transition-all duration-200', consoleCollapsed ? 'h-0 hidden' : 'flex flex-col')}>
                         <div ref={consoleRef} className="flex-1 overflow-y-auto p-3 bg-[#000000] space-y-1 font-mono text-[11px] leading-relaxed no-scrollbar">
                             {filteredLogs.length === 0 ? (
@@ -798,9 +788,7 @@ export default function DeploymentDetailsPage() {
                     </div>
                 </div>
 
-                {/* Sidebar Inspection Panels */}
                 <div className="space-y-4 font-mono text-xs">
-                    {/* Webhook Card */}
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3">
                         <h3 className="font-semibold text-white border-b border-[#1F1F1F] pb-2">Webhook Integration</h3>
                         <div className="space-y-1">
@@ -811,7 +799,6 @@ export default function DeploymentDetailsPage() {
                         </div>
                     </div>
 
-                    {/* Ingress Gateway Card */}
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3">
                         <h3 className="font-semibold text-white border-b border-[#1F1F1F] pb-2">Ingress & Gateway</h3>
                         <div className="space-y-1">
@@ -823,7 +810,6 @@ export default function DeploymentDetailsPage() {
                         </div>
                     </div>
 
-                    {/* Build Output Card */}
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3">
                         <h3 className="font-semibold text-white border-b border-[#1F1F1F] pb-2">Build Configuration</h3>
                         <div className="space-y-1">
@@ -835,7 +821,6 @@ export default function DeploymentDetailsPage() {
                         </div>
                     </div>
 
-                    {/* Available Actions Card */}
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3">
                         <h3 className="font-semibold text-white border-b border-[#1F1F1F] pb-2">Available Actions</h3>
                         <div className="space-y-1.5">
@@ -846,7 +831,6 @@ export default function DeploymentDetailsPage() {
                         </div>
                     </div>
 
-                    {/* Environment Variables Summary Card */}
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3">
                         <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-2">
                             <div className="flex items-center gap-2">
@@ -885,7 +869,6 @@ export default function DeploymentDetailsPage() {
                 </div>
             </div>
 
-            {/* ── 7. Delete Confirmation Modal ── */}
             {deleteOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 font-mono text-xs">
                     <div className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 sm:p-6 space-y-4">
@@ -915,11 +898,9 @@ export default function DeploymentDetailsPage() {
                 </div>
             )}
 
-            {/* ── 8. Rich Multi-File Environment Variable Manager Modal (Fully Responsive) ── */}
             {envModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 font-mono text-xs overflow-y-auto">
                     <div className="w-full max-w-4xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 sm:p-6 space-y-4 max-h-[92vh] flex flex-col my-auto">
-                        {/* Modal Header */}
                         <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3 shrink-0">
                             <div className="flex items-center gap-2">
                                 <h3 className="text-sm font-bold text-white">Manage Environment Variables</h3>
@@ -932,11 +913,8 @@ export default function DeploymentDetailsPage() {
                             </button>
                         </div>
 
-                        {/* Modal Body */}
                         <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden min-h-[360px]">
-                            {/* File Selector (Mobile Dropdown + Desktop Sidebar) */}
                             <div className="w-full md:w-60 shrink-0 flex flex-col gap-3 border-b md:border-b-0 md:border-r border-[#1F1F1F] pb-3 md:pb-0 md:pr-3">
-                                {/* Header / Add file (Desktop) */}
                                 <div className="hidden md:flex items-center justify-between gap-2">
                                     <span className="text-[10px] font-semibold uppercase text-[#666666] shrink-0">ENV FILES</span>
                                     <button
@@ -963,7 +941,6 @@ export default function DeploymentDetailsPage() {
                                     </div>
                                 )}
 
-                                {/* Mobile File Selector Row */}
                                 <div className="flex items-center gap-2 md:hidden">
                                     <select
                                         value={activeFileIndex}
@@ -984,7 +961,6 @@ export default function DeploymentDetailsPage() {
                                     </button>
                                 </div>
 
-                                {/* Desktop File List */}
                                 <div className="hidden md:flex flex-1 overflow-y-auto flex-col space-y-1.5 pr-1 min-h-[140px]">
                                     {draftFiles.map((file, idx) => {
                                         const isActive = idx === activeFileIndex;
@@ -1027,10 +1003,8 @@ export default function DeploymentDetailsPage() {
                                 </button>
                             </div>
 
-                            {/* Modal Main Content Area */}
                             <div className="flex-1 flex flex-col gap-3 overflow-hidden min-w-0">
                                 {historyOpen ? (
-                                    /* Version History Tab */
                                     <div className="flex-1 flex flex-col gap-3 overflow-hidden">
                                         <div className="border-b border-[#1F1F1F] pb-2">
                                             <h4 className="font-semibold text-white">Environment Version History</h4>
@@ -1096,7 +1070,6 @@ export default function DeploymentDetailsPage() {
                                         </div>
                                     </div>
                                 ) : (
-                                    /* Variables Table / Bulk Text Editor */
                                     <div className="flex-1 flex flex-col gap-3 overflow-hidden min-w-0">
                                         <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-2 gap-2">
                                             <span className="font-semibold text-white truncate">{activeFile.path}</span>
@@ -1123,7 +1096,6 @@ export default function DeploymentDetailsPage() {
                                             </div>
                                         ) : (
                                             <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-                                                {/* Toolbar row: Search, Sort, Add */}
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <div className="relative flex-1 min-w-[140px]">
                                                         <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#666666]" />
@@ -1148,7 +1120,6 @@ export default function DeploymentDetailsPage() {
                                                     </button>
                                                 </div>
 
-                                                {/* Variable Rows Table */}
                                                 <div className="flex-1 overflow-y-auto border border-[#1F1F1F] rounded divide-y divide-[#1F1F1F] bg-[#000000] min-h-[160px] max-h-[320px]">
                                                     {filteredVariables.length === 0 ? (
                                                         <div className="py-12 text-center text-[#666666] italic">No variables in this file.</div>
@@ -1180,7 +1151,6 @@ export default function DeploymentDetailsPage() {
                             </div>
                         </div>
 
-                        {/* Overwrite Confirmation Banner */}
                         {showConfirmOverwrite && (
                             <div className="rounded border border-amber-500/30 bg-amber-500/10 p-3 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
                                 <span className="text-amber-200 text-xs">Import contains duplicate keys that will overwrite existing values.</span>
@@ -1191,7 +1161,6 @@ export default function DeploymentDetailsPage() {
                             </div>
                         )}
 
-                        {/* Modal Footer Buttons */}
                         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 border-t border-[#1F1F1F] shrink-0">
                             <button onClick={() => setEnvModalOpen(false)} className="h-8 rounded border border-[#1F1F1F] bg-[#111111] px-4 text-white hover:bg-[#1A1A1A]">Cancel</button>
                             <button onClick={handleSaveChanges} disabled={updateEnv.isPending} className="h-8 rounded border border-[#1F1F1F] bg-[#111111] px-4 text-white hover:bg-[#1F1F1F]">Save Draft</button>

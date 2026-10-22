@@ -9,7 +9,6 @@ const wsParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid ID format' }),
 });
 
-// Bound per-user connections to prevent WebSocket resource exhaustion.
 const MAX_WS_PER_USER = 20;
 const userConnectionCounts = new Map<string, number>();
 
@@ -134,7 +133,6 @@ export default async function wsRoutes(fastify: FastifyInstance) {
         });
     });
 
-    // Real-time notification push for authenticated users
     fastify.get('/notifications', { websocket: true }, async (connection, request) => {
         const token = socketToken(request);
         const session = await verifySocketUser(token);
@@ -153,17 +151,14 @@ export default async function wsRoutes(fastify: FastifyInstance) {
             return;
         }
 
-        // Send initial unread count
         const unreadCount = await prisma.notification.count({ where: { userId, isRead: false } });
         connection.send(JSON.stringify({ event: 'notification:unread_count', data: { count: unreadCount } }));
 
-        // Listen for new alerts targeted at this user
         const onAlertCreated = (alertUserId: string, notification: any) => {
             if (alertUserId === userId) {
                 try {
                     connection.send(JSON.stringify({ event: 'notification:new', data: notification }));
                 } catch {
-                    // Connection may have closed
                 }
             }
         };

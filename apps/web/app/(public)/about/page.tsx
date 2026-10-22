@@ -62,27 +62,22 @@ export default function AboutPage() {
     return (
         <main className="min-h-screen bg-black text-white">
 
-            {/* ── 1. Header Section ────────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 pb-16 pt-14 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-3xl">
-                        {/* Eyebrow */}
                         <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                             <span>DEPLOYFORGE — ABOUT</span>
                         </div>
 
-                        {/* Title */}
                         <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
                             Self-hosted deployment control for modern software teams.
                         </h1>
 
-                        {/* Description */}
                         <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
                             DeployForge bridges the gap between polished platform ergonomics and complete server sovereignty. Connect repositories, manage VPS fleets over agentless SSH, and use validated traffic switching for supported stateless releases.
                         </p>
 
-                        {/* CTAs */}
                         <div className="mt-8 flex flex-wrap items-center gap-3">
                             <Link
                                 href={primaryHref}
@@ -102,7 +97,6 @@ export default function AboutPage() {
                 </div>
             </section>
 
-            {/* ── 2. What is DeployForge? ────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
@@ -119,7 +113,6 @@ export default function AboutPage() {
                             </p>
                         </div>
 
-                        {/* Specs Box */}
                         <div className="lg:col-span-6">
                             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 font-mono text-xs">
                                 <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3 text-[#666666]">
@@ -155,7 +148,6 @@ export default function AboutPage() {
                 </div>
             </section>
 
-            {/* ── 3. Why DeployForge? ────────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -176,7 +168,6 @@ export default function AboutPage() {
                 </div>
             </section>
 
-            {/* ── 4. Product Philosophy ──────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -197,7 +188,6 @@ export default function AboutPage() {
                 </div>
             </section>
 
-            {/* ── 5. Technology Stack ───────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -232,7 +222,6 @@ export default function AboutPage() {
                 </div>
             </section>
 
-            {/* ── 6. Final CTA ──────────────────────────────────────────── */}
             <section className="px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 sm:p-10">
                     <div className="max-w-xl">

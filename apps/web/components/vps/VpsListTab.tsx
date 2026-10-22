@@ -99,7 +99,6 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
 
                 return (
                     <div key={server.id} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 flex flex-col justify-between space-y-4 hover:border-[#333333] transition-colors">
-                        {/* Header */}
                         <div className="flex items-start justify-between gap-3 border-b border-[#1F1F1F] pb-3">
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2">
@@ -111,7 +110,6 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                             <StatusTag status={server.status} />
                         </div>
 
-                        {/* Ingress Gateway Chip */}
                         <div className="rounded border border-[#1F1F1F] bg-[#000000] p-2 flex items-center justify-between gap-2 text-[10px]">
                             <div className={clsx('flex items-center gap-1.5 font-semibold', gatewayReady ? 'text-emerald-400' : gatewayFailed ? 'text-rose-400' : gatewayBusy ? 'text-cyan-400' : 'text-[#A1A1A1]')}>
                                 {gatewayReady ? <ShieldCheck size={12} className="shrink-0" /> : gatewayFailed ? <XCircle size={12} className="shrink-0" /> : <RefreshCw size={12} className={clsx('shrink-0', gatewayBusy && 'animate-spin')} />}
@@ -121,7 +119,6 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                         </div>
                         {server.gatewayError ? <p className="text-[10px] text-rose-400 line-clamp-2" title={server.gatewayError}>{server.gatewayError}</p> : null}
 
-                        {/* Resource Health Metrics */}
                         {health ? (
                             <div className="space-y-2 border-b border-[#1F1F1F] pb-3">
                                 <ProgressMeter label="CPU Utilization" value={cpu} />
@@ -135,7 +132,6 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                             </div>
                         )}
 
-                        {/* Metadata Rows */}
                         <div className="space-y-1.5 text-[11px] text-[#A1A1A1]">
                             <div className="flex justify-between">
                                 <span className="text-[#666666]">SSH USER</span>
@@ -155,7 +151,6 @@ export default function VpsListTab({ vpsList, isLoading, isError, errorMessage, 
                             </div>
                         </div>
 
-                        {/* Action Buttons */}
                         <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-[#1F1F1F]">
                             <button
                                 onClick={() => onViewInfo(server)}

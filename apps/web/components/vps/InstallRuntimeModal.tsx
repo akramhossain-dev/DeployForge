@@ -115,7 +115,6 @@ export function InstallRuntimeModal({ vps, open, onClose, onSuccess }: InstallRu
                     overflow: 'hidden',
                 }}
             >
-                {/* Header */}
                 <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '14px 16px', borderBottom: '1px solid #1f1f1f',
@@ -133,7 +132,6 @@ export function InstallRuntimeModal({ vps, open, onClose, onSuccess }: InstallRu
                     </button>
                 </div>
 
-                {/* Body */}
                 <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '60vh', overflowY: 'auto' }}>
                     {phase === 'select' && (
                         <>
@@ -242,7 +240,6 @@ export function InstallRuntimeModal({ vps, open, onClose, onSuccess }: InstallRu
                     )}
                 </div>
 
-                {/* Footer */}
                 <div style={{
                     padding: '12px 16px',
                     borderTop: '1px solid #1f1f1f',

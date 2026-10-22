@@ -64,7 +64,6 @@ export default function LoginPage() {
         <main className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center bg-black px-4 py-12 text-white">
             <div className="w-full max-w-sm sm:max-w-md space-y-6">
 
-                {/* Brand Header */}
                 <div className="text-center space-y-2">
                     <Link href="/" className="inline-flex items-center gap-2">
                         <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-white">
@@ -80,9 +79,7 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                {/* Auth Card */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 shadow-sm">
-                    {/* OAuth providers */}
                     <div className="space-y-2">
                         <button
                             type="button"
@@ -104,14 +101,12 @@ export default function LoginPage() {
                         </button>
                     </div>
 
-                    {/* Divider */}
                     <div className="my-5 flex items-center gap-3">
                         <div className="h-px flex-1 bg-[#1F1F1F]" />
                         <span className="text-[10px] font-mono text-[#666666] uppercase">OR</span>
                         <div className="h-px flex-1 bg-[#1F1F1F]" />
                     </div>
 
-                    {/* Credentials Form */}
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div>
                             <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
@@ -174,7 +169,6 @@ export default function LoginPage() {
                     </form>
                 </div>
 
-                {/* Footer Link */}
                 <p className="text-center text-xs text-[#A1A1A1]">
                     Don&apos;t have an account?{' '}
                     <Link href="/register" className="font-semibold text-white hover:underline">

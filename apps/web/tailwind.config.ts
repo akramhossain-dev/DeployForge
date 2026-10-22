@@ -15,7 +15,6 @@ const config: Config = {
                 foreground: '#FFFFFF',
                 'secondary-foreground': '#A1A1A1',
                 'muted-foreground': '#666666',
-                // Map default slate color palette to pure black developer tool values
                 slate: {
                     950: '#000000',
                     900: '#0A0A0A',

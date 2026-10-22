@@ -1,116 +1,141 @@
-# 🔐 DeployForge Security Protocols
+# DeployForge Security
 
-DeployForge enforces security controls at the data storage, authentication, network routing, and host execution layers.
+DeployForge is a privileged control plane: it stores infrastructure credentials,
+opens remote sessions, and deploys workloads to target VPS hosts. Security depends
+on application controls, host hardening, secret management, and disciplined release
+operations working together.
 
----
+## Identity and sessions
 
-## 1. Data Encryption & Storage
+- User passwords are hashed with Argon2id.
+- Access and refresh tokens have separate lifecycles; refresh sessions can be revoked.
+- Registration, verification, and password-reset tokens are short-lived and single-purpose.
+- Administrator authentication uses separate routes, secrets, roles, and lockout controls.
+- Keep `JWT_SECRET`, `ADMIN_JWT_SECRET`, and `ADMIN_SECRET` independent and randomly generated.
+- Revoke active sessions after password, role, or account-security changes.
 
-### 1.1 Secrets at Rest (AES-256-GCM)
-All sensitive secrets (VPS passwords, private keys, environment variables) are encrypted before write operations:
-* **Module:** `@deployforge/security` (`EncryptionService`).
-* **Algorithm:** AES-256-GCM with a unique 12-byte IV per entry.
-* **Storage Format:** `iv:authTag:encryptedData` (hex-encoded).
-* **Key Source:** `ENCRYPTION_KEY` env var — must be a 64-character hex string.
-* **Transparent Middleware:** Prisma middleware auto-encrypts/decrypts the `env` field on `Deployment` and `DeploymentHistory` models.
+## Request security
 
-### 1.2 Password Hashing (Argon2id)
-* **Algorithm:** Argon2id via `@deployforge/security`.
-* **Parameters:** Memory 64MB, 3 iterations, 4 threads (production-grade).
-* **Minimums:** User passwords ≥ 6 chars; Super Admin password ≥ 8 chars.
+- Double-submit CSRF protection covers state-changing browser requests.
+- Helmet security headers and endpoint-specific rate limits reduce common web attacks.
+- Request schemas validate external input before it reaches service code.
+- Prototype-pollution defenses reject dangerous object keys.
+- Unexpected server errors return a sanitized response with a request ID; secrets and stack
+  traces must stay out of client responses.
+- GitHub webhooks require signature verification. Delivery IDs are recorded to prevent replay.
 
----
+## Data protection
 
-## 2. Environment Variable Validation
+- Sensitive application values are encrypted with AES-256-GCM before database storage.
+- `ENCRYPTION_KEY` must be exactly 64 hexadecimal characters and stored outside source control.
+- `MASTER_KEY` and application authentication secrets must be generated independently.
+- Logs and API responses must redact passwords, tokens, private keys, connection strings, and
+  decrypted environment values.
+- PostgreSQL is the source of truth. Back up both the database and the encryption key, but keep
+  them in separate security domains.
+- Never replace an encryption key until existing encrypted records have a tested re-encryption
+  procedure.
 
-The API validates all environment variables at startup using Zod (`apps/api/src/config/env.ts`):
-* **Placeholder Detection:** Rejects secrets starting with `replace_with_`, `your_`, `changeme`, etc.
-* **Production Enforcement:** `APP_URL` and `API_URL` must use `https://` and must not point to `localhost` when `NODE_ENV=production`.
-* **Format Checks:** `ENCRYPTION_KEY` must be 64 hex chars; `DATABASE_URL` must be a valid PostgreSQL URI.
-* **Hard Exit:** Any failure causes `process.exit(1)` with descriptive error messages.
+## Project and tenant isolation
 
----
+- Project membership and role checks must precede access to deployments, variables, domains,
+  logs, and GitHub configuration.
+- VPS, terminal, file-manager, deployment, and domain operations must verify resource ownership.
+- Administrator privileges are platform-wide and must not be granted as a shortcut for normal
+  project access.
+- Review audit records after authentication, administrator, VPS, domain, secret, or deployment
+  changes.
 
-## 3. Authentication & Session Security
+## SSH and remote execution
 
-### 3.1 JWT Access & Opaque Refresh Tokens
-* **Access Tokens (JWT):** 15-minute lifetime with `userId`, `role`, and `sessionId`.
-* **Refresh Tokens:** Long-lived, stored as SHA-256 hash in database.
-* **Immediate Revocation:** `authGuard` validates `sessionId` against active DB records on every request.
-* **Replay Protection:** Reused refresh tokens trigger full session revocation for that user.
+- Store SSH credentials encrypted and prefer dedicated deployment keys over personal keys.
+- Normalize remote paths, reject traversal, and quote shell arguments before remote execution.
+- Distributed locks must prevent concurrent operations from mutating the same deployment target.
+- Candidate releases must pass health checks before traffic is switched.
+- Untrusted Compose definitions must reject privileged mode, host networking, host bind mounts,
+  Docker socket access, device mappings, added capabilities, and unmanaged external networks.
 
-### 3.2 Project Isolation & Role-Based Access Control (RBAC)
-DeployForge enforces project-scoped boundary controls where all primary entities (Deployments, Domains, Sandboxes, VPS) are bound to a parent `Project`.
-* **Membership Verification:** Every resource request is validated against the user's project member role inside `ProjectMember`.
-* **Role Permissions Boundary:**
-  * **OWNER / ADMIN:** Full administrative control. Can delete/rename projects, manage team members (invite, change roles, revoke), link new custom domains, attach/remove VPS nodes, manage deployment lifecycles, and edit environment variables.
-  * **DEVELOPER:** Write-access to deployments. Can create and restart deployments, rollback versions, edit environment variables, and view domains. Cannot manage members, delete projects, or configure domains.
-  * **VIEWER:** Read-only access. Can inspect deployment logs, metrics, domain links, and members. Restricted from triggering builds, restarts, rollbacks, modifying env files, or managing teams.
+## Host baseline
 
-### 3.3 Admin Authentication (Separate System)
-* **Isolated Model:** `AdminUser` and `AdminSession` are fully separate from regular `User` sessions.
-* **Brute-Force Lockout:** Configurable via `ADMIN_MAX_ATTEMPTS` (default `5`) and `ADMIN_LOCKOUT_TIME` (default `900` seconds).
-* **Separate Secret:** `ADMIN_JWT_SECRET` signs admin tokens — distinct from user `JWT_SECRET`.
+- Keep the host OS, Docker Engine, and Compose plugin supported and patched.
+- Permit only the required SSH port and public ports `80`/`443` through the firewall.
+- Disable password-based SSH login after key access is verified.
+- Use a restricted deployment user; do not share personal SSH keys with CI.
+- Enable time synchronization and monitor authentication and system logs.
+- Set production `.env` permissions to `0600` and restrict ownership to the deployment account.
 
-### 3.4 Security Audit Logs
-Critical actions are written to the `AuditLog` table:
-* **Scope:** `auth`, `sessions`, `password`, `github`, `account` categories.
-* **Metadata:** IP address, OS, browser, device parsed from user-agent.
+## Secret handling
 
----
+- Keep deployment credentials in the GitHub `production` environment, not repository variables or workflow source.
+- Use independent random values for database, Redis, JWT, admin, encryption, webhook, OAuth, SMTP, and metrics credentials.
+- Never print `.env`, private keys, tokens, database URLs, or decrypted values in CI output.
+- Rotate a secret immediately after suspected disclosure.
 
-## 4. Network & Ingress Security
+## Network and container controls
 
-### 4.1 CSRF Protection
-Double-submit cookie pattern (`apps/api/src/plugins/csrf.ts`):
-* Token signed via HMAC-SHA256.
-* Client must send token in both `csrfToken` cookie and `X-CSRF-Token` header for all state-changing requests.
-* Comparison uses `crypto.timingSafeEqual` to prevent timing attacks.
+The Compose stack separates traffic into these networks:
 
-### 4.2 Security Headers (`@fastify/helmet`)
-* **CSP:** `default-src 'none'` — scripts, styles, frames, objects all blocked.
-* **Frame Ancestors:** `'none'` — prevents clickjacking.
-* **HSTS:** `max-age=31536000; includeSubDomains; preload` (production only).
-* **Permissions Policy:** Restricts camera, microphone, geolocation, payment, USB.
-* **Referrer Policy:** `no-referrer`.
+- `deployforge_internal`: internal PostgreSQL, Redis, migration, API, and worker traffic.
+- `deployforge_proxy`: Nginx access to API and web without exposing those services directly on the host.
+- `deployforge_dev`: compatibility network for local tooling; do not publish its internal service ports on the production firewall.
 
-### 4.3 Rate Limiting
-* Global: `RATE_LIMIT_MAX` requests per `RATE_LIMIT_WINDOW` (defaults: 100/minute).
-* Sensitive routes have tighter per-route limits.
-* Returns `HTTP 429` with `{ code: "RATE_LIMIT_EXCEEDED" }`.
+API, worker, and web containers run with a read-only root filesystem, dropped Linux capabilities, and `no-new-privileges`. Writable data is limited to declared volumes and temporary filesystems.
 
-### 4.4 Prototype Pollution Protection
-A `preValidation` hook rejects any request body, query, or params containing `__proto__`, `prototype`, or `constructor` with `HTTP 400`.
+Only Nginx publishes host ports in the production profile. Do not add public PostgreSQL, Redis, API, or web port mappings for convenience.
 
----
+DeployForge-managed application containers must remain attached only to the networks and storage
+declared by the validated deployment configuration.
 
-## 5. Remote Execution & Runtime Sandboxing
+## TLS and domains
 
-### 5.1 SSH Input Sanitization
-* Shell arguments are escaped via prototype-safe `shellQuote`/`shellPath` helpers in `@deployforge/vps`.
-* Archive extractions use a Python3 wrapper script on the target VPS to prevent path traversal.
+- Require HTTPS for production application and API URLs.
+- Keep DNS under an account protected by MFA.
+- Monitor certificate renewal and expiry.
+- Validate Nginx configuration with `nginx -t` before reload.
+- Keep OAuth callback URLs on the exact production HTTPS origin.
 
-### 5.2 Docker Isolation (Application Containers)
-* `--cap-drop ALL` — removes all root-level kernel capabilities.
-* `--security-opt no-new-privileges` — blocks privilege escalation.
+## GitHub deployment protection
 
-### 5.3 Deployment Sandbox (Pre-flight)
-Before execution, the `DeploymentSandbox` system scores the deployment configuration, estimates CPU/RAM/Disk usage, and flags violations. Deployments with status `rejected` are blocked from proceeding.
+- Protect `main` and require CI before merge.
+- Add reviewers to the GitHub `production` environment for controlled releases.
+- Configure `DEPLOY_HOST_FINGERPRINT` to pin the production host key.
+- Use a deploy key with only the repository access it needs.
+- Publish immutable annotated release tags; never force-update a production tag.
+- Review database migrations for backward compatibility before tagging a release.
 
-### 5.4 Control Plane Container Hardening
-Both `api` and `web` Docker services run with:
-* `read_only: true` filesystem (only `/tmp` writable via `tmpfs`).
-* `no-new-privileges: true`.
-* `cap_drop: ALL`.
+## Metrics and operational access
 
----
+- Protect metrics endpoints with a strong `METRICS_TOKEN` bearer token.
+- Use a dedicated SMTP credential or application password.
+- Set `GOOGLE_OAUTH_ENABLED=false` when Google login is not configured.
+- Review rate-limit and administrator lockout values against expected traffic.
 
-## 6. Metrics Endpoint Protection
+## Backup security
 
-The `/metrics` endpoint is protected by an optional Bearer token:
-* **Config:** Set `METRICS_TOKEN` to a random 64-char hex string.
-  ```bash
-  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-  ```
-* **Usage:** `Authorization: Bearer <METRICS_TOKEN>`
-* If `METRICS_TOKEN` is empty, the endpoint is unprotected (dev-only; not recommended for production).
+- Encrypt backups before offsite transfer.
+- Restrict backup files to the operator account.
+- Keep database backups and encryption keys in separate security domains.
+- Test recovery regularly; an untested backup is not a recovery plan.
+- Never delete Docker volumes during routine image cleanup.
+
+## Production checklist
+
+- Required secrets are unique, valid, and absent from the repository and CI logs.
+- HTTPS is enforced and certificates renew successfully.
+- OAuth callback URLs exactly match the production HTTPS origin.
+- `METRICS_TOKEN`, webhook signing, CSRF protection, and rate limits are enabled.
+- PostgreSQL, Redis, API, worker, and web ports are not publicly exposed.
+- The production host key is pinned with `DEPLOY_HOST_FINGERPRINT`.
+- A recent encrypted backup and a tested recovery procedure exist.
+- CI passed for the exact release SHA and the immutable tag points to `main`.
+
+## Pre-release checklist
+
+- CI passed for the exact release SHA.
+- The tag points to a commit on `main`.
+- Production secrets and OAuth callbacks are valid.
+- A recent verified database backup exists.
+- Compose validation and image builds pass.
+- Database migrations were reviewed for backward compatibility.
+- `/live` and `/ready` return HTTP 200 after deployment.
+- HTTPS and certificate validity are confirmed externally.

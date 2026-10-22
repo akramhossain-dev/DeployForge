@@ -1,8 +1,5 @@
 name: CD — Deploy to Production
 
-# Production deploys are explicit: create and push a semantic version tag.
-# The release gate requires that exact commit to be on main and have a
-# successful completed CI run before any production environment is touched.
 on:
   push:
     tags:

@@ -1,34 +1,18 @@
-/**
- * Runtime Manager — Shared Type Definitions
- *
- * These types model the full lifecycle:
- *   RequirementsDetector → EnvironmentScanner → DependencyComparator
- *     → InstallationPlanner → RuntimeInstaller → PostInstallVerifier
- */
 
-// ─── Detection ────────────────────────────────────────────────────────────────
 
-/** A runtime/tool detected as required by the project files. */
 export type DetectedRuntime = {
-    /** Canonical identifier, e.g. 'nodejs', 'python', 'docker' */
     name: RuntimeName;
-    /** Minimum required version string (semver or raw), null if unspecified */
     requiredVersion: string | null;
-    /** The project file that triggered this detection */
     sourceFile: string;
 };
 
-// ─── Environment Scan ─────────────────────────────────────────────────────────
 
-/** A single runtime found installed on the VPS. */
 export type InstalledRuntime = {
     name: RuntimeName;
-    /** Version string returned by the CLI, null if not installed */
     version: string | null;
     installed: boolean;
 };
 
-/** System-level information about the VPS. */
 export type SystemInfo = {
     os: string;
     osVersion: string;
@@ -44,7 +28,6 @@ export type SystemInfo = {
     uptimeSeconds: number;
 };
 
-/** Service daemon status. */
 export type ServiceStatus = {
     docker: 'running' | 'stopped' | 'not_installed';
     nginx: 'running' | 'stopped' | 'not_installed';
@@ -53,7 +36,6 @@ export type ServiceStatus = {
     mysql: 'running' | 'stopped' | 'not_installed';
 };
 
-/** Full result of scanning a VPS environment. */
 export type EnvironmentScanResult = {
     system: SystemInfo;
     runtimes: InstalledRuntime[];
@@ -61,11 +43,9 @@ export type EnvironmentScanResult = {
     scannedAt: string;
 };
 
-// ─── Comparison ───────────────────────────────────────────────────────────────
 
 export type RuntimeDiffStatus = 'ok' | 'missing' | 'incompatible';
 
-/** Result of comparing a single required runtime against what is installed. */
 export type RuntimeDiff = {
     name: RuntimeName;
     requiredVersion: string | null;
@@ -74,11 +54,9 @@ export type RuntimeDiff = {
     sourceFile: string;
 };
 
-// ─── Installation Plan ────────────────────────────────────────────────────────
 
 export type InstallAction = 'install' | 'skip';
 
-/** One item in the install plan. */
 export type InstallationPlanItem = {
     name: RuntimeName;
     action: InstallAction;
@@ -86,14 +64,11 @@ export type InstallationPlanItem = {
     targetVersion: string | null;
 };
 
-/** The full plan generated before modifying the VPS. */
 export type InstallationPlan = {
     items: InstallationPlanItem[];
-    /** True when nothing needs to be installed. */
     isNoop: boolean;
 };
 
-// ─── Installation Log ─────────────────────────────────────────────────────────
 
 export type InstallLogLevel = 'info' | 'success' | 'error' | 'warn';
 
@@ -104,7 +79,6 @@ export type InstallationLogEntry = {
     runtimeName?: RuntimeName;
 };
 
-// ─── Post-Install Verification ────────────────────────────────────────────────
 
 export type VerificationResult = {
     name: RuntimeName;
@@ -113,7 +87,6 @@ export type VerificationResult = {
     error?: string;
 };
 
-// ─── Preflight ────────────────────────────────────────────────────────────────
 
 export type PreflightCheck = {
     check: string;
@@ -126,7 +99,6 @@ export type PreflightResult = {
     ready: boolean;
 };
 
-// ─── analyzeAndPrepare Result ─────────────────────────────────────────────────
 
 export type PrepareResult = {
     requirements: DetectedRuntime[];
@@ -139,7 +111,6 @@ export type PrepareResult = {
     failureReason?: string;
 };
 
-// ─── Allowed Runtime Names ────────────────────────────────────────────────────
 
 export const RUNTIME_NAMES = [
     'nodejs',

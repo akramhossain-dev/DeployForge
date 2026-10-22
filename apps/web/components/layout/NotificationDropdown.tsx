@@ -41,13 +41,11 @@ export function NotificationDropdown() {
     const { data: unreadData } = useUnreadCount();
     const markAllAsRead = useMarkAllAsRead();
 
-    // Real-time connection
     useNotificationStream(true);
 
     const notifications = recentData || [];
     const unreadCount = unreadData?.count || 0;
 
-    // Close on click outside
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -60,7 +58,6 @@ export function NotificationDropdown() {
 
     return (
         <div className="relative" ref={dropdownRef}>
-            {/* Bell Button */}
             <button
                 onClick={() => setOpen(!open)}
                 className="relative flex h-8 w-8 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-[#A1A1A1] transition-colors hover:bg-[#111111] hover:text-white"
@@ -74,10 +71,8 @@ export function NotificationDropdown() {
                 )}
             </button>
 
-            {/* Dropdown Panel */}
             {open && (
                 <div className="glass-dropdown absolute right-0 top-10 z-50 w-[340px] rounded-md">
-                    {/* Header */}
                     <div className="flex items-center justify-between border-b border-[#1F1F1F] px-3.5 py-2.5">
                         <div className="flex items-center gap-2">
                             <h3 className="text-xs font-bold text-white">Notifications</h3>
@@ -97,7 +92,6 @@ export function NotificationDropdown() {
                         )}
                     </div>
 
-                    {/* Notification List */}
                     <div className="max-h-[360px] overflow-y-auto no-scrollbar font-mono text-xs">
                         {notifications.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 text-center text-[#666666]">
@@ -111,7 +105,6 @@ export function NotificationDropdown() {
                         )}
                     </div>
 
-                    {/* Footer */}
                     <div className="border-t border-[#1F1F1F] p-2">
                         <Link
                             href="/notifications"

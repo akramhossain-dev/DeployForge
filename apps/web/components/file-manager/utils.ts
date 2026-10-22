@@ -115,7 +115,6 @@ export function validateName(name: string): string | null {
     return null;
 }
 
-// ─── Clipboard item type ──────────────────────────────────────────────────────
 export type FMClipboard = {
     paths: string[];
     operation: 'copy' | 'cut';

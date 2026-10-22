@@ -30,7 +30,6 @@ export function maskSensitiveData(text: string): string {
         return `${p1}${p2}${p3}********`;
     });
 
-    // 2. CLI flags (e.g., --token xyz)
     const cliPattern = /(--password|--token|--key)\s+([^\s;'"\n\r]+)/gi;
     sanitized = sanitized.replace(cliPattern, (_match, p1) => {
         return `${p1} ********`;
@@ -42,7 +41,6 @@ export function maskSensitiveData(text: string): string {
 export function parseError(rawError: string): ParsedError {
     const masked = maskSensitiveData(rawError || '');
     
-    // 1. Container Restart / Runtime Crashes
     if (/container is restarting/i.test(masked) || /daemon: Container.*restarting/i.test(masked)) {
         return {
             category: 'Runtime Error',
@@ -57,7 +55,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 2. Module / File Not Found
     if (/MODULE_NOT_FOUND/i.test(masked) || /cannot find module/i.test(masked) || /no such file or directory/i.test(masked)) {
         return {
             category: 'Runtime Error',
@@ -72,7 +69,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 3. NPM Lockfile / Dependency failures
     if (/npm ci EUSAGE/i.test(masked) || /package-lock\.json was not found/i.test(masked) || /package-lock\.json.*missing/i.test(masked)) {
         return {
             category: 'Build Error',
@@ -87,7 +83,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 4. General Build/Compile Errors
     if (/build failed/i.test(masked) || /tsc.*failed/i.test(masked) || /vite build.*error/i.test(masked) || /astro build.*error/i.test(masked)) {
         return {
             category: 'Build Error',
@@ -102,7 +97,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 5. Git Clone Errors
     if (/git clone failed/i.test(masked) || /permission denied \(publickey\)/i.test(masked) || /repository not found/i.test(masked) || /could not resolve host/i.test(masked) && /github/i.test(masked)) {
         return {
             category: 'Git Error',
@@ -117,7 +111,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 6. Nginx / Routing/ DNS Errors
     if (/nginx: configuration file.*failed/i.test(masked) || /DNS record.*not found/i.test(masked) || /nginx: \[emerg\]/i.test(masked) || /nginx.*emerg/i.test(masked)) {
         return {
             category: 'Domain Error',
@@ -132,7 +125,6 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    // 7. Certbot / SSL Generation Errors
     if (/failed authorization procedure/i.test(masked) || /certbot failed/i.test(masked) || /ssl verification failed/i.test(masked) || /acme-challenge/i.test(masked)) {
         return {
             category: 'SSL Error',

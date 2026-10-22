@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { AlertTriangle, Home, LayoutDashboard, RefreshCw, SearchX } from '@/components/icons';
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 
-// ── Shared wrapper ─────────────────────────────────────────────────────────────
 function FallbackShell({ children }: { children: React.ReactNode }) {
     return (
         <main className="flex min-h-screen items-center justify-center bg-[#000000] px-4 py-16 text-white font-mono text-xs sm:px-6 lg:px-8">
@@ -13,19 +12,16 @@ function FallbackShell({ children }: { children: React.ReactNode }) {
     );
 }
 
-// ── 404 ────────────────────────────────────────────────────────────────────────
 export function NotFoundView() {
     const auth = useAuthSession();
 
     return (
         <FallbackShell>
             <section className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 text-center space-y-4 sm:p-8">
-                {/* Icon */}
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#111111] text-white">
                     <SearchX size={20} />
                 </div>
 
-                {/* Headline */}
                 <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-[#666666]">Error 404</p>
                     <h1 className="mt-1 text-lg font-bold tracking-tight text-white sm:text-xl">Page not found</h1>
@@ -34,7 +30,6 @@ export function NotFoundView() {
                     </p>
                 </div>
 
-                {/* Actions */}
                 <div className="pt-2 flex flex-col gap-2 sm:flex-row sm:justify-center">
                     <Link
                         href="/"
@@ -56,17 +51,14 @@ export function NotFoundView() {
     );
 }
 
-// ── Global error ───────────────────────────────────────────────────────────────
 export function GlobalErrorView({ reset }: { reset: () => void }) {
     return (
         <FallbackShell>
             <section className="w-full max-w-md rounded-md border border-rose-900/50 bg-[#0A0A0A] p-6 text-center space-y-4 sm:p-8">
-                {/* Icon */}
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-rose-900/50 bg-rose-950/20 text-rose-400">
                     <AlertTriangle size={20} />
                 </div>
 
-                {/* Headline */}
                 <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-400">Rendering Error</p>
                     <h1 className="mt-1 text-lg font-bold tracking-tight text-white sm:text-xl">Something went wrong</h1>
@@ -75,7 +67,6 @@ export function GlobalErrorView({ reset }: { reset: () => void }) {
                     </p>
                 </div>
 
-                {/* Actions */}
                 <div className="pt-2 flex flex-col gap-2 sm:flex-row sm:justify-center">
                     <button
                         type="button"

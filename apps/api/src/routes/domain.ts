@@ -46,7 +46,6 @@ const verifyDnsQuerySchema = z.object({
 export default async function domainRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    // Attach / Add a domain
     fastify.post('/attach', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -74,7 +73,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
     });
 
 
-    // Remove a domain
     fastify.delete('/remove/:domainId', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -96,7 +94,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // Issue SSL certificate
     fastify.post('/ssl/issue/:domainId', {
         config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -117,7 +114,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // Toggle Auto-HTTPS (HTTP -> HTTPS redirect)
     fastify.post('/auto-https/:domainId', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     }, async (request, reply) => {
@@ -136,7 +132,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // List all domains for current user
     fastify.get('/list', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, _reply) => {
@@ -166,7 +161,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, _reply) => {
         const { deploymentId } = z.object({ deploymentId: z.string().uuid() }).parse(request.params);
-        // Soft-deleted domains must not leak into active deployment responses.
         const domains = await prisma.domain.findMany({
             where: {
                 deploymentId,
@@ -199,7 +193,6 @@ export default async function domainRoutes(fastify: FastifyInstance) {
         return { success: true, data: subdomains };
     });
 
-    // Detailed DNS verification
     fastify.get('/verify-dns/:domainName', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request, reply) => {

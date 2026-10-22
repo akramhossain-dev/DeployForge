@@ -43,7 +43,6 @@ export default function FileManagerPage({ params }: PageProps) {
 
     return (
         <div className="space-y-4 font-mono text-xs h-[calc(100vh-140px)] flex flex-col">
-            {/* Header Breadcrumbs */}
             <div className="flex items-center gap-3 border-b border-[#1F1F1F] pb-3 shrink-0">
                 <Link href="/file-manager">
                     <button className="flex h-8 w-8 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-[#A1A1A1] hover:text-white transition-colors">
@@ -57,7 +56,6 @@ export default function FileManagerPage({ params }: PageProps) {
                 </div>
             </div>
 
-            {/* Main File Explorer Container */}
             <div className="flex-1 min-h-0 rounded-md border border-[#1F1F1F] bg-[#0A0A0A]">
                 <FileManager vpsId={vpsId} vpsName={vps.name} />
             </div>

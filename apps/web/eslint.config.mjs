@@ -7,9 +7,6 @@ export default defineConfig([
   ...nextVitals,
   {
     files: ['**/*.{ts,tsx}'],
-    // These React Compiler rules require broad state-model refactors. The
-    // compiler is not enabled; retain the established effect-driven behavior
-    // while the Next 16 runtime migration is validated independently.
     plugins: {
       '@typescript-eslint': tseslint.plugin,
       'unused-imports': unusedImports,

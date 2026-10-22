@@ -16,7 +16,6 @@ const updateSchema = z.object({
 export default async function alertSettingsRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', (fastify as any).authGuard);
 
-    // Get alert settings (creates default if none exist)
     fastify.get('/', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
@@ -24,7 +23,6 @@ export default async function alertSettingsRoutes(fastify: FastifyInstance) {
         return { success: true, data: rule };
     });
 
-    // Update alert settings
     fastify.patch('/', {
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     }, async (request) => {

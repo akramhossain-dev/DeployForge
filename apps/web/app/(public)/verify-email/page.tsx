@@ -70,14 +70,12 @@ function VerifyEmailContent() {
 export default function VerifyEmailPage() {
     return (
         <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-4 py-12 text-white">
-            {/* Aurora */}
             <div className="pointer-events-none absolute inset-0 -z-10">
                 <div className="absolute left-1/2 top-0 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-cyan-400/10 blur-3xl" />
                 <div className="absolute bottom-0 right-[-4rem] h-[24rem] w-[24rem] rounded-full bg-violet-400/8 blur-3xl" />
             </div>
 
             <div className="w-full max-w-md space-y-6">
-                {/* Brand */}
                 <div className="text-center">
                     <div className="inline-flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-gradient-to-b from-slate-800/80 to-slate-900/80 px-4 py-2.5 shadow-xl">
                         <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-rose-400 to-rose-600">
@@ -88,7 +86,6 @@ export default function VerifyEmailPage() {
                     <p className="mt-3 text-xs font-black uppercase tracking-widest text-slate-500">Email Verification</p>
                 </div>
 
-                {/* Card */}
                 <div className="rounded-2xl border border-white/[0.1] bg-white/[0.06] p-1 shadow-2xl backdrop-blur-xl">
                     <div className="rounded-xl border border-white/[0.07] bg-slate-950/90 p-6">
                         <Suspense fallback={

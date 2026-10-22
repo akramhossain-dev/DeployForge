@@ -116,7 +116,6 @@ export default function TeamPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -128,7 +127,6 @@ export default function TeamPage() {
                 </div>
             </div>
 
-            {/* Received Invitations */}
             {receivedInvitations.length > 0 && (
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex items-center gap-2 text-white font-bold">
@@ -175,9 +173,7 @@ export default function TeamPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    {/* Left 2 Cols: Member & Invites List */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Active Project Selector */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                             <div className="flex items-center gap-2 text-white">
                                 <Users size={14} />
@@ -195,7 +191,6 @@ export default function TeamPage() {
                             </select>
                         </div>
 
-                        {/* Members Panel */}
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                             <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
                                 <span className="font-bold text-white text-sm">Project Members</span>
@@ -212,7 +207,6 @@ export default function TeamPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#1F1F1F]">
-                                        {/* Owner row */}
                                         <tr className="align-middle">
                                             <td className="py-3">
                                                 <div className="flex items-center gap-2">
@@ -233,7 +227,6 @@ export default function TeamPage() {
                                             </td>
                                         </tr>
 
-                                        {/* Members list */}
                                         {members.filter((m: any) => m.userId !== selectedProject?.userId).map((member: any) => (
                                             <tr key={member.id} className="align-middle">
                                                 <td className="py-3">
@@ -287,7 +280,6 @@ export default function TeamPage() {
                             </div>
                         </div>
 
-                        {/* Invites list */}
                         {invites.length > 0 && (
                             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                                 <span className="font-bold text-white text-sm">Pending Outgoing Invites</span>
@@ -330,7 +322,6 @@ export default function TeamPage() {
                         )}
                     </div>
 
-                    {/* Right 1 Col: Invite Form & Role Guide */}
                     <div className="space-y-6">
                         {canManage ? (
                             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
@@ -381,7 +372,6 @@ export default function TeamPage() {
                             </div>
                         )}
 
-                        {/* Role Permissions Reference */}
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-3">
                             <span className="font-bold text-white text-xs">Role Permissions</span>
                             <div className="space-y-2 text-[11px] text-[#A1A1A1]">

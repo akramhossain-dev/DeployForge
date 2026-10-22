@@ -70,7 +70,6 @@ export default function NotificationsPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -99,7 +98,6 @@ export default function NotificationsPage() {
                 </div>
             </div>
 
-            {/* Filters Bar */}
             <div className="flex flex-col gap-3 sm:flex-row">
                 <input
                     type="text"
@@ -128,7 +126,6 @@ export default function NotificationsPage() {
                 </select>
             </div>
 
-            {/* Notifications Feed */}
             {isLoading ? (
                 <div className="flex h-40 items-center justify-center font-mono text-xs text-[#666666]">
                     <Loader2 size={16} className="animate-spin mr-2" /> Loading notification feed...
@@ -191,7 +188,6 @@ export default function NotificationsPage() {
                 </div>
             )}
 
-            {/* Pagination */}
             {pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-[#1F1F1F] pt-4 text-xs text-[#A1A1A1]">
                     <span>Page {page} of {pagination.totalPages} ({pagination.total} total)</span>
@@ -214,7 +210,6 @@ export default function NotificationsPage() {
                 </div>
             )}
 
-            {/* Clear Modal */}
             {showClearAllModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono text-xs">
                     <div className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">

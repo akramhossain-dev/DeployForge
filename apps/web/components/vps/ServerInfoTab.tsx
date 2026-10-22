@@ -93,7 +93,6 @@ export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInf
 
     return (
         <div className="space-y-4 font-mono text-xs">
-            {/* Top Bar */}
             <div className="flex items-center justify-between gap-4 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3">
                 <div className="flex items-center gap-2">
                     <Server size={14} className="text-white" />
@@ -108,7 +107,6 @@ export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInf
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {/* Ingress Gateway & Multi-Tenant Routing */}
                 <InfoCard icon={<ShieldCheck size={14} className={gatewayReady ? 'text-emerald-400' : 'text-[#666666]'} />} title="Ingress Gateway & Multi-Tenancy">
                     <Row label="Gateway Engine" value={vps.gatewayVersion || 'Not verified'} />
                     <Row label="Gateway Status" value={vps.gatewayStatus || 'UNKNOWN'} />
@@ -118,7 +116,6 @@ export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInf
                     <Row label="Multi-Site Mode" value={<span className={clsx('font-bold', gatewayReady ? 'text-emerald-400' : 'text-[#666666]')}>{gatewayReady ? 'VERIFIED' : 'UNAVAILABLE'}</span>} />
                 </InfoCard>
 
-                {/* Network */}
                 <InfoCard icon={<Globe size={14} />} title="Network Configuration">
                     <Row label="Hostname" value={d.hostname} />
                     <Row label="Public IP" value={d.publicIp} />
@@ -126,7 +123,6 @@ export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInf
                     <Row label="SSH Port" value={vps.port} />
                 </InfoCard>
 
-                {/* OS */}
                 <InfoCard icon={<Info size={14} />} title="Operating System">
                     <Row label="OS" value={d.os} />
                     <Row label="Kernel" value={d.kernel} />
@@ -134,19 +130,16 @@ export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInf
                     <Row label="Timezone" value={d.timezone} />
                 </InfoCard>
 
-                {/* CPU */}
                 <InfoCard icon={<Cpu size={14} />} title="Processor">
                     <Row label="Model" value={d.cpuModel} />
                     <Row label="CPU Cores" value={d.cpuCores} />
                 </InfoCard>
 
-                {/* Memory */}
                 <InfoCard icon={<MemoryStick size={14} />} title="Memory Allocation">
                     <UsageBar used={d.ramUsed} total={d.ramTotal} label="RAM" />
                     {d.swapTotal > 0 && <UsageBar used={d.swapUsed} total={d.swapTotal} label="Swap" />}
                 </InfoCard>
 
-                {/* Storage */}
                 <InfoCard icon={<HardDrive size={14} />} title="Disk Storage">
                     <Row label="Total" value={d.diskTotal} />
                     <Row label="Used" value={d.diskUsed} />
@@ -154,7 +147,6 @@ export default function ServerInfoTab({ vps, useServerInfoHook = useVpsServerInf
                     <Row label="Usage" value={d.diskPercent} />
                 </InfoCard>
 
-                {/* Time */}
                 <InfoCard icon={<Clock size={14} />} title="System Time & Uptime">
                     <Row label="Uptime" value={d.uptimeFormatted} />
                     <Row label="Boot Time" value={d.bootTime} />

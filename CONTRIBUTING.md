@@ -12,7 +12,7 @@ Thank you for your interest in contributing to DeployForge! This guide outlines 
    ```bash
    git checkout -b feature/your-feature-name
    ```
-3. **Environment Setup:** Follow the instructions in [docs/SETUP.md](docs/SETUP.md) to initialize your database, cache, and launch local development services.
+3. **Environment Setup:** Copy `.env.example` to `.env`, install dependencies, initialize the database, and launch the local services.
 4. **Develop and Implement:**
    - Write your code following the monorepo architecture.
    - Utilize existing shared workspace packages (`packages/security` for crypto/hashing, `packages/vps` for SSH) to ensure system uniformity.
@@ -74,11 +74,11 @@ Do **not** commit `package-lock.json` or `yarn.lock` files.
   ```
   feat(api): add session revocation on password reset
   fix(web): correct useCallback dependency in vps page
-  docs: update API.md with notification endpoints
+  chore: update project metadata
   chore(deps): bump next from 14.1.0 to 14.2.0
   ```
 * **Code Review:** All PRs require approval from at least one core maintainer. Do not merge incomplete features or disabled code placeholders.
-* **Documentation:** If your change adds or modifies a feature, update the relevant doc in `docs/`. If it adds new API routes, update `docs/API.md`. If it adds new env vars, update both example files.
+* **Environment Templates:** If your change adds new environment variables, update both example files.
 
 ---
 

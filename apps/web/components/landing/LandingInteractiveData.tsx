@@ -49,7 +49,6 @@ export function LandingConsolePreview() {
 
     return (
         <div className="grid gap-6 p-6 lg:grid-cols-3">
-            {/* Pipeline status column */}
             <div className="space-y-4 lg:col-span-2">
                 <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
                     <div className="flex items-center gap-2">
@@ -82,7 +81,6 @@ export function LandingConsolePreview() {
                             </div>
                         ))
                     ) : (
-                        /* Static realistic sample when unauthenticated or empty */
                         <div className="space-y-2">
                             <div className="flex items-center justify-between rounded-md border border-[#1F1F1F] bg-[#000000] p-3 text-xs font-mono">
                                 <div className="flex items-center gap-3 min-w-0">
@@ -112,7 +110,6 @@ export function LandingConsolePreview() {
                     )}
                 </div>
 
-                {/* Terminal log output snippet */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#000000] p-3 font-mono text-[11px] leading-relaxed text-[#A1A1A1]">
                     <p className="text-[#666666]">[15:24:02] SSH pool connection verified (root@192.168.1.100:22)</p>
                     <p className="text-[#666666]">[15:24:04] Extracting build context into Docker engine container sandbox...</p>
@@ -121,7 +118,6 @@ export function LandingConsolePreview() {
                 </div>
             </div>
 
-            {/* Node status / stats sidebar */}
             <div className="space-y-4 border-t border-[#1F1F1F] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
                 <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
                     <div className="flex items-center gap-2">

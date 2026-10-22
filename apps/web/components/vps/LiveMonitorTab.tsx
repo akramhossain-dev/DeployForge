@@ -110,7 +110,6 @@ export default function LiveMonitorTab({ vps, useLiveMetricsHook = useVpsLiveMet
 
     return (
         <div className="space-y-4 font-mono text-xs">
-            {/* Status bar */}
             <div className="flex items-center justify-between gap-4 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3">
                 <div className="flex items-center gap-2">
                     <Activity size={14} className="text-white" />

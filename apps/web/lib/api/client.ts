@@ -49,7 +49,6 @@ export type ApiRequestInit = RequestInit & {
 function handleUnauthorized(path: string) {
     if (typeof window === 'undefined') return;
 
-    // Clear stale auth cookies so middleware won't redirect based on them
     document.cookie = 'accessToken=; Path=/; Max-Age=0; SameSite=Lax';
     document.cookie = 'refreshToken=; Path=/; Max-Age=0; SameSite=Lax';
 

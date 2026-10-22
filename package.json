@@ -7,8 +7,6 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "phase6": "bash scripts/phase6/phase6.sh",
-    "phase6:test": "bash scripts/phase6/tests/run.sh",
     "db:push": "pnpm exec prisma db push --schema prisma/schema.prisma",
     "db:generate": "pnpm exec prisma generate --schema prisma/schema.prisma",
     "db:studio": "pnpm exec prisma studio --schema prisma/schema.prisma",

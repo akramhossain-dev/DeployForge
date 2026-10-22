@@ -45,14 +45,12 @@ export class DomainService {
             result.isValid = addresses.includes(expectedIp);
             result.propagated = result.isValid;
         } catch (_err) {
-            // DNS resolution failed – no A records
         }
 
         try {
             const cnames = await resolveCname(domainName);
             result.cname = cnames[0] || null;
         } catch (_err) {
-            // No CNAME record
         }
 
         return result;
@@ -102,14 +100,12 @@ export class DomainService {
                 ...auth,
             });
 
-            // Ensure Traefik and deployforge-net exist
             await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
 
             const routerId = `df-${deployment.projectId}`;
             const safeProjectName = deployment.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
             const shortDeployId = deploymentId.slice(0, 8);
 
-            // Phase 3 routes are updated atomically without recreating the active runtime.
             if (deployment.project.activeRelease) {
                 await ReleaseService.updateDomainRoute(ssh, deployment.projectId, cleanDomain, routerId);
             } else if (deployment.status === 'RUNNING' && deployment.containerId) {
@@ -136,7 +132,6 @@ export class DomainService {
                         await prisma.deployment.update({ where: { id: deploymentId }, data: { containerId: newCId.trim() } });
                     }
                 } else if (!deployment.containerId.startsWith('compose:')) {
-                    // Inspect existing container image and env
                     const { stdout: inspectOut } = await ssh.execute(`docker inspect --format '{{.Config.Image}}' ${shellQuote(deployment.containerId)}`).catch(() => ({ stdout: '' }));
                     const imageTag = inspectOut.trim();
                     if (imageTag) {
@@ -325,7 +320,6 @@ export class DomainService {
                 }
             } catch (error) {
                 if (deployment.project.activeRelease) throw error;
-                // Legacy label-based route repair remains best-effort.
             } finally {
                 ssh.disconnect();
             }
@@ -386,8 +380,6 @@ export class DomainService {
             );
         }
 
-        // Traefik automatically negotiates Let's Encrypt certificates upon HTTPS traffic.
-        // We trigger an outbound handshake request to initiate certificate issuance.
         const ssh = new SSHService();
         try {
             const auth = vps.authType === 'key'
@@ -397,7 +389,6 @@ export class DomainService {
             await ssh.connect({ host: vps.ipAddress, port: vps.port, username: vps.username, ...auth });
             await ssh.execute(`curl -k -fsS https://${domain.domainName} >/dev/null 2>&1 || true`);
         } catch {
-            // Non-fatal
         } finally {
             ssh.disconnect();
         }

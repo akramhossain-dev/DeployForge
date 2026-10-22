@@ -1,125 +1,91 @@
-# 🏗️ DeployForge Architectural Specifications
+# DeployForge Architecture
 
-DeployForge is engineered on the principle of separating control management (Control Plane) from application execution environments (Data Plane). This document details the component architecture, monorepo layout, communication pipelines, and multi-tenant deployment lifecycles.
-
----
-
-## 1. High-Level Architecture Model
-
-DeployForge acts as a central control hub. Instead of installing heavy daemon agents on target environments, the platform connects agentlessly to standard Linux VPS nodes over SSH. It initializes a persistent **Traefik Ingress Gateway** and an isolated virtual bridge network (`deployforge-net`), allowing multiple independent applications and static sites to co-exist securely on a single VPS without host port collisions.
-
-```mermaid
-graph TD
-    User((Developer)) -->|HTTPS| WebApp[Next.js Frontend]
-    WebApp -->|REST API & WS| API[Fastify Backend]
-  
-    subgraph Control Plane
-        API --> DB[(PostgreSQL)]
-        API --> Cache[(Redis Cache / Broker)]
-        API --> Queue[BullMQ Work Queue]
-        Queue --> Worker[Deployment Worker]
-    end
-  
-    subgraph "Data Plane (Target Linux VPS)"
-        Worker -->|SSH Connection Tunnel| VPS[Target Ubuntu VPS]
-        VPS -->|Host Ports 80 & 443| Traefik[Traefik Ingress Gateway]
-        Traefik -->|deployforge-net (172.28.0.0/16)| Containers[Sandboxed App & Static Containers]
-    end
-  
-    subgraph External
-        API <--> GitHub[GitHub API / Webhooks]
-        Traefik <--> LetEncrypt[Let's Encrypt ACME]
-    end
-```
-
-### 1.1 The Control Plane (Central Orchestrator)
-
-Responsible for user management, webhook event handling, build orchestration, state auditing, and server statistics aggregation.
-
-* **Next.js Web App (`apps/web`):** Built with React 18, Zustand, and Tailwind CSS. Structured with public portals, protected developer consoles, and secure admin dashboards.
-* **Fastify Server (`apps/api`):** Built with Fastify. Houses services for user authentication, SSH command orchestration, project configurations, and runtime detections.
-* **BullMQ Task Processor:** Directs async server setups, framework detection, docker builds, and metrics polls. Offloads heavy operations from the main HTTP request loop.
-* **Redis Cache & Broker:** Serves as the message broker for BullMQ and stores ephemeral session caching.
-* **PostgreSQL & Prisma:** Core system metadata repository. Includes relational schemas for projects, project memberships (RBAC), invitations, deployments, domains, servers, user tokens, and security trails.
-
-### 1.2 The Data Plane (Multi-Tenant Target VPS)
-
-The remote hosting environment where user applications execute.
-
-* **Agentless SSH-Driven Control:** The Control Plane communicates with Data Plane nodes entirely over secure SSH connections (managed via the Node `ssh2` client).
-* **Traefik Ingress Controller:** A lightweight, persistent Traefik container (`deployforge-traefik`) binds exclusively to host ports 80 and 443. It automatically discovers active application containers by listening to `/var/run/docker.sock`.
-* **Internal Docker Virtual Bridge (`deployforge-net`):** All tenant containers attach to `deployforge-net`. No container ever publishes host ports directly (eliminating `PORT_IN_USE` collisions across different projects).
-* **Label-Driven Routing & Automated TLS:** Routing rules are declared dynamically via Docker container labels. Traefik automatically provisions and renews Let's Encrypt TLS certificates using ACME HTTP-01 challenges.
-* **Magic DNS Support:** When a user deploys without a custom domain, DeployForge assigns `<projectSlug>-<deployId>.<vpsIp>.sslip.io`, which resolves immediately to the VPS with valid SSL.
-
----
-
-## 2. Monorepo Structural Blueprint
-
-DeployForge uses a Turborepo monorepo configuration:
+## System topology
 
 ```text
-DeployForge/
-├── apps/
-│   ├── api/                  # Fastify Backend Server
-│   └── web/                  # Next.js App Router Frontend
-├── packages/
-│   ├── database/             # Shared Prisma Client & Models
-│   ├── mail/                 # Transactional Email Templates & Transport
-│   ├── security/             # AES-256-GCM & Argon2id Crypto Library
-│   ├── shared/               # Shared API Contracts, Schemas & Errors
-│   └── vps/                  # SSH Shell & Remote File Transfer Lib
-└── prisma/                   # PostgreSQL Schema definitions
+Browser
+   |
+ HTTPS
+   v
+Nginx ----> Web
+   |
+   +------> API ----> PostgreSQL
+              |----> Redis/BullMQ ----> Worker
+              |                         |
+              +-------------------------+
+                         SSH/SFTP
+                            |
+                     Target VPS nodes
 ```
 
-* **`packages/security`:** Encapsulates the application's security primitives (AES-256-GCM encryption for stored secrets, Argon2id password hashing, and JWT signatures).
-* **`packages/vps`:** Standardizes remote execution patterns over SSH, command sanitization, and SFTP transfers.
-* **`packages/database`:** Shares a single database client configuration across API, migrations, and backend worker contexts.
-* **`packages/mail`:** Standardizes transactional mail dispatching (e.g., registration verification OTPs and password reset triggers).
-* **`packages/shared`:** Houses API contracts, input validation schemas, unified errors, and shared utility functions.
+The control plane and target VPS nodes are separate trust zones. Control-plane state is stored in PostgreSQL and Redis. Application builds and runtimes execute on the selected target VPS.
 
----
+## Control-plane services
 
-## 3. Core Execution Workflows
+| Service | Responsibility |
+| --- | --- |
+| `nginx` | Public ports 80/443, ACME challenge handling, TLS termination, API/WebSocket proxying, and web routing. |
+| `web` | Next.js dashboard, authentication UI, administration, deployments, domains, monitoring, terminal, and file manager. |
+| `api` | HTTP/WebSocket endpoints, authorization, validation, persistence, orchestration, and audit logging. |
+| `worker` | BullMQ jobs for deployments and long-running infrastructure operations. |
+| `migrate` | One-shot Prisma migration image used before application restart. |
+| `postgres` | Durable relational state and release history. |
+| `redis` | Queue transport, distributed deployment locks, session/cache data, and event coordination. |
 
-### 3.1 VPS Initialization (One-Time Bootstrap)
+## Compose networks and storage
 
-When a VPS is added to DeployForge:
+- `deployforge_internal` is an internal network for database, Redis, migration, API, and worker traffic.
+- `deployforge_proxy` connects Nginx to API and web without publishing their ports on the host.
+- `deployforge_dev` supports local tooling and compatibility; production firewalls must not expose its internal services.
+- `postgres_data`, `redis_data`, `backup_data`, `certbot_webroot`, and `certbot_certs` are persistent volumes.
 
-1. Verifies/installs Docker Engine and Docker Compose.
-2. Creates the shared external Docker network `deployforge-net`.
-3. Launches the persistent `deployforge-traefik` container with ACME storage mounted at `/etc/deployforge/traefik/acme/acme.json`.
+API, worker, and web use read-only root filesystems, dropped Linux capabilities, `no-new-privileges`, and explicitly declared writable volumes or temporary filesystems.
 
-### 3.2 Label-Driven Zero-Downtime Deployment
+## Application layers
 
-```mermaid
-sequenceDiagram
-    participant W as BullMQ Worker
-    participant V as Target VPS (SSH)
-    participant T as Traefik Ingress
-    participant C_OLD as Old Container (df-p1-v1)
-    participant C_NEW as New Container (df-p1-v2)
+### API
 
-    W->>V: Connect via SSH & prepare working directory
-    W->>V: Clone repo or extract uploaded ZIP
-    W->>V: Build new Docker Image (tagged with releaseId)
-    W->>V: Spin up candidate on private deployforge-validation network
-    W->>V: Perform HTTP readiness check, then attach a unique release alias
-  
-    alt Health Check Succeeds
-        W->>T: Probe secret canary route and atomically replace stable route file
-        W->>C_OLD: Disconnect OLD release after public probe passes
-        Note over V,T: Old release remains retained for safe rollback
-        W->>W: Mark Deployment status as SUCCESS
-    else Health Check Fails
-        W->>C_NEW: Terminate NEW Container (Blue)
-        W->>W: Mark status as FAILED (Old container remains active)
-    end
-```
+Fastify registers route modules by domain: authentication, profile, sessions, VPS management, deployments, projects, domains, monitoring, runtime preparation, terminal, file manager, notifications, alerts, webhooks, and administration.
 
-### 3.3 Automated Metrics Collection
+Business logic lives under `apps/api/src/services`. Deployment execution is split into detection, build, Compose policy, validation, release, routing, rollback, resource policy, and maintenance services. The worker consumes queued jobs without duplicating HTTP request handling.
 
-1. **Cron Schedule:** Every 60 seconds, a background job scheduler publishes metrics collection tasks to BullMQ.
-2. **SSH Connection:** The worker opens an SSH tunnel to each active VPS in the system.
-3. **Execution:** Runs native commands (`top -b -n 1`, `df -h`, `docker stats --no-stream`).
-4. **Ingress:** Formats and writes the metrics logs to PostgreSQL, making them available for dashboard monitoring.
+### Web
+
+The Next.js App Router separates public, authenticated, and administrator surfaces. Shared API hooks and clients handle session-aware requests, while WebSocket connections provide live deployment status, logs, notifications, and terminal traffic.
+
+### Shared packages
+
+Workspace packages keep Prisma access, SSH/SFTP, cryptography, mail, and shared validation independent from API and UI route code. Turbo coordinates dependency-aware build, typecheck, test, and lint tasks.
+
+## Deployment flow
+
+1. Validate the request, project access, target server, configuration, and resource policy.
+2. Acquire a distributed project/deployment lock.
+3. Prepare the workspace and obtain source code or uploaded content.
+4. Detect runtime, framework, package manager, build command, start command, and application port.
+5. Build a release or sanitize a user-provided Compose definition.
+6. Create a private candidate network and candidate runtime.
+7. Probe candidate health without sending public traffic.
+8. Persist release metadata and atomically update the ingress route.
+9. Mark the release active and retain the previous release for rollback.
+10. Emit logs, status events, notifications, and audit records.
+
+Failures before route switching leave the active release unchanged. Failures after a routing operation invoke the deployment error and recovery path.
+
+## Production release flow
+
+The GitHub CD workflow runs only for `v*.*.*` tags. It verifies that the tagged SHA belongs to `main` and has a successful completed CI push run. The VPS then fetches the exact tag, verifies its SHA, validates Compose, builds images, starts PostgreSQL/Redis, runs the migration container, and restarts API/worker/web with health waits.
+
+Nginx and Certbot use the Compose `production` profile and persist certificates independently from routine application releases.
+
+## Health and observability
+
+- `/live`, `/health`, and `/liveness` verify that the API process responds.
+- `/ready` and `/readiness` check PostgreSQL and Redis dependencies.
+- `/metrics` exposes application metrics and supports bearer-token protection.
+- Deployment logs are persisted and streamed over WebSockets.
+- VPS health, live metrics, history, and environment scans are available through dedicated routes.
+
+## Data and recovery boundaries
+
+PostgreSQL is the source of truth for platform state. Redis is operational coordination state and must not be treated as the only copy of durable data. Docker volumes survive application image replacement but are not offsite backups. Production recovery therefore requires verified PostgreSQL backups, protected encryption keys, and tested restore procedures.

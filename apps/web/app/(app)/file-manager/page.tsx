@@ -41,7 +41,6 @@ export default function FileManagerIndexPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -53,7 +52,6 @@ export default function FileManagerIndexPage() {
                 </div>
             </div>
 
-            {/* Search Input */}
             <div className="relative max-w-sm">
                 <input
                     value={search}
@@ -63,7 +61,6 @@ export default function FileManagerIndexPage() {
                 />
             </div>
 
-            {/* Server Grid */}
             {isLoading ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {Array.from({ length: 4 }).map((_, i) => (

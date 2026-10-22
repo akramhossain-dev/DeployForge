@@ -155,7 +155,6 @@ export default function SecurityActivityPage() {
                     Comprehensive audit trail of security events, login attempts, session changes, and account credential updates.
                 </p>
 
-                {/* Filter and Search Bar */}
                 <div className="grid gap-3 md:grid-cols-12 mb-6">
                     <form onSubmit={handleSearchSubmit} className="relative md:col-span-7 flex">
                         <input
@@ -245,7 +244,6 @@ export default function SecurityActivityPage() {
                             </table>
                         </div>
 
-                        {/* Pagination Bar */}
                         {pagination && pagination.totalPages > 1 && (
                             <div className="flex items-center justify-between pt-3 border-t border-[#1F1F1F] font-mono text-xs">
                                 <div className="text-[#666666]">

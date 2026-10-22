@@ -167,7 +167,6 @@ function ResetPasswordContent() {
 export default function ResetPasswordPage() {
     return (
         <main className="relative isolate overflow-hidden bg-slate-950 text-white">
-            {/* Aurora */}
             <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
                 <div className="absolute left-[-8rem] top-0 h-[32rem] w-[32rem] rounded-full bg-cyan-400/10 blur-3xl" />
                 <div className="absolute bottom-0 right-[-8rem] h-[28rem] w-[28rem] rounded-full bg-violet-400/8 blur-3xl" />
@@ -175,7 +174,6 @@ export default function ResetPasswordPage() {
             </div>
 
             <section className="mx-auto grid min-h-screen max-w-6xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:px-8">
-                {/* ── Left panel ── */}
                 <div className="max-w-lg">
                     <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-100">
                         <Lock size={13} /> Security System
@@ -199,7 +197,6 @@ export default function ResetPasswordPage() {
                     </div>
                 </div>
 
-                {/* ── Right form card ── */}
                 <div className="w-full rounded-2xl border border-white/[0.1] bg-white/[0.06] p-1 shadow-2xl shadow-slate-950/80 backdrop-blur-xl">
                     <div className="rounded-xl border border-white/[0.08] bg-slate-950/90 p-6 sm:p-8">
                         <Suspense fallback={

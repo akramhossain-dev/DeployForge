@@ -23,7 +23,6 @@ function withQuery(path: string, params?: Record<string, string>) {
     return query ? `${path}?${query}` : path;
 }
 
-// ─── Notification List ──────────────────────────────────────────────
 export function useNotifications(params?: Record<string, string>) {
     return useQuery({
         queryKey: queryKeys.notifications(params),
@@ -32,7 +31,6 @@ export function useNotifications(params?: Record<string, string>) {
     });
 }
 
-// ─── Unread Count ───────────────────────────────────────────────────
 export function useUnreadCount() {
     return useQuery({
         queryKey: queryKeys.unreadCount,
@@ -41,7 +39,6 @@ export function useUnreadCount() {
     });
 }
 
-// ─── Recent Notifications (dropdown) ────────────────────────────────
 export function useRecentNotifications() {
     return useQuery({
         queryKey: queryKeys.recent,
@@ -50,7 +47,6 @@ export function useRecentNotifications() {
     });
 }
 
-// ─── Mark As Read ───────────────────────────────────────────────────
 export function useMarkAsRead() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -61,7 +57,6 @@ export function useMarkAsRead() {
     });
 }
 
-// ─── Mark All Read ──────────────────────────────────────────────────
 export function useMarkAllAsRead() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -72,7 +67,6 @@ export function useMarkAllAsRead() {
     });
 }
 
-// ─── Delete Notification ────────────────────────────────────────────
 export function useDeleteNotification() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -83,7 +77,6 @@ export function useDeleteNotification() {
     });
 }
 
-// ─── Delete All Notifications ───────────────────────────────────────
 export function useDeleteAllNotifications() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -94,7 +87,6 @@ export function useDeleteAllNotifications() {
     });
 }
 
-// ─── Alert Settings ─────────────────────────────────────────────────
 export function useAlertSettings() {
     return useQuery({
         queryKey: queryKeys.alertSettings,
@@ -125,7 +117,6 @@ export function useUpdateAlertSettings() {
     });
 }
 
-// ─── Real-time Notification Stream (WebSocket) ──────────────────────
 export function useNotificationStream(enabled = true) {
     const queryClient = useQueryClient();
     const addToast = useToastStore.getState().addToast;
@@ -150,7 +141,6 @@ export function useNotificationStream(enabled = true) {
                 if (payload.event === 'notification:new') {
                     const notification = payload.data as AppNotification;
 
-                    // Show toast
                     const severityMap: Record<string, 'info' | 'success' | 'warning' | 'error'> = {
                         INFO: 'info',
                         SUCCESS: 'success',
@@ -165,7 +155,6 @@ export function useNotificationStream(enabled = true) {
                         duration: 8000,
                     });
 
-                    // Invalidate queries to refresh UI
                     queryClient.invalidateQueries({ queryKey: ['notifications'] });
                 }
 
@@ -173,7 +162,6 @@ export function useNotificationStream(enabled = true) {
                     queryClient.setQueryData(queryKeys.unreadCount, payload.data);
                 }
             } catch {
-                // Ignore parse errors
             }
         };
 

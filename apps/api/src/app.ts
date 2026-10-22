@@ -13,8 +13,6 @@ const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?
 const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
 const app = Fastify({
     bodyLimit: 1024 * 1024,
-    // Production traffic has exactly one trusted hop (the internal Nginx
-    // container). Direct API host ports are not published in production.
     trustProxy: (_address, hop) => config.app.env === 'production' && hop === 0,
     genReqId: (req) => {
         return (req.headers['x-request-id'] as string) || randomUUID();
@@ -85,7 +83,6 @@ export async function buildApp() {
                     return JSON.stringify(body);
                 }
             } catch {
-                // Non-JSON error payloads retain the response header correlation ID.
             }
         }
         return payload;

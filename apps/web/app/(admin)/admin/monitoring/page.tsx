@@ -38,7 +38,6 @@ export default function AdminMonitoringPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -60,7 +59,6 @@ export default function AdminMonitoringPage() {
 
             {monitoring.isError && <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-4 text-rose-300">{(monitoring.error as Error)?.message}</div>}
 
-            {/* Stat cards */}
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
                 <AdminStat title="Deployment Success" value={data ? `${data.deploymentSuccessRate}%` : '…'} icon={<Gauge size={16} />} />
                 <AdminStat title="Job Success Rate" value={data ? `${data.jobSuccessRate}%` : '…'} icon={<Activity size={16} />} />
@@ -68,9 +66,7 @@ export default function AdminMonitoringPage() {
                 <AdminStat title="System Uptime" value={formatUptime(data?.systemUptime)} icon={<Clock size={16} />} />
             </div>
 
-            {/* Content row */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {/* Resource pressure */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
                         <Activity size={14} />
@@ -79,7 +75,6 @@ export default function AdminMonitoringPage() {
                     <ResourceBars cpu={data?.cpuUsage} ram={data?.memoryUsage} disk={data?.diskUsage} />
                 </div>
 
-                {/* Queue status */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
                         <Gauge size={14} />

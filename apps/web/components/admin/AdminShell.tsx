@@ -91,12 +91,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
     return (
         <div className="relative h-screen min-h-[100dvh] overflow-hidden bg-[#000000] text-white font-mono text-xs">
             <div className="relative flex h-screen min-h-[100dvh] overflow-hidden">
-                {/* Desktop sidebar */}
                 <aside className="hidden h-screen min-h-[100dvh] w-60 shrink-0 flex-col border-r border-[#1F1F1F] bg-[#0A0A0A] lg:flex">
                     <AdminSidebar pathname={pathname} role={role} email={admin?.email} onLogout={signOut} />
                 </aside>
 
-                {/* Mobile overlay */}
                 {sidebarOpen && (
                     <div className="fixed inset-0 z-40 lg:hidden">
                         <button className="absolute inset-0 bg-black/80" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />
@@ -107,7 +105,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 )}
 
                 <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#000000]">
-                    {/* Topbar */}
                     <header className="z-30 shrink-0 border-b border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3 sm:px-6">
                         <div className="flex items-center justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
@@ -156,7 +153,6 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
 }) {
     return (
         <div className="flex h-full flex-col font-mono text-xs">
-            {/* Brand Header */}
             <div className="flex items-center justify-between gap-2 border-b border-[#1F1F1F] px-4 py-4">
                 <Link href="/admin">
                     <DeployForgeLogo variant="secondary" size="md" showBadge badgeText={role || 'ADMIN'} />
@@ -168,7 +164,6 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
                 )}
             </div>
 
-            {/* Nav groups */}
             <nav className="flex-1 overflow-y-auto no-scrollbar px-3 py-3 space-y-4">
                 {NAV_GROUPS.map(group => (
                     <div key={group.label}>
@@ -198,7 +193,6 @@ function AdminSidebar({ pathname, role, email, onLogout, onClose }: {
                 ))}
             </nav>
 
-            {/* User footer */}
             <div className="border-t border-[#1F1F1F] p-3">
                 <div className="flex items-center justify-between gap-2 rounded border border-[#1F1F1F] bg-[#000000] p-2.5">
                     <div className="min-w-0 flex-1">

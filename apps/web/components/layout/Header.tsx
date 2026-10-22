@@ -22,7 +22,6 @@ export function Header() {
     return (
         <header className="sticky top-0 z-50 h-14 border-b border-[#1F1F1F] bg-black text-white">
             <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-                {/* Brand */}
                 <div className="flex items-center gap-6">
                     <Link href="/" className="flex items-center gap-2.5" aria-label="DeployForge home">
                         <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-white">
@@ -31,7 +30,6 @@ export function Header() {
                         <span className="text-sm font-semibold tracking-tight text-white">DeployForge</span>
                     </Link>
 
-                    {/* Desktop navigation links */}
                     <nav className="hidden items-center gap-1 md:flex">
                         {NAV_ITEMS.map(item => (
                             <Link
@@ -50,7 +48,6 @@ export function Header() {
                     </nav>
                 </div>
 
-                {/* Right side actions */}
                 <div className="hidden items-center gap-3 md:flex">
                     <a
                         href="https://github.com/akramhossain-dev/DeployForge"
@@ -92,7 +89,6 @@ export function Header() {
                     )}
                 </div>
 
-                {/* Mobile menu toggle */}
                 <button
                     type="button"
                     onClick={() => setMobileOpen(v => !v)}
@@ -104,7 +100,6 @@ export function Header() {
                 </button>
             </div>
 
-            {/* Mobile drawer */}
             {mobileOpen && (
                 <div className="border-b border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3 md:hidden">
                     <nav className="flex flex-col gap-1">

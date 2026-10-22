@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import { monitoringEventEmitter, MONITORING_EVENTS } from '../utils/monitoring-events';
 import { CacheService } from './cache.service';
 
-const COOLDOWN_SECONDS = 300; // 5 minutes
+const COOLDOWN_SECONDS = 300;
 
 interface MetricsPayload {
     cpuUsage: number;
@@ -25,10 +25,6 @@ interface AlertPayload {
 }
 
 export class AlertService {
-    /**
-     * Check collected metrics against user's configured thresholds.
-     * Creates alerts for any thresholds that are exceeded.
-     */
     static async checkThresholds(userId: string, vpsId: string, serverName: string, metrics: MetricsPayload) {
         const rule = await this.getOrCreateRule(userId);
 
@@ -97,9 +93,6 @@ export class AlertService {
         }
     }
 
-    /**
-     * Handle server going offline (health check connection failure).
-     */
     static async handleServerOffline(userId: string, vpsId: string, serverName: string) {
         await this.triggerAlert({
             userId,
@@ -112,9 +105,6 @@ export class AlertService {
         });
     }
 
-    /**
-     * Handle server reconnecting after being offline.
-     */
     static async handleServerReconnected(userId: string, vpsId: string, serverName: string) {
         await this.triggerAlert({
             userId,
@@ -127,9 +117,6 @@ export class AlertService {
         });
     }
 
-    /**
-     * Handle deployment events (completed, failed).
-     */
     static async handleDeploymentEvent(
         userId: string,
         vpsId: string,
@@ -151,9 +138,6 @@ export class AlertService {
         });
     }
 
-    /**
-     * Handle SSL certificate expiring.
-     */
     static async handleSSLExpiring(userId: string, vpsId: string, serverName: string, domainName: string, daysLeft: number) {
         await this.triggerAlert({
             userId,
@@ -167,9 +151,6 @@ export class AlertService {
         });
     }
 
-    /**
-     * Handle backup events.
-     */
     static async handleBackupEvent(
         userId: string,
         vpsId: string,
@@ -190,18 +171,13 @@ export class AlertService {
         });
     }
 
-    /**
-     * Core alert trigger with cooldown deduplication.
-     */
     static async triggerAlert(payload: AlertPayload) {
         try {
-            // Check cooldown to prevent duplicate alerts
             if (await this.isOnCooldown(payload.userId, payload.vpsId, payload.type)) {
                 logger.debug({ type: payload.type, vpsId: payload.vpsId }, 'Alert skipped (cooldown active)');
                 return null;
             }
 
-            // Create notification in database
             const notification = await prisma.notification.create({
                 data: {
                     userId: payload.userId,
@@ -215,10 +191,8 @@ export class AlertService {
                 },
             });
 
-            // Set cooldown
             await this.setCooldown(payload.userId, payload.vpsId, payload.type);
 
-            // Emit real-time event
             monitoringEventEmitter.emit(MONITORING_EVENTS.ALERT_CREATED, payload.userId, notification);
 
             logger.info(
@@ -233,35 +207,24 @@ export class AlertService {
         }
     }
 
-    /**
-     * Check if an alert type is on cooldown for a given user+vps combination.
-     */
     private static async isOnCooldown(userId: string, vpsId: string, type: AlertType): Promise<boolean> {
         try {
             const key = `alert:cooldown:${userId}:${vpsId}:${type}`;
             const value = await CacheService.get(key);
             return value !== null;
         } catch {
-            // If Redis is down, don't block alerts
             return false;
         }
     }
 
-    /**
-     * Set cooldown for an alert type.
-     */
     private static async setCooldown(userId: string, vpsId: string, type: AlertType) {
         try {
             const key = `alert:cooldown:${userId}:${vpsId}:${type}`;
             await CacheService.set(key, '1', COOLDOWN_SECONDS);
         } catch {
-            // Redis failure shouldn't block alert creation
         }
     }
 
-    /**
-     * Get or create default alert rules for a user.
-     */
     static async getOrCreateRule(userId: string) {
         let rule = await prisma.alertRule.findUnique({ where: { userId } });
         if (!rule) {

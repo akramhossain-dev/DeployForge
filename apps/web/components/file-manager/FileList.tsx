@@ -78,7 +78,6 @@ export function FileList({
                                     : 'hover:bg-white/[0.05]'
                             }`}
                         >
-                            {/* Checkbox for selection in grid view */}
                             <input
                                 type="checkbox"
                                 checked={isSelected}

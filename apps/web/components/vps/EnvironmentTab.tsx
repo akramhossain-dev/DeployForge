@@ -82,7 +82,6 @@ export function EnvironmentTab({ vps }: EnvironmentTabProps) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Header bar */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                 <div>
                     <h3 style={{ fontSize: '13px', color: '#fff', fontWeight: 500, margin: 0 }}>Runtime Environment</h3>
@@ -149,7 +148,6 @@ export function EnvironmentTab({ vps }: EnvironmentTabProps) {
 
             {scan && (
                 <>
-                    {/* System metrics */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
                         <StatCard
                             icon={<Cpu size={11} />}
@@ -177,7 +175,6 @@ export function EnvironmentTab({ vps }: EnvironmentTabProps) {
                         />
                     </div>
 
-                    {/* Installed runtimes table */}
                     <div style={{ border: '1px solid #1f1f1f', borderRadius: '6px', overflow: 'hidden' }}>
                         <div style={{ padding: '10px 14px', background: '#0a0a0a', borderBottom: '1px solid #1f1f1f' }}>
                             <span style={{ fontSize: '12px', color: '#a1a1a1', fontWeight: 500 }}>
@@ -221,7 +218,6 @@ export function EnvironmentTab({ vps }: EnvironmentTabProps) {
                         )}
                     </div>
 
-                    {/* Missing runtimes */}
                     {missingRuntimes.length > 0 && (
                         <div style={{ border: '1px solid #1f1f1f', borderRadius: '6px', overflow: 'hidden' }}>
                             <div style={{ padding: '10px 14px', background: '#0a0a0a', borderBottom: '1px solid #1f1f1f', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -273,7 +269,6 @@ export function EnvironmentTab({ vps }: EnvironmentTabProps) {
                         </div>
                     )}
 
-                    {/* Services */}
                     <div style={{ border: '1px solid #1f1f1f', borderRadius: '6px', overflow: 'hidden' }}>
                         <div style={{ padding: '10px 14px', background: '#0a0a0a', borderBottom: '1px solid #1f1f1f' }}>
                             <span style={{ fontSize: '12px', color: '#a1a1a1', fontWeight: 500 }}>Service Status</span>

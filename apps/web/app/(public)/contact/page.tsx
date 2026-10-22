@@ -40,22 +40,18 @@ export default function ContactPage() {
     return (
         <main className="min-h-screen bg-black text-white">
 
-            {/* ── 1. Page Header ────────────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 pb-12 pt-14 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-3xl">
-                        {/* Eyebrow */}
                         <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
                             <Mail size={13} className="text-white" />
                             <span>DEPLOYFORGE — SUPPORT</span>
                         </div>
 
-                        {/* Title */}
                         <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
                             Contact Support
                         </h1>
 
-                        {/* Description */}
                         <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
                             Send questions about account credentials, security inquiries, repository integrations, infrastructure workflows, or platform operations.
                         </p>
@@ -63,11 +59,9 @@ export default function ContactPage() {
                 </div>
             </section>
 
-            {/* ── 2. Support Content & Form Grid ────────────────────────── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-12 sm:px-6 lg:px-8">
                 <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-12 lg:items-start">
 
-                    {/* Left Column: Support Information (5 cols) */}
                     <div className="space-y-6 lg:col-span-5">
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
                             <h2 className="text-sm font-semibold text-white">Support Channels & Guidelines</h2>
@@ -79,7 +73,6 @@ export default function ContactPage() {
                             </div>
                         </div>
 
-                        {/* Topics List */}
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-3 font-mono text-xs">
                             <p className="border-b border-[#1F1F1F] pb-2 font-semibold uppercase tracking-wider text-[#666666]">
                                 COMMON SUPPORT AREAS
@@ -97,7 +90,6 @@ export default function ContactPage() {
                             </div>
                         </div>
 
-                        {/* Direct Link Options */}
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 font-mono text-xs space-y-3">
                             <p className="border-b border-[#1F1F1F] pb-2 font-semibold uppercase tracking-wider text-[#666666]">
                                 SELF-SERVICE RESOURCES
@@ -126,7 +118,6 @@ export default function ContactPage() {
                         </div>
                     </div>
 
-                    {/* Right Column: Contact Form (7 cols) */}
                     <div className="lg:col-span-7">
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 lg:p-8">
                             <div className="border-b border-[#1F1F1F] pb-4 mb-6">
@@ -204,7 +195,6 @@ export default function ContactPage() {
                                     />
                                 </div>
 
-                                {/* Feedback states */}
                                 {success && (
                                     <div className="flex items-center gap-2.5 rounded border border-emerald-900/50 bg-emerald-950/20 p-3 text-xs font-mono text-emerald-300">
                                         <CheckCircle2 size={14} className="shrink-0 text-emerald-400" />

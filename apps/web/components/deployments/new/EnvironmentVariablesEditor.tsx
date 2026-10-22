@@ -245,7 +245,6 @@ export function EnvironmentVariablesEditor({
             {enabled && (
                 <div className="rounded-md border border-[#1F1F1F] bg-[#000000] overflow-hidden">
                     <div className="flex flex-col lg:flex-row min-h-[400px]">
-                        {/* Sidebar: Files List */}
                         <div className="hidden lg:flex w-64 shrink-0 flex-col gap-3 border-r border-[#1F1F1F] p-4 bg-[#0A0A0A]">
                             <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-semibold uppercase tracking-wider text-[#666666]">
@@ -374,10 +373,8 @@ export function EnvironmentVariablesEditor({
                             </div>
                         </div>
 
-                        {/* Editor Panel */}
                         <div className="flex-1 flex flex-col gap-4 p-4">
                             <div className="flex flex-col gap-3 border-b border-[#1F1F1F] pb-3">
-                                {/* Mobile file selector */}
                                 <div className="flex lg:hidden flex-col gap-2">
                                     <div className="flex items-center gap-2">
                                         <select
@@ -431,7 +428,6 @@ export function EnvironmentVariablesEditor({
                                     )}
                                 </div>
 
-                                {/* Active File Header */}
                                 <div className="flex items-center justify-between gap-4">
                                     <div className="flex items-center gap-2 min-w-0">
                                         <div className="flex flex-col min-w-0">
@@ -516,7 +512,6 @@ export function EnvironmentVariablesEditor({
                             </div>
 
                             {isBulkEdit ? (
-                                /* Bulk Text Editor */
                                 <div className="flex-1 flex flex-col gap-3">
                                     <p className="text-xs text-[#A1A1A1]">
                                         Paste key-value pairs formatted as <code className="text-white">KEY=VALUE</code>, one per line.
@@ -548,9 +543,7 @@ export function EnvironmentVariablesEditor({
                                     </div>
                                 </div>
                             ) : (
-                                /* Table Editor */
                                 <div className="flex-1 flex flex-col gap-3">
-                                    {/* Filters & Actions */}
                                     <div className="flex items-center gap-2 shrink-0">
                                         <div className="relative flex-1">
                                             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" />
@@ -578,7 +571,6 @@ export function EnvironmentVariablesEditor({
                                         </button>
                                     </div>
 
-                                    {/* Variables List */}
                                     <div className="flex-1 overflow-y-auto border border-[#1F1F1F] rounded divide-y divide-[#1F1F1F] bg-[#000000] max-h-[300px]">
                                         {filteredVariables.length === 0 ? (
                                             <div className="py-12 text-center text-xs text-[#666666] italic">
@@ -595,7 +587,6 @@ export function EnvironmentVariablesEditor({
                                                             !isKeyValid && 'bg-rose-950/10'
                                                         )}
                                                     >
-                                                        {/* Key Input */}
                                                         <div className="w-full space-y-1">
                                                             <input
                                                                 defaultValue={key}
@@ -614,7 +605,6 @@ export function EnvironmentVariablesEditor({
                                                             )}
                                                         </div>
 
-                                                        {/* Value Input */}
                                                         <div className="w-full">
                                                             <PasswordInput
                                                                 value={val}
@@ -624,7 +614,6 @@ export function EnvironmentVariablesEditor({
                                                             />
                                                         </div>
 
-                                                        {/* Actions */}
                                                         <div className="flex items-center gap-1 shrink-0 justify-end">
                                                             <button
                                                                 type="button"
@@ -657,7 +646,6 @@ export function EnvironmentVariablesEditor({
 
             {error && <p className="text-xs text-rose-400">{error}</p>}
 
-            {/* Overwrite Confirmation Modal Banner */}
             {showConfirmOverwrite && (
                 <div className="rounded border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
                     <p className="text-xs text-amber-200">

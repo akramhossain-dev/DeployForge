@@ -1,17 +1,13 @@
-# Dependencies
 node_modules/
 .pnpm-store/
 yarn.lock
 package-lock.json
 
-# Environment
 .env
 .env.*
 !.env.example
 !.env.production.example
-!.env.phase6.example
 
-# Build outputs
 dist/
 build/
 .next/
@@ -21,28 +17,20 @@ out/
 packages/*/src/*.js
 .agents/
 
-# Logs
 logs/
 *.log
 
-# Runtime
 .DS_Store
 *.pid
-.phase6-artifacts/
 
-# Prisma
 *dev.db*
 /prisma/*.db
 
-# Redis dump
 dump.rdb
 
-# Docker
 docker-compose.override.yml
 
-# IDE
 .vscode/
 .idea/
 
-# Turbo
 .turbo/

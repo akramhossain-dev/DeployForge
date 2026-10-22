@@ -48,7 +48,6 @@ export default function HistoryMonitorTab({ vps, useHistoryMetricsHook }: Histor
 
     return (
         <div className="space-y-4 font-mono text-xs">
-            {/* Range Selector Bar */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                 <div className="flex items-center gap-2">
                     <BarChart2 size={14} className="text-white" />
@@ -77,7 +76,6 @@ export default function HistoryMonitorTab({ vps, useHistoryMetricsHook }: Histor
                 </div>
             </div>
 
-            {/* Content Display */}
             {isLoading ? (
                 <div className="h-64 animate-pulse rounded-md border border-[#1F1F1F] bg-[#0A0A0A]" />
             ) : isError ? (

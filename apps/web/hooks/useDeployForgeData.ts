@@ -90,7 +90,6 @@ export const queryKeys = {
     projects: ['projects'] as const,
     projectMembers: (projectId: string) => ['projects', projectId, 'members'] as const,
     invitations: ['invitations'] as const,
-    // Runtime Manager
     vpsEnvironment: (vpsId: string) => ['vps', vpsId, 'environment'] as const,
     allowedRuntimes: ['runtime', 'runtimes'] as const,
 };
@@ -264,7 +263,6 @@ export function useVerifyDns(domainName?: string, vpsIp?: string, enabled = true
         }>(`/domain/verify-dns/${encodeURIComponent(domainName!)}?vpsIp=${encodeURIComponent(vpsIp!)}`),
         enabled: !!domainName && !!vpsIp && enabled,
         retry: false,
-        // Avoid self-rate-limiting when several domain cards are expanded.
         staleTime: 60000,
         refetchOnWindowFocus: false,
     });
@@ -479,7 +477,7 @@ export function useDeploymentLogStream(deploymentId?: string, enabled = true) {
                     if (payload.event === 'deployment:log' && payload.data) {
                         setLogs((current) => current.some((log) => log.id === payload.data.id) ? current : [...current, payload.data]);
                     }
-                } catch { /* Ignore malformed stream frames. */ }
+                } catch {}
             };
         };
         connect();
@@ -514,7 +512,7 @@ export function useDeploymentStatusStream(deploymentId?: string) {
                 try {
                     const payload = JSON.parse(event.data);
                     if (payload.event === 'deployment:status') setStatus(payload.data);
-                } catch { /* HTTP polling remains the fallback. */ }
+                } catch {}
             };
         };
         connect();
@@ -1004,9 +1002,7 @@ export function useDeclineInvitation() {
     });
 }
 
-// ── Runtime Manager Hooks ─────────────────────────────────────────────────────
 
-/** Scan the VPS environment — runtimes, OS info, service status. */
 export function useVpsEnvironment(vpsId?: string) {
     return useQuery({
         queryKey: queryKeys.vpsEnvironment(vpsId || 'none'),
@@ -1017,7 +1013,6 @@ export function useVpsEnvironment(vpsId?: string) {
     });
 }
 
-/** Install one or more runtimes on a VPS (whitelisted). */
 export function useInstallRuntime(vpsId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
@@ -1031,7 +1026,6 @@ export function useInstallRuntime(vpsId?: string) {
     });
 }
 
-/** List allowed (installable) runtime names. */
 export function useAllowedRuntimes() {
     return useQuery({
         queryKey: queryKeys.allowedRuntimes,

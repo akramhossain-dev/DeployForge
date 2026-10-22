@@ -186,7 +186,6 @@ export function GithubDeployForm() {
                 <DeploymentRequestError error={deploy.error} prefix="Deployment trigger failed" />
             )}
 
-            {/* Grid Fields */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div>
                     <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#666666] mb-1">
@@ -277,7 +276,6 @@ export function GithubDeployForm() {
                 </div>
             </div>
 
-            {/* Webhook Status Panel */}
             <div className="flex flex-col gap-3 rounded-md border border-[#1F1F1F] bg-[#111111] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <p className="font-semibold text-white">GitHub Webhook Status</p>
@@ -293,7 +291,6 @@ export function GithubDeployForm() {
                 <StatusBadge status={selectedRepo?.webhookId ? 'RUNNING' : 'PENDING'} />
             </div>
 
-            {/* Auto Deploy Checkbox */}
             <label className="flex items-center justify-between gap-4 rounded-md border border-[#1F1F1F] bg-[#111111] p-4 cursor-pointer">
                 <div>
                     <span className="block font-semibold text-white">Auto Deploy on Push</span>
@@ -310,7 +307,6 @@ export function GithubDeployForm() {
                 />
             </label>
 
-            {/* Execution Mode Selector */}
             <ExecutionModeSelector mode={mode} setMode={setMode} />
 
             <ResourcePolicyFields
@@ -323,7 +319,6 @@ export function GithubDeployForm() {
                 disabled={isSubmitting}
             />
 
-            {/* Mode Banner */}
             <div
                 className={clsx(
                     'rounded-md border p-3 text-xs leading-relaxed',
@@ -337,7 +332,6 @@ export function GithubDeployForm() {
                     : 'Production Environment: Persistent container release with rollback history, domain routing, and health checks.'}
             </div>
 
-            {/* Hosting Configuration */}
             {mode === 'production' ? (
                 <HostingConfiguration
                     hostType={hostType}
@@ -354,7 +348,6 @@ export function GithubDeployForm() {
                 </div>
             )}
 
-            {/* Environment Variables Setup Flow */}
             <EnvironmentVariablesEditor
                 enabled={useEnv}
                 setEnabled={setUseEnv}
@@ -363,7 +356,6 @@ export function GithubDeployForm() {
                 error={errors.env}
             />
 
-            {/* Submit Action */}
             <div className="border-t border-[#1F1F1F] pt-4 flex justify-end">
                 <button
                     type="button"

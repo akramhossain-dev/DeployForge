@@ -66,7 +66,6 @@ export default function AdminGithubPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -88,7 +87,6 @@ export default function AdminGithubPage() {
 
             {accounts.isError && <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-4 text-rose-300">{(accounts.error as Error)?.message}</div>}
 
-            {/* KPI strip */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                     <p className="text-[10px] font-semibold uppercase text-[#666666]">Connected Accounts</p>
@@ -100,7 +98,6 @@ export default function AdminGithubPage() {
                 </div>
             </div>
 
-            {/* Account Grid */}
             {!accounts.isLoading && (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {(accounts.data || []).map(account => {
@@ -142,7 +139,6 @@ export default function AdminGithubPage() {
                 </div>
             )}
 
-            {/* Confirmation Modal */}
             {confirmModal.open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono text-xs">
                     <div className="w-full max-w-md rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">

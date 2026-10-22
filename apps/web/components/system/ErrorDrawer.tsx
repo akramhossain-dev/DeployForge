@@ -39,12 +39,9 @@ ${rawError}
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/80 backdrop-blur-sm">
-            {/* Backdrop */}
             <div className="absolute inset-0" onClick={closeErrorDrawer} />
 
-            {/* Drawer */}
             <div className="glass-modal relative z-10 flex h-full w-full max-w-xl flex-col border-l border-[#1F1F1F] p-5 overflow-y-auto">
-                {/* Header */}
                 <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-4">
                     <div className="flex items-center gap-2.5">
                         <AlertOctagon className="text-rose-400" size={18} />
@@ -62,9 +59,7 @@ ${rawError}
                     </button>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 space-y-5 py-5">
-                    {/* Category */}
                     <div className="flex flex-wrap gap-2 items-center">
                         <span className="text-xs font-mono font-medium text-[#A1A1A1]">Category:</span>
                         <StatusBadge status={category} />
@@ -73,13 +68,11 @@ ${rawError}
                         </span>
                     </div>
 
-                    {/* Explanation */}
                     <div className="rounded-md border border-[#1F1F1F] bg-[#111111] p-3.5">
                         <p className="text-[11px] font-mono font-semibold uppercase text-rose-400 tracking-wider">What happened</p>
                         <p className="mt-1.5 text-xs leading-relaxed text-white font-sans whitespace-pre-line">{explanation}</p>
                     </div>
 
-                    {/* Suggestions */}
                     <div>
                         <h3 className="text-[11px] font-mono font-semibold uppercase text-[#A1A1A1] tracking-wider">Suggested Fixes</h3>
                         <ul className="mt-2.5 space-y-2">
@@ -92,7 +85,6 @@ ${rawError}
                         </ul>
                     </div>
 
-                    {/* Technical traceback */}
                     <div>
                         <div className="flex items-center justify-between mb-2">
                             <h3 className="flex items-center gap-1.5 text-[11px] font-mono font-semibold uppercase text-[#A1A1A1] tracking-wider">
@@ -112,7 +104,6 @@ ${rawError}
                         </div>
                     </div>
 
-                    {/* Metadata */}
                     <div className="grid grid-cols-2 gap-3 rounded-md border border-[#1F1F1F] bg-[#111111] p-3 text-xs font-mono">
                         <div>
                             <p className="text-[#666666] uppercase text-[10px] font-semibold">Deployment ID</p>
@@ -125,7 +116,6 @@ ${rawError}
                     </div>
                 </div>
 
-                {/* Footer */}
                 <div className="border-t border-[#1F1F1F] pt-4 flex gap-2.5">
                     <button
                         type="button"

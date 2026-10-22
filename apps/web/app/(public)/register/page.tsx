@@ -88,7 +88,6 @@ export default function RegisterPage() {
         <main className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center bg-black px-4 py-12 text-white">
             <div className="w-full max-w-sm sm:max-w-md space-y-6">
 
-                {/* Brand Header */}
                 <div className="text-center space-y-2">
                     <Link href="/" className="inline-flex items-center gap-2">
                         <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-white">
@@ -104,10 +103,8 @@ export default function RegisterPage() {
                     </p>
                 </div>
 
-                {/* Auth Card Container */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 shadow-sm">
 
-                    {/* ── Verified State ── */}
                     {verified ? (
                         <div className="text-center py-4 space-y-4">
                             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#111111] text-emerald-400">
@@ -126,7 +123,6 @@ export default function RegisterPage() {
                             </Link>
                         </div>
 
-                    /* ── OTP Verification Step ── */
                     ) : step === 'verify' ? (
                         <form onSubmit={submitOtp} className="space-y-4">
                             <div className="text-center space-y-1">
@@ -171,10 +167,8 @@ export default function RegisterPage() {
                             </button>
                         </form>
 
-                    /* ── Registration Form Step ── */
                     ) : (
                         <form onSubmit={submitRegister} className="space-y-4">
-                            {/* OAuth */}
                             <div className="space-y-2">
                                 <button
                                     type="button"
@@ -196,14 +190,12 @@ export default function RegisterPage() {
                                 </button>
                             </div>
 
-                            {/* Divider */}
                             <div className="my-4 flex items-center gap-3">
                                 <div className="h-px flex-1 bg-[#1F1F1F]" />
                                 <span className="text-[10px] font-mono text-[#666666] uppercase">OR</span>
                                 <div className="h-px flex-1 bg-[#1F1F1F]" />
                             </div>
 
-                            {/* Fields */}
                             <div>
                                 <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
                                     Full Name
@@ -253,7 +245,6 @@ export default function RegisterPage() {
                                 {passwordError && <p className="mt-1 text-xs font-mono text-rose-400">{passwordError}</p>}
                             </div>
 
-                            {/* Terms Checkbox */}
                             <div>
                                 <label className="flex items-start gap-2.5 cursor-pointer text-xs text-[#A1A1A1]">
                                     <input
@@ -297,7 +288,6 @@ export default function RegisterPage() {
                     )}
                 </div>
 
-                {/* Footer Link */}
                 {!verified && (
                     <p className="text-center text-xs text-[#A1A1A1]">
                         Already have an account?{' '}

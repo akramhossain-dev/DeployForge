@@ -197,7 +197,6 @@ export default function SecurityPage() {
     return (
         <div className="space-y-6">
 
-            {/* ── 1. Change Password Section ── */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
                 <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 mb-4">
                     <KeyRound size={15} className="text-white" />
@@ -287,7 +286,6 @@ export default function SecurityPage() {
                 </form>
             </div>
 
-            {/* ── 2. Active Sessions Section ── */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-3 mb-4">
                     <div className="flex items-center gap-2">
@@ -376,7 +374,6 @@ export default function SecurityPage() {
                 )}
             </div>
 
-            {/* ── 3. Recent Security Activity Section ── */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6">
                 <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3 mb-4">
                     <div className="flex items-center gap-2">

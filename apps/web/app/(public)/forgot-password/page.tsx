@@ -42,7 +42,6 @@ export default function ForgotPasswordPage() {
         <main className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center bg-black px-4 py-12 text-white">
             <div className="w-full max-w-sm sm:max-w-md space-y-6">
 
-                {/* Brand Header */}
                 <div className="text-center space-y-2">
                     <Link href="/" className="inline-flex items-center gap-2">
                         <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-white">
@@ -58,10 +57,8 @@ export default function ForgotPasswordPage() {
                     </p>
                 </div>
 
-                {/* Auth Card Container */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 shadow-sm">
                     {isSent ? (
-                        /* Success state */
                         <div className="text-center space-y-4 py-2">
                             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#111111] text-emerald-400">
                                 <CheckCircle2 size={24} />
@@ -82,7 +79,6 @@ export default function ForgotPasswordPage() {
                             </Link>
                         </div>
                     ) : (
-                        /* Form state */
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
                                 <label className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-[#666666] mb-1">
@@ -125,7 +121,6 @@ export default function ForgotPasswordPage() {
                     )}
                 </div>
 
-                {/* Back to sign in link */}
                 <div className="text-center">
                     <Link href="/login" className="inline-flex items-center gap-1.5 text-xs text-[#A1A1A1] transition-colors hover:text-white">
                         <ArrowLeft size={13} />

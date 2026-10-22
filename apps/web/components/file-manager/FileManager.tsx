@@ -311,7 +311,6 @@ export function FileManager({ vpsId }: FileManagerProps) {
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-2xl">
             {}
             <div className="flex shrink-0 flex-col md:flex-row md:items-center gap-2 border-b border-white/10 bg-slate-900/80 px-3 py-2">
-                {/* Navigation and Breadcrumbs Group */}
                 <div className="flex flex-1 items-center gap-1.5 min-w-0 w-full">
                     <div className="flex items-center gap-1 rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5 shrink-0">
                         <button onClick={navigateUp} disabled={currentPath === '/'} title="Up" className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-slate-200 disabled:opacity-25 disabled:cursor-not-allowed">
@@ -327,7 +326,6 @@ export function FileManager({ vpsId }: FileManagerProps) {
                     </div>
                 </div>
 
-                {/* Actions and Views Group */}
                 <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 w-full md:w-auto shrink-0">
                     <div className="flex flex-wrap items-center gap-1">
                         <button onClick={() => setShowSearch((v) => !v)} title="Search" className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${showSearch ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-300' : 'border-white/10 bg-white/[0.04] text-slate-500 hover:text-slate-200'}`}>

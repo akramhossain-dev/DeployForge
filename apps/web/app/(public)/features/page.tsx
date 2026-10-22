@@ -19,7 +19,6 @@ import {
 import { useAuthSession } from '@/hooks/useDeployForgeData';
 import clsx from 'clsx';
 
-// Core feature categories for the interactive subsystem explorer
 const FEATURE_CATEGORIES = [
     {
         id: 'orchestration',
@@ -135,7 +134,6 @@ Backup Utilities: Experimental manual export only`
     }
 ];
 
-// Workflow pipeline steps
 const PIPELINE_STEPS = [
     {
         number: '01',
@@ -163,7 +161,6 @@ const PIPELINE_STEPS = [
     }
 ];
 
-// Architecture table entries
 const ARCHITECTURE_LAYERS = [
     { component: 'Frontend Console', tech: 'Next.js 14 App Router, React 18, Tailwind CSS, xterm.js', role: 'Dashboard UI, web terminal, deployment control surfaces' },
     { component: 'Backend API Engine', tech: 'Fastify, TypeScript, Pino Logger, WebSockets', role: 'REST API endpoints, webhook receivers, live streaming' },
@@ -185,28 +182,23 @@ export default function FeaturesPage() {
     return (
         <main className="min-h-screen bg-black text-white">
 
-            {/* ── 1. Page Header ────────────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 pb-16 pt-14 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-3xl">
-                        {/* Small Eyebrow */}
                         <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                             <span>DeployForge — Platform Capabilities</span>
                         </div>
 
-                        {/* Confident Restrained Headline */}
                         <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
                             Infrastructure control for self-hosted server fleets.
                         </h1>
 
-                        {/* Supporting Description */}
                         <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
                             DeployForge connects your source repositories to Virtual Private Servers over agentless SSH.
                             Orchestrate immutable container builds, Traefik routing, encrypted secrets, and validated release switching from a single interface.
                         </p>
 
-                        {/* Actions */}
                         <div className="mt-8 flex flex-wrap items-center gap-3">
                             <Link
                                 href={primaryHref}
@@ -223,7 +215,6 @@ export default function FeaturesPage() {
                             </Link>
                         </div>
 
-                        {/* Spec Pills */}
                         <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 border-t border-[#1F1F1F] pt-5 text-xs font-mono text-[#666666]">
                             <span className="flex items-center gap-1.5">
                                 <CheckCircle2 size={13} className="text-white" /> Agentless SSH2
@@ -242,7 +233,6 @@ export default function FeaturesPage() {
                 </div>
             </section>
 
-            {/* ── 2. Feature Overview (Interactive Subsystem Explorer) ───── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="mb-8">
@@ -252,7 +242,6 @@ export default function FeaturesPage() {
                         </p>
                     </div>
 
-                    {/* Subsystem Tabs */}
                     <div className="flex flex-wrap gap-1.5 border-b border-[#1F1F1F] pb-3">
                         {FEATURE_CATEGORIES.map(cat => (
                             <button
@@ -270,11 +259,9 @@ export default function FeaturesPage() {
                         ))}
                     </div>
 
-                    {/* Active Subsystem Detail View */}
                     <div className="mt-6 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 lg:p-8">
                         <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
 
-                            {/* Left Description & Specs (7 cols) */}
                             <div className="space-y-6 lg:col-span-7">
                                 <div>
                                     <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#666666]">
@@ -301,7 +288,6 @@ export default function FeaturesPage() {
                                 </div>
                             </div>
 
-                            {/* Right Code / Config Console Preview (5 cols) */}
                             <div className="lg:col-span-5">
                                 <div className="overflow-hidden rounded-md border border-[#1F1F1F] bg-[#000000]">
                                     <div className="flex items-center justify-between border-b border-[#1F1F1F] bg-[#111111] px-3.5 py-2 font-mono text-[11px] text-[#666666]">
@@ -322,7 +308,6 @@ export default function FeaturesPage() {
                 </div>
             </section>
 
-            {/* ── 3. Deployment Workflow ────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -332,7 +317,6 @@ export default function FeaturesPage() {
                         </p>
                     </div>
 
-                    {/* Step Cards Grid */}
                     <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {PIPELINE_STEPS.map((s) => (
                             <div key={s.number} className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5">
@@ -346,9 +330,7 @@ export default function FeaturesPage() {
                         ))}
                     </div>
 
-                    {/* Technical Interface Preview Box */}
                     <div className="mt-8 overflow-hidden rounded-md border border-[#1F1F1F] bg-[#0A0A0A]">
-                        {/* Status Header Bar */}
                         <div className="flex flex-wrap items-center justify-between border-b border-[#1F1F1F] bg-[#111111] px-4 py-2.5 font-mono text-xs text-[#A1A1A1]">
                             <div className="flex items-center gap-3">
                                 <span className="flex items-center gap-1.5 font-semibold text-white">
@@ -363,7 +345,6 @@ export default function FeaturesPage() {
                             </div>
                         </div>
 
-                        {/* Pipeline Details & Log Output */}
                         <div className="grid gap-6 p-5 lg:grid-cols-3">
                             <div className="space-y-3 font-mono text-xs lg:col-span-1">
                                 <div className="rounded-md border border-[#1F1F1F] bg-[#000000] p-3">
@@ -402,7 +383,6 @@ export default function FeaturesPage() {
                 </div>
             </section>
 
-            {/* ── 4. Projects & Environment Secrets ─────────────────────── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
@@ -430,7 +410,6 @@ export default function FeaturesPage() {
                             </div>
                         </div>
 
-                        {/* Interactive UI Mockup for Secrets */}
                         <div className="lg:col-span-7">
                             <div className="overflow-hidden rounded-md border border-[#1F1F1F] bg-[#0A0A0A]">
                                 <div className="flex items-center justify-between border-b border-[#1F1F1F] bg-[#111111] px-4 py-2.5 font-mono text-xs">
@@ -470,7 +449,6 @@ export default function FeaturesPage() {
                 </div>
             </section>
 
-            {/* ── 5. Build, Logs & Monitoring ─────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -514,7 +492,6 @@ export default function FeaturesPage() {
                 </div>
             </section>
 
-            {/* ── 6. Technical Architecture Layers ───────────────────────── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -549,7 +526,6 @@ export default function FeaturesPage() {
                 </div>
             </section>
 
-            {/* ── 7. Final Product CTA ──────────────────────────────────── */}
             <section className="px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 sm:p-10">
                     <div className="max-w-xl">

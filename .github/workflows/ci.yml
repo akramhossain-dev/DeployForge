@@ -49,7 +49,6 @@ jobs:
   docker:
     name: Docker Build Verification
     runs-on: ubuntu-latest
-    # Only verify Docker builds on pushes to main (not every PR to save CI minutes)
     if: github.event_name == 'push'
 
     steps:

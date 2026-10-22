@@ -72,7 +72,6 @@ export class MonitoringService {
             startDate = new Date(from);
             endDate = new Date(to);
         } else {
-            // Default to 24h
             startDate.setHours(startDate.getHours() - 24);
         }
 

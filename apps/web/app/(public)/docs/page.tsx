@@ -249,7 +249,6 @@ export default function DocsPage() {
     const primaryHref = auth.isAuthenticated ? '/dashboard' : '/register';
     const primaryLabel = auth.isAuthenticated ? 'Open Console' : 'Get Started';
 
-    // Filter documentation sections based on search query and category tab
     const filteredSections = DOC_SECTIONS.filter(sec => {
         const matchesQuery = searchQuery === '' ||
             sec.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -266,27 +265,22 @@ export default function DocsPage() {
     return (
         <main className="min-h-screen bg-black text-white">
 
-            {/* ── 1. Header Section ────────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 pb-12 pt-14 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-3xl">
-                        {/* Eyebrow */}
                         <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
                             <BookOpen size={13} className="text-white" />
                             <span>DEPLOYFORGE — DOCUMENTATION</span>
                         </div>
 
-                        {/* Title */}
                         <h1 className="mt-5 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
                             DeployForge Documentation
                         </h1>
 
-                        {/* Description */}
                         <p className="mt-4 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
                             Technical reference guide for connecting source repositories, provisioning VPS servers, validating Blue-Green releases, and managing encrypted secrets.
                         </p>
 
-                        {/* Search Input Box */}
                         <div className="relative mt-6 max-w-md">
                             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" />
                             <input
@@ -301,11 +295,9 @@ export default function DocsPage() {
                 </div>
             </section>
 
-            {/* ── 2. Documentation Main Grid (Sidebar + Content) ────────── */}
             <section className="border-b border-[#1F1F1F] px-4 py-12 sm:px-6 lg:px-8">
                 <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-12">
 
-                    {/* Left Sticky Sidebar Navigation (3 cols) */}
                     <aside className="lg:col-span-3 lg:sticky lg:top-20 lg:self-start">
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 font-mono text-xs space-y-4">
                             <div>
@@ -359,7 +351,6 @@ export default function DocsPage() {
                         </div>
                     </aside>
 
-                    {/* Right Documentation Content Column (9 cols) */}
                     <div className="space-y-8 lg:col-span-9">
                         {filteredSections.length === 0 ? (
                             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 text-center font-mono text-xs text-[#A1A1A1]">
@@ -378,7 +369,6 @@ export default function DocsPage() {
                                     id={section.id}
                                     className="scroll-mt-20 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 lg:p-8"
                                 >
-                                    {/* Section Header */}
                                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1F1F1F] pb-4 font-mono text-xs">
                                         <span className="text-[11px] font-semibold uppercase tracking-wider text-[#666666]">
                                             {section.category}
@@ -396,7 +386,6 @@ export default function DocsPage() {
                                         {section.description}
                                     </p>
 
-                                    {/* Bullet Items */}
                                     <div className="mt-5 space-y-2 font-mono text-xs text-[#A1A1A1]">
                                         {section.items.map((item, idx) => (
                                             <div key={idx} className="flex items-start gap-2.5 rounded border border-[#1F1F1F] bg-[#000000] p-3">
@@ -406,7 +395,6 @@ export default function DocsPage() {
                                         ))}
                                     </div>
 
-                                    {/* Code Example Block */}
                                     {section.codeBlock && (
                                         <div className="mt-6 overflow-hidden rounded-md border border-[#1F1F1F] bg-[#000000]">
                                             <div className="flex items-center justify-between border-b border-[#1F1F1F] bg-[#111111] px-4 py-2 font-mono text-[11px] text-[#666666]">
@@ -426,7 +414,6 @@ export default function DocsPage() {
                 </div>
             </section>
 
-            {/* ── 3. Final Product CTA ──────────────────────────────────── */}
             <section className="px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 sm:p-10">
                     <div className="max-w-xl">

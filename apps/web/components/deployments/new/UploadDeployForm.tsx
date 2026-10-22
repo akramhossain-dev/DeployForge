@@ -126,7 +126,6 @@ export function UploadDeployForm() {
                 <DeploymentRequestError error={deploy.error} prefix="Upload deployment failed" />
             )}
 
-            {/* Drag & Drop Box */}
             <div>
                 <label
                     onDragOver={(e) => e.preventDefault()}
@@ -161,7 +160,6 @@ export function UploadDeployForm() {
                 {errors.file && <p className="mt-1 text-xs text-rose-400">{errors.file}</p>}
             </div>
 
-            {/* Upload Progress Bar & Archive Validation Check */}
             <div className="space-y-2">
                 <div className="h-1.5 overflow-hidden rounded bg-[#111111] border border-[#1F1F1F]">
                     <div className="h-full bg-white transition-all duration-300" style={{ width: `${progress}%` }} />
@@ -174,7 +172,6 @@ export function UploadDeployForm() {
                 </div>
             </div>
 
-            {/* Grid Fields */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <div>
                     <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#666666] mb-1">
@@ -234,7 +231,6 @@ export function UploadDeployForm() {
                 </div>
             </div>
 
-            {/* Info Callout */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#111111] p-4 text-xs text-[#A1A1A1]">
                 <p className="font-semibold text-white">Manual Archive Deployment</p>
                 <p className="mt-1">
@@ -242,7 +238,6 @@ export function UploadDeployForm() {
                 </p>
             </div>
 
-            {/* Execution Mode Selector */}
             <ExecutionModeSelector mode={mode} setMode={setMode} />
 
             <ResourcePolicyFields
@@ -255,7 +250,6 @@ export function UploadDeployForm() {
                 disabled={isSubmitting}
             />
 
-            {/* Hosting Configuration */}
             {mode === 'production' ? (
                 <HostingConfiguration
                     hostType={hostType}
@@ -272,7 +266,6 @@ export function UploadDeployForm() {
                 </div>
             )}
 
-            {/* Environment Variables Setup Flow */}
             <EnvironmentVariablesEditor
                 enabled={useEnv}
                 setEnabled={setUseEnv}
@@ -281,7 +274,6 @@ export function UploadDeployForm() {
                 error={errors.env}
             />
 
-            {/* Submit Action */}
             <div className="border-t border-[#1F1F1F] pt-4 flex justify-end">
                 <button
                     type="button"

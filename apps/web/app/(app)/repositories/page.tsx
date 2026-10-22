@@ -37,7 +37,6 @@ export default function RepositoriesPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -70,14 +69,12 @@ export default function RepositoriesPage() {
                 </div>
             </div>
 
-            {/* Error banners */}
             {connectError && (
                 <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
                     GitHub Connect Error: {connectError}
                 </div>
             )}
 
-            {/* GitHub profile status banner */}
             {profile.data && (
                 <div className="flex items-center justify-between rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                     <div className="flex items-center gap-3">
@@ -100,7 +97,6 @@ export default function RepositoriesPage() {
                 </div>
             )}
 
-            {/* Stats Overview */}
             {profile.data && repos.data?.length ? (
                 <div className="grid grid-cols-3 gap-3">
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
@@ -118,7 +114,6 @@ export default function RepositoriesPage() {
                 </div>
             ) : null}
 
-            {/* Search toolbar */}
             {repos.data?.length ? (
                 <div className="relative">
                     <input
@@ -130,7 +125,6 @@ export default function RepositoriesPage() {
                 </div>
             ) : null}
 
-            {/* Repository grid */}
             {profile.isLoading || repos.isLoading ? (
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     {Array.from({ length: 4 }).map((_, i) => (
@@ -154,7 +148,6 @@ export default function RepositoriesPage() {
                                 </p>
                             </div>
 
-                            {/* Tags */}
                             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#1F1F1F] pt-3">
                                 <div className="flex items-center gap-2">
                                     <span className="inline-flex items-center gap-1 rounded border border-[#1F1F1F] bg-[#000000] px-2 py-0.5 text-[10px] text-[#A1A1A1]">

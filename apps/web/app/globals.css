@@ -146,7 +146,7 @@
     display: none;
   }
 
-  /* Selective Glassmorphism for Overlays (Modals, Dropdowns, Toasts, Search Panels, Command Menus, Popovers) */
+
   .glass-modal {
     background-color: rgba(10, 10, 10, 0.85);
     backdrop-filter: blur(8px);

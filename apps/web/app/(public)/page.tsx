@@ -77,31 +77,25 @@ export default function HomePage() {
     return (
         <main className="min-h-screen bg-black text-white">
 
-            {/* ── 1. Hero Section ────────────────────────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 pb-20 pt-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-3xl">
-                        {/* Status label */}
                         <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                             <span>v1.0.0 — Self-Hosted PaaS Orchestrator</span>
                         </div>
 
-                        {/* Headline */}
                         <h1 className="mt-6 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
                             Self-hosted application deployments on your own infrastructure.
                         </h1>
 
-                        {/* Description */}
                         <p className="mt-5 text-base leading-relaxed text-[#A1A1A1] sm:text-lg">
                             DeployForge connects your GitHub repositories to Virtual Private Servers over agentless SSH.
                             Automate immutable container builds, Traefik routing, and validated release switching without vendor lock-in.
                         </p>
 
-                        {/* Interactive CTAs */}
                         <LandingHeroButtons />
 
-                        {/* Trust/spec points */}
                         <div className="mt-10 flex flex-wrap gap-x-6 gap-y-2 border-t border-[#1F1F1F] pt-6 text-xs font-mono text-[#666666]">
                             <span className="flex items-center gap-1.5">
                                 <CheckCircle2 size={13} className="text-white" /> Agentless SSH Protocol
@@ -120,7 +114,6 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* ── 2. Product Interface Preview ──────────────────────────── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-16 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="mb-4 flex items-center justify-between">
@@ -134,9 +127,7 @@ export default function HomePage() {
                         </div>
                     </div>
 
-                    {/* Console mock shell */}
                     <div className="overflow-hidden rounded-md border border-[#1F1F1F] bg-[#0A0A0A]">
-                        {/* Terminal title bar */}
                         <div className="flex items-center justify-between border-b border-[#1F1F1F] bg-[#111111] px-4 py-2.5 font-mono text-xs text-[#A1A1A1]">
                             <div className="flex items-center gap-2">
                                 <div className="flex gap-1.5">
@@ -152,13 +143,11 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        {/* Interactive Console Content */}
                         <LandingConsolePreview />
                     </div>
                 </div>
             </section>
 
-            {/* ── 3. Core Features Grid ─────────────────────────────────── */}
             <section id="features" className="border-b border-[#1F1F1F] px-4 py-20 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -188,7 +177,6 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* ── 4. How It Works / Workflow Pipeline ────────────────────── */}
             <section className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-20 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="max-w-2xl">
@@ -210,7 +198,6 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* ── 5. Technical Architecture Section ─────────────────────── */}
             <section className="border-b border-[#1F1F1F] px-4 py-20 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl">
                     <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
@@ -242,7 +229,6 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        {/* Code / Config architecture specification box */}
                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 font-mono text-xs leading-relaxed">
                             <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3 text-[#666666]">
                                 <span>deployforge.config.json</span>
@@ -270,7 +256,6 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* ── 6. Final CTA Section ──────────────────────────────────── */}
             <section className="px-4 py-20 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-7xl rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-8 sm:p-12">
                     <div className="max-w-xl">

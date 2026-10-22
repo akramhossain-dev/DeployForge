@@ -51,7 +51,7 @@ function transformEnvironment(value: unknown, direction: 'encrypt' | 'decrypt'):
         const [iv, tag, content] = parts;
         row.env = encryptionService().decrypt({ iv, tag, content });
       } catch {
-        // Preserve ciphertext when a key is unavailable or rotation is incomplete.
+
       }
     }
   }

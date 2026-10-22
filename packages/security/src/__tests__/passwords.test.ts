@@ -28,13 +28,13 @@ describe('PasswordService', () => {
         });
 
         it('should reject passwords missing complexity requirements', () => {
-            
+
             expect(PasswordService.validate('abc12!').valid).toBe(false);
-            
+
             expect(PasswordService.validate('ABC12!').valid).toBe(false);
-            
+
             expect(PasswordService.validate('Abcdef!').valid).toBe(false);
-            
+
             expect(PasswordService.validate('Abcde12').valid).toBe(false);
         });
 
@@ -58,7 +58,7 @@ describe('PasswordService', () => {
         it('should hash and verify passwords using Argon2id', async () => {
             const password = 'MySecretPassword123!';
             const hash = await PasswordService.hash(password);
-            
+
             expect(hash).toBeDefined();
             expect(hash).not.toBe(password);
             expect(hash.startsWith('$argon2')).toBe(true);

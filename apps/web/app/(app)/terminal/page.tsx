@@ -23,7 +23,6 @@ export default function TerminalPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -35,14 +34,12 @@ export default function TerminalPage() {
                 </div>
             </div>
 
-            {/* Error Banner */}
             {vps.isError && (
                 <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
                     Failed to fetch VPS list: {(vps.error as Error)?.message}
                 </div>
             )}
 
-            {/* Sleek Modern Full-Bleed Terminal Shell */}
             <div>
                 <TerminalPanel
                     vpsList={vps.data || []}

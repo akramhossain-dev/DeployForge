@@ -1,6 +1,3 @@
-/**
- * Reusable JSON-LD Structured Data Schema Generators for DeployForge
- */
 
 export function getOrganizationSchema() {
     return {

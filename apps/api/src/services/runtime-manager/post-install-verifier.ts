@@ -1,10 +1,3 @@
-/**
- * PostInstallVerifier
- *
- * After installation, run version commands to confirm each runtime
- * was installed correctly. Deployment does not continue until all
- * required runtimes pass verification.
- */
 
 import { SSHService } from '@deployforge/vps';
 import { RuntimeName, VerificationResult } from './types';
@@ -30,12 +23,6 @@ const VERIFY_COMMANDS: Record<RuntimeName, string> = {
 
 export class PostInstallVerifier {
 
-    /**
-     * Verify that all listed runtimes are accessible after installation.
-     *
-     * @param ssh          Active SSH session
-     * @param runtimeNames List of runtime names to verify
-     */
     static async verify(
         ssh: SSHService,
         runtimeNames: RuntimeName[],
@@ -51,7 +38,6 @@ export class PostInstallVerifier {
 
             try {
                 const { stdout, stderr, code } = await ssh.execute(
-                    // Ensure PATH includes common install locations
                     `export PATH="$PATH:$HOME/.bun/bin:/usr/local/go/bin" && ${cmd}`,
                     30_000,
                 );
@@ -80,16 +66,10 @@ export class PostInstallVerifier {
         return results;
     }
 
-    /**
-     * Check if all results passed. Used to gate deployment continuation.
-     */
     static allPassed(results: VerificationResult[]): boolean {
         return results.every((r) => r.ok);
     }
 
-    /**
-     * Format a verification summary for deployment logs.
-     */
     static formatSummary(results: VerificationResult[]): string {
         const lines = results.map((r) => {
             const icon = r.ok ? '✓' : '✗';

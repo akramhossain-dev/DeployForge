@@ -64,7 +64,6 @@ export default function SettingsPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* General Profile Section */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
                 <div className="border-b border-[#1F1F1F] pb-3">
                     <h2 className="font-bold text-white text-sm">General Profile</h2>
@@ -102,7 +101,6 @@ export default function SettingsPage() {
                 </form>
             </div>
 
-            {/* Connected Providers */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
                 <div className="border-b border-[#1F1F1F] pb-3">
                     <h2 className="font-bold text-white text-sm">Connected Providers</h2>
@@ -120,7 +118,6 @@ export default function SettingsPage() {
                 </div>
             </div>
 
-            {/* GitHub Connection Manager */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
                 <div className="border-b border-[#1F1F1F] pb-3 flex items-center justify-between">
                     <div>

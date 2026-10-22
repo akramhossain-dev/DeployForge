@@ -58,7 +58,6 @@ export default function AccountSettingsPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Danger Zone Container */}
             <div className="rounded-md border border-rose-900/40 bg-rose-950/20 p-6 space-y-4 text-rose-300">
                 <div className="flex items-center gap-2 font-bold text-rose-400 text-sm border-b border-rose-900/40 pb-3">
                     <AlertTriangle size={16} />
@@ -83,7 +82,6 @@ export default function AccountSettingsPage() {
                 </div>
             </div>
 
-            {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono text-xs">
                     <div className="w-full max-w-md rounded-md border border-rose-900/50 bg-[#0A0A0A] p-6 space-y-4">

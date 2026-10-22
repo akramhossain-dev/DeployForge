@@ -76,7 +76,6 @@ export default function PrivacyPolicyPage() {
     return (
         <main className="min-h-screen bg-black text-white">
 
-            {/* ── 1. Page Header ────────────────────────────────────────── */}
             <header className="border-b border-[#1F1F1F] px-4 pb-12 pt-14 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-4xl">
                     <div className="inline-flex items-center gap-2 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-2.5 py-1 text-xs font-mono text-[#A1A1A1]">
@@ -102,7 +101,6 @@ export default function PrivacyPolicyPage() {
                 </div>
             </header>
 
-            {/* ── 2. Table of Contents Jump Links ───────────────────────── */}
             <nav className="border-b border-[#1F1F1F] bg-[#000000] px-4 py-4 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-4xl">
                     <div className="flex flex-wrap gap-2 text-xs font-mono">
@@ -120,7 +118,6 @@ export default function PrivacyPolicyPage() {
                 </div>
             </nav>
 
-            {/* ── 3. Document Sections ──────────────────────────────────── */}
             <article className="px-4 py-12 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-4xl space-y-12">
                     {SECTIONS.map((sec) => (
@@ -149,7 +146,6 @@ export default function PrivacyPolicyPage() {
                 </div>
             </article>
 
-            {/* ── 4. Contact Footer ────────────────────────────────────── */}
             <section className="border-t border-[#1F1F1F] bg-[#000000] px-4 py-12 sm:px-6 lg:px-8">
                 <div className="mx-auto max-w-4xl">
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 sm:p-8">

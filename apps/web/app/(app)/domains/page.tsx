@@ -161,7 +161,6 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
 
     return (
         <div className={clsx('rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4 font-mono text-xs transition-colors hover:border-[#333333]', isDeleted && 'opacity-50')}>
-            {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-[#1F1F1F] pb-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                     <Globe size={15} className={sslIssued ? 'text-emerald-400 shrink-0' : 'text-[#666666] shrink-0'} />
@@ -200,7 +199,6 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
                 </div>
             </div>
 
-            {/* Target & Created Info */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-[#A1A1A1] border-b border-[#1F1F1F] pb-3">
                 <div>
                     <span className="text-[10px] text-[#666666] block uppercase">Deployment</span>
@@ -220,10 +218,8 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
                 </div>
             </div>
 
-            {/* Expanded details */}
             {expanded && !isDeleted && (
                 <div className="space-y-4 pt-1">
-                    {/* DNS Setup Guide */}
                     {vpsIp && (
                         <div className="rounded-md border border-[#1F1F1F] bg-[#000000] p-3 space-y-2.5">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-[#666666]">
@@ -260,7 +256,6 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
                         </div>
                     )}
 
-                    {/* Live DNS Propagation Verification */}
                     {vpsIp && (
                         <div className="rounded-md border border-[#1F1F1F] bg-[#050505] p-3 space-y-2">
                             <div className="flex items-center justify-between">
@@ -304,7 +299,6 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
                         </div>
                     )}
 
-                    {/* Traefik ACME Automated SSL Note */}
                     <div className="rounded border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 text-[11px] text-[#A1A1A1] flex items-center gap-2">
                         <ShieldCheck size={14} className="text-cyan-400 shrink-0" />
                         <span>
@@ -320,7 +314,6 @@ function DomainCard({ domain }: { domain: Domain & { deployment?: any } }) {
                         {domain.sslError ? <span className="text-rose-400 sm:col-span-2">{domain.sslError}</span> : null}
                     </div>
 
-                    {/* Controls */}
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#1F1F1F] pt-3">
                         <div className="flex flex-wrap gap-2">
                             {!sslIssued && (
@@ -393,7 +386,6 @@ export default function DomainsPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -422,14 +414,12 @@ export default function DomainsPage() {
                 </div>
             </div>
 
-            {/* Error state */}
             {domains.isError && (
                 <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
                     Failed to load domains: {(domains.error as Error)?.message}
                 </div>
             )}
 
-            {/* Summary metrics */}
             <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-1">
                     <p className="text-[10px] uppercase text-[#666666]">TOTAL DOMAINS</p>
@@ -445,7 +435,6 @@ export default function DomainsPage() {
                 </div>
             </div>
 
-            {/* Filters */}
             <div className="flex flex-col gap-3 sm:flex-row">
                 <input
                     value={search}
@@ -465,7 +454,6 @@ export default function DomainsPage() {
                 </select>
             </div>
 
-            {/* Domain list */}
             {domains.isLoading ? (
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                     {Array.from({ length: 4 }).map((_, i) => (
@@ -496,7 +484,6 @@ export default function DomainsPage() {
                 </div>
             )}
 
-            {/* Add Domain Modal */}
             <AddDomainModal
                 open={addOpen}
                 onClose={() => setAddOpen(false)}

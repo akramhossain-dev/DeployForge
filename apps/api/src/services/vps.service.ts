@@ -124,22 +124,18 @@ export class VPSService {
 
             const acmeEmail = email || config.email?.fromEmail || `admin@${vps.ipAddress}.sslip.io`;
 
-            // 1. Ensure Docker Engine & Compose plugin
             const dockerCheck = await ssh.execute('command -v docker >/dev/null 2>&1');
             if (dockerCheck.code !== 0) {
                 logger.info({ vpsId }, 'Installing Docker on VPS...');
                 await ssh.execute('export DEBIAN_FRONTEND=noninteractive && curl -fsSL https://get.docker.com | sh && systemctl enable --now docker', 300000);
             }
 
-            // 2. Create the application and private gateway networks.
             await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
             await ssh.execute('docker network inspect deployforge-gateway >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-gateway');
             await ssh.execute('docker network inspect deployforge-validation >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-validation');
 
-            // 3. Prepare ACME persistent storage
             await ssh.execute('mkdir -p /etc/deployforge/traefik/acme /etc/deployforge/traefik/dynamic && touch /etc/deployforge/traefik/acme/acme.json && chmod 600 /etc/deployforge/traefik/acme/acme.json');
 
-            // 4. Keep the Docker socket behind a read-only allowlisted proxy.
             const proxyRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-socket-proxy 2>/dev/null");
             if (proxyRunning.stdout.trim() !== 'true') {
                 await ssh.execute('docker rm -f deployforge-socket-proxy 2>/dev/null || true');
@@ -155,7 +151,6 @@ export class VPSService {
                 if (proxyResult.code !== 0) throw new Error('Docker socket proxy failed to start');
             }
 
-            // 5. Ensure Traefik talks to the proxy and never mounts the socket.
             const traefikRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-traefik 2>/dev/null");
             const proxyConfigured = await ssh.execute("docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'deployforge-socket-proxy:2375' && docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'providers.file.directory=/dynamic'");
             if (traefikRunning.stdout.trim() !== 'true' || proxyConfigured.code !== 0) {
@@ -606,7 +601,6 @@ export class VPSService {
                 data: { status: 'active', lastCheckedAt: new Date() },
             });
 
-            // Alert engine: check thresholds
             const swapResult = await ssh.execute(`free | awk '/Swap:/{if($2>0) printf "%.1f", $3/$2*100; else print "0"}'`).catch(() => ({ stdout: '0' }));
             const loadResult = await ssh.execute(`cat /proc/loadavg | awk '{print $1}'`).catch(() => ({ stdout: '0' }));
             const swapUsage = parseFloat((swapResult as any).stdout?.trim()) || 0;
@@ -620,7 +614,6 @@ export class VPSService {
                 loadAvg1,
             }).catch(err => logger.warn({ err, vpsId }, 'Alert threshold check failed'));
 
-            // If server was previously offline, emit reconnected alert
             if (previousStatus === 'failed') {
                 AlertService.handleServerReconnected(vps.userId, vpsId, vps.name)
                     .catch(err => logger.warn({ err, vpsId }, 'Server reconnected alert failed'));
@@ -633,7 +626,6 @@ export class VPSService {
                 data: { status: 'failed', lastCheckedAt: new Date() },
             });
 
-            // Alert engine: server offline
             if (previousStatus === 'active') {
                 AlertService.handleServerOffline(vps.userId, vpsId, vps.name)
                     .catch(alertErr => logger.warn({ err: alertErr, vpsId }, 'Server offline alert failed'));
@@ -658,10 +650,6 @@ export class VPSService {
                 ...buildStoredAuth(vps),
             });
 
-            // Run two sequential calls — each combines related commands into
-            // a single SSH channel using printf/echo and double-quote-only awk.
-            // This keeps well below OpenSSH MaxSessions=10 and avoids all
-            // single-quote nesting issues inside the JS string.
 
             const [r1, r2] = await Promise.all([
                 ssh.execute(
@@ -685,7 +673,6 @@ export class VPSService {
                 ),
             ]);
 
-            // Parse key=value blocks
             function parseBlock(raw: string): Record<string, string> {
                 const out: Record<string, string> = {};
                 for (const line of raw.split('\n')) {

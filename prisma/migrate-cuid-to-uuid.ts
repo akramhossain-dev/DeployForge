@@ -10,7 +10,6 @@ function isCuid(id: string): boolean {
 async function main() {
     console.log('Starting CUID to UUID migration...');
 
-    // 1. Migrate Project -> Deployment (projectId)
     console.log('Migrating Project tables...');
     const projects = await prisma.project.findMany();
     for (const project of projects) {
@@ -44,7 +43,6 @@ async function main() {
         }
     }
 
-    // 2. Migrate Session -> RefreshTokenReplay (sessionId)
     console.log('Migrating Session tables...');
     const sessions = await prisma.session.findMany();
     for (const session of sessions) {
@@ -82,8 +80,6 @@ async function main() {
         }
     }
 
-    // 3. Migrate other leaf CUID tables (no foreign references)
-    // - RefreshTokenReplay
     console.log('Migrating RefreshTokenReplay tables...');
     const replays = await prisma.refreshTokenReplay.findMany();
     for (const replay of replays) {
@@ -105,7 +101,6 @@ async function main() {
         }
     }
 
-    // - VerificationToken
     console.log('Migrating VerificationToken tables...');
     const verificationTokens = await prisma.verificationToken.findMany();
     for (const vt of verificationTokens) {
@@ -127,7 +122,6 @@ async function main() {
         }
     }
 
-    // - VPSHealth
     console.log('Migrating VPSHealth tables...');
     const healths = await prisma.vPSHealth.findMany();
     for (const h of healths) {
@@ -152,7 +146,6 @@ async function main() {
         }
     }
 
-    // - PasswordResetToken
     console.log('Migrating PasswordResetToken tables...');
     const prts = await prisma.passwordResetToken.findMany();
     for (const prt of prts) {
@@ -174,7 +167,6 @@ async function main() {
         }
     }
 
-    // - EmailVerificationToken
     console.log('Migrating EmailVerificationToken tables...');
     const evts = await prisma.emailVerificationToken.findMany();
     for (const evt of evts) {
@@ -196,7 +188,6 @@ async function main() {
         }
     }
 
-    // - NotificationPreference
     console.log('Migrating NotificationPreference tables...');
     const nps = await prisma.notificationPreference.findMany();
     for (const np of nps) {
@@ -222,7 +213,6 @@ async function main() {
         }
     }
 
-    // - AuditLog
     console.log('Migrating AuditLog tables...');
     const logs = await prisma.auditLog.findMany();
     for (const log of logs) {

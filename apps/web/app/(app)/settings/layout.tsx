@@ -54,7 +54,6 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
             />
 
             <div className="flex flex-col gap-6 lg:flex-row">
-                {/* Settings Sidebar */}
                 <aside className="w-full shrink-0 lg:w-56">
                     <nav className="flex flex-row flex-wrap gap-1 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-1 lg:flex-col lg:p-1.5">
                         {navItems.map((item) => (
@@ -76,7 +75,6 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
                     </nav>
                 </aside>
 
-                {/* Main Settings Content */}
                 <main className="flex-1 space-y-6">
                     {children}
                 </main>

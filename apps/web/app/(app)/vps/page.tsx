@@ -69,7 +69,6 @@ export default function VpsPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -91,7 +90,6 @@ export default function VpsPage() {
                 </div>
             </div>
 
-            {/* Pure Dark Developer-Product Tab Bar */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-1 flex items-center gap-1 overflow-x-auto no-scrollbar">
                 {TABS.map((tab) => {
                     const active = activeTab === tab.id;
@@ -122,7 +120,6 @@ export default function VpsPage() {
                 })}
             </div>
 
-            {/* Server Selector strip for info/monitor/environment tabs */}
             {(activeTab === 'info' || activeTab === 'monitor' || activeTab === 'history' || activeTab === 'environment') && (vps.data?.length ?? 0) > 0 && (
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 text-xs">
                     <span className="shrink-0 text-[#666666] font-semibold uppercase">Active Server:</span>
@@ -147,7 +144,6 @@ export default function VpsPage() {
                 </div>
             )}
 
-            {/* Tab view rendering */}
             {activeTab === 'list' && (
                 <VpsListTab
                     vpsList={vps.data || []}

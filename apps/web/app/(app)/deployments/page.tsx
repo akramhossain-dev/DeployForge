@@ -138,7 +138,6 @@ export default function DeploymentsPage() {
     return (
         <div className="space-y-6">
 
-            {/* ── 1. Page Header ── */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -168,7 +167,6 @@ export default function DeploymentsPage() {
                 </div>
             </div>
 
-            {/* ── Error Banner ── */}
             {deployments.isError && (
                 <div className="flex items-center justify-between rounded-md border border-rose-900/50 bg-rose-950/20 p-3 font-mono text-xs text-rose-300">
                     <span>Failed to load deployments data.</span>
@@ -182,7 +180,6 @@ export default function DeploymentsPage() {
                 </div>
             )}
 
-            {/* ── 2. Mode Selector Tabs ── */}
             <div className="flex items-center gap-1 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-1 w-fit font-mono text-xs">
                 <button
                     onClick={() => setActiveTab('list')}
@@ -212,14 +209,12 @@ export default function DeploymentsPage() {
 
             {activeTab === 'list' ? (
                 <>
-                    {/* ── Stat Cards Grid ── */}
                     <div className="grid grid-cols-3 gap-4 2xl:gap-6">
                         <StatCard label="Total Deployments" value={deployments.data?.length || 0} />
                         <StatCard label="Active Runs" value={activeCount} />
                         <StatCard label="Failed Runs" value={failedCount} />
                     </div>
 
-                    {/* ── Filters & Search Toolbar ── */}
                     <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3">
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-center justify-between">
                             <div className="relative flex-1 max-w-md 2xl:max-w-xl">
@@ -232,7 +227,6 @@ export default function DeploymentsPage() {
                                 />
                             </div>
 
-                            {/* Status Filter Buttons */}
                             <div className="flex flex-wrap gap-1 font-mono text-xs">
                                 {STATUS_FILTERS.map((f) => (
                                     <button
@@ -252,7 +246,6 @@ export default function DeploymentsPage() {
                         </div>
                     </div>
 
-                    {/* ── Deployment List Table ── */}
                     {deployments.isLoading ? (
                         <div className="space-y-2">
                             {Array.from({ length: 6 }).map((_, i) => (
@@ -285,7 +278,6 @@ export default function DeploymentsPage() {
                                                 key={d.id}
                                                 className="hover:bg-[#111111]/60 transition-colors"
                                             >
-                                                {/* Deployment Name & Repo */}
                                                 <td className="p-3.5">
                                                     <Link href={`/deployments/${d.id}`} className="font-semibold text-white hover:underline flex items-center gap-1.5">
                                                         {sourceType === 'upload' ? <PackagePlus size={13} className="text-[#A1A1A1]" /> : <Github size={13} className="text-[#A1A1A1]" />}
@@ -299,7 +291,6 @@ export default function DeploymentsPage() {
                                                     )}
                                                 </td>
 
-                                                {/* Branch */}
                                                 <td className="p-3.5 whitespace-nowrap">
                                                     <div className="flex items-center gap-1 text-[#A1A1A1]">
                                                         <GitBranch size={12} className="text-[#666666]" />
@@ -307,7 +298,6 @@ export default function DeploymentsPage() {
                                                     </div>
                                                 </td>
 
-                                                {/* Server & Ingress */}
                                                 <td className="p-3.5 whitespace-nowrap">
                                                     <div className="flex items-center gap-1 text-[#A1A1A1]">
                                                         <Server size={12} className="text-[#666666]" />
@@ -316,7 +306,6 @@ export default function DeploymentsPage() {
                                                     <p className="text-[10px] text-emerald-400 font-mono">Traefik :443 (TLS)</p>
                                                 </td>
 
-                                                {/* Commit Hash & Message (expanded width on large monitors) */}
                                                 <td className="p-3.5 max-w-md 2xl:max-w-xl truncate">
                                                     <div className="flex items-center gap-2">
                                                         <span className="rounded border border-[#1F1F1F] bg-[#000000] px-1.5 py-0.5 font-mono text-[10px] text-white shrink-0">
@@ -328,12 +317,10 @@ export default function DeploymentsPage() {
                                                     </div>
                                                 </td>
 
-                                                {/* Created Date */}
                                                 <td className="p-3.5 text-[#666666] whitespace-nowrap">
                                                     {formatDate(d.updatedAt || d.createdAt)}
                                                 </td>
 
-                                                {/* Status Tag */}
                                                 <td className="p-3.5 text-right whitespace-nowrap">
                                                     <StatusTag status={d.status} />
                                                 </td>
@@ -358,7 +345,6 @@ export default function DeploymentsPage() {
                     )}
                 </>
             ) : (
-                /* ── 3. Telemetry Analytics Tab ── */
                 <div className="space-y-6 font-mono text-xs">
                     {analytics.isLoading ? (
                         <div className="space-y-4">
@@ -377,7 +363,6 @@ export default function DeploymentsPage() {
                         </div>
                     ) : (
                         <>
-                            {/* Project Filter Toolbar */}
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                                 <div>
                                     <h3 className="font-bold text-white uppercase tracking-wider">Project Telemetry</h3>
@@ -397,7 +382,6 @@ export default function DeploymentsPage() {
 
                             {computedMetrics && (
                                 <>
-                                    {/* Stat Cards Grid */}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 2xl:gap-6">
                                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 lg:p-5 space-y-1">
                                             <p className="text-[10px] text-[#666666] uppercase">Total Runs</p>
@@ -417,7 +401,6 @@ export default function DeploymentsPage() {
                                         </div>
                                     </div>
 
-                                    {/* Lifecycle Duration & Last Deployment */}
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 2xl:gap-8">
                                         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
                                             <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3">

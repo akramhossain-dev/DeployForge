@@ -279,7 +279,6 @@ export function AppModal({
         >
             <div className={clsx('relative w-full my-auto', maxWidthMap[size])}>
                 <div className="glass-modal flex flex-col rounded-md p-5 text-white font-mono text-xs">
-                    {/* Modal header */}
                     <div className="mb-4 flex shrink-0 items-center justify-between gap-4 border-b border-[#1F1F1F] pb-3">
                         <h2 className="text-sm font-bold text-white sm:text-base">{title}</h2>
                         <button
@@ -291,7 +290,6 @@ export function AppModal({
                             <X size={13} />
                         </button>
                     </div>
-                    {/* Modal body */}
                     <div className="min-h-0">{children}</div>
                 </div>
             </div>

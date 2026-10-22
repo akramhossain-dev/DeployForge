@@ -99,7 +99,6 @@ export const deploymentWorker = new Worker(
         });
         logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job started');
 
-        // Fetch deployment details for alert context
         const deployment = await prisma.deployment.findUnique({
             where: { id: deploymentId },
             select: { id: true, userId: true, vpsId: true, name: true, vps: { select: { name: true } } },
@@ -154,7 +153,6 @@ export const deploymentWorker = new Worker(
             });
             logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, releaseId: await currentReleaseId(deploymentExists.projectId), vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job completed');
 
-            // Alert: deployment completed
             if (deployment) {
                 AlertService.handleDeploymentEvent(
                     deployment.userId,
@@ -182,7 +180,6 @@ export const deploymentWorker = new Worker(
                 },
             });
 
-            // Alert: deployment failed
             if (deployment) {
                 AlertService.handleDeploymentEvent(
                     deployment.userId,

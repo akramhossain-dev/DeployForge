@@ -351,15 +351,12 @@ export class AccountService {
 
         await this.logAudit(userId, 'ACCOUNT_DELETED', 'Account successfully deleted.', ip, ua);
 
-        // Delete verification tokens
         if (user.email) {
             await prisma.verificationToken.deleteMany({ where: { email: user.email } });
         }
 
-        // Clear all session cache patterns from Redis to instantly log out the user from all devices
         await CacheService.clearPattern(`user-session:${userId}:*`);
 
-        // Clear profile cache
         await CacheService.del(`user:profile:${userId}`);
 
         await prisma.user.delete({ where: { id: userId } });

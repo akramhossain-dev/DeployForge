@@ -48,7 +48,7 @@ DeployForge/
 │   └── vps/                  # SSH Connection Pools & SFTP Transfers
 ├── prisma/                   # Database Schema & Migrations
 ├── docker/                   # Dockerfiles & Nginx configuration
-└── docs/                     # Comprehensive Project Documentation
+└── docs/                     # Project and production documentation
 ```
 
 ---
@@ -75,21 +75,18 @@ pnpm dev
 * **Web Dashboard:** `http://localhost:3000`
 * **API Server:** `http://localhost:3001`
 
-> See [docs/SETUP.md](docs/SETUP.md) for the full setup guide including production Docker deployment.
-
 ---
 
-## 📄 Documentation Directory
+## 📚 Documentation
 
-| Doc | Description |
-|-----|-------------|
-| 📋 [Project Overview](docs/PROJECT_OVERVIEW.md) | Vision, Control/Data Plane model, package map |
-| 🚀 [Setup & Installation](docs/SETUP.md) | Local dev quickstart, Docker Compose production guide |
-| 🔌 [API Reference](docs/API.md) | Full REST endpoint inventory, WebSocket terminal, admin routes |
-| 🏗️ [Architecture](docs/ARCHITECTURE.md) | Design diagrams, Blue-Green deployment sequence, monorepo layout |
-| 🌟 [Features](docs/FEATURES.md) | All platform features: deployments, env vars, monitoring, alerts, file manager |
-| 🔐 [Security](docs/SECURITY.md) | Encryption, CSRF, rate limiting, Docker hardening, metrics protection |
-| 🧭 [Phase 6 Migration Runbook](docs/PHASE6_RUNBOOK.md) | Dry-run-first staging, soak, cutover and rollback automation |
+| Guide | Purpose |
+| --- | --- |
+| [Project Overview](docs/PROJECT_OVERVIEW.md) | Product goals, workflows, repository map, and system boundaries |
+| [Features](docs/FEATURES.md) | Supported platform capabilities and operational boundaries |
+| [Architecture](docs/ARCHITECTURE.md) | Services, networks, deployment flow, storage, and recovery model |
+| [API Reference](docs/API.md) | API conventions, authentication, and route groups |
+| [Setup](docs/SETUP.md) | Local development and production deployment instructions |
+| [Security](docs/SECURITY.md) | Application, host, container, release, and backup controls |
 
 ---
 

@@ -306,7 +306,6 @@ export class DeploymentService {
             });
             hardStorageLimit = await ResourcePolicyService.supportsHardStorageLimit(ssh);
 
-            // Ensure Traefik Ingress Gateway & deployforge-net network
             await this.ensureTraefikGateway(ssh, deploymentId, vps);
             if (!isSandbox) await ReleaseService.reconcileProject(ssh, deploymentId, project.id, effectiveDomain, routerId);
 
@@ -325,7 +324,6 @@ export class DeploymentService {
             await ResourcePolicyService.assertWorkspaceBudget(ssh, deploymentId, project.id, vps.username, resourcePolicy.storageMiB);
             if (isSandbox) await runCommand(ssh, deploymentId, 'system', `ln -sfn ${shellQuote(workDir)} ${shellQuote(currentLink)}`);
 
-            // ── Environment Preparation (Runtime Detection & Provisioning) ─────────
             await LoggingService.log(deploymentId, 'Scanning VPS environment...', 'system');
             try {
                 const { stdout: fileListOut } = await ssh.execute(
@@ -354,7 +352,6 @@ export class DeploymentService {
                 if (err instanceof DeploymentError) throw err;
                 await LoggingService.log(deploymentId, `Environment scan warning: ${err?.message || 'unknown error'}`, 'system');
             }
-            // ────────────────────────────────────────────────────────────
 
             await LoggingService.log(deploymentId, 'Validating project structure', 'build');
             const detected = await BuildService.detectProject(ssh, deploymentId, workDir);
@@ -643,7 +640,6 @@ export class DeploymentService {
                 },
             });
 
-            // The old runtime remains intact for rollback; only its legacy deployment state changes.
             if (!isSandbox) {
                 const previousActiveDeployment = await prisma.deployment.findFirst({
                     where: {
@@ -709,15 +705,12 @@ export class DeploymentService {
         await LoggingService.log(deploymentId, 'Verifying Traefik Ingress Gateway and deployforge-net network...', 'system');
         const acmeEmail = `admin@${vps.ipAddress}.sslip.io`;
 
-        // 1. Ensure external network
         await ssh.execute('docker network inspect deployforge-net >/dev/null 2>&1 || docker network create --driver bridge --subnet 172.28.0.0/16 deployforge-net');
         await ssh.execute('docker network inspect deployforge-gateway >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-gateway');
         await ssh.execute('docker network inspect deployforge-validation >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-validation');
 
-        // 2. Ensure ACME directory & permissions
         await ssh.execute('mkdir -p /etc/deployforge/traefik/acme /etc/deployforge/traefik/dynamic && touch /etc/deployforge/traefik/acme/acme.json && chmod 600 /etc/deployforge/traefik/acme/acme.json');
 
-        // 3. Ensure the allowlisted Docker socket proxy is running.
         const proxyRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-socket-proxy 2>/dev/null");
         if (proxyRunning.stdout.trim() !== 'true') {
             await ssh.execute('docker rm -f deployforge-socket-proxy 2>/dev/null || true');
@@ -732,7 +725,6 @@ export class DeploymentService {
                 tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459`, 'deploying', 'SOCKET_PROXY_START_FAILED');
         }
 
-        // 4. Ensure Traefik is running with the proxy endpoint.
         const traefikRunning = await ssh.execute("docker inspect -f '{{.State.Running}}' deployforge-traefik 2>/dev/null");
         const proxyConfigured = await ssh.execute("docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'deployforge-socket-proxy:2375'");
         const phase3Configured = await ssh.execute("docker inspect -f '{{join .Config.Cmd \" \"}}' deployforge-traefik 2>/dev/null | grep -q 'providers.file.directory=/dynamic'");

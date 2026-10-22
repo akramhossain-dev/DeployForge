@@ -35,7 +35,6 @@ export function DeploymentTimeline({
 
     return (
         <div className="space-y-4 font-mono text-xs">
-            {/* ── Metadata Chips Grid ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-2.5 sm:p-3 space-y-0.5 min-w-0">
                     <p className="text-[10px] uppercase text-[#666666] truncate">EXECUTION MODE</p>
@@ -66,7 +65,6 @@ export function DeploymentTimeline({
                 </div>
             </div>
 
-            {/* ── Active URL Banner ── */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[#1F1F1F] bg-[#0A0A0A] px-4 py-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -103,7 +101,6 @@ export function DeploymentTimeline({
                 </div>
             </div>
 
-            {/* ── Deployment Pipeline Timeline ── */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-3.5 sm:p-4 space-y-3">
                 <div className="flex items-center justify-between">
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-[#666666]">Release Pipeline Progression</p>

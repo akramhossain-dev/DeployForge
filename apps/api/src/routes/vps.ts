@@ -292,7 +292,6 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // ── Runtime / Environment endpoints ──────────────────────────────────────
 
     fastify.get('/:id/environment', {
         preHandler: [(fastify as any).authGuard],
@@ -391,7 +390,6 @@ export default async function vpsRoutes(fastify: FastifyInstance) {
             if (!vps) {
                 return reply.status(404).send({ success: false, error: { code: 'VPS_NOT_FOUND', message: 'VPS not found' } });
             }
-            // Return recent installation-related deployment logs for this VPS
             const recentLogs = await prisma.deploymentLog.findMany({
                 where: {
                     deployment: { vpsId: id, vps: { userId: request.user!.id } },

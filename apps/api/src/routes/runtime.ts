@@ -1,9 +1,3 @@
-/**
- * /runtime — Runtime management routes
- *
- * POST /runtime/:vpsId/prepare   — Manual full prepare without a deployment
- * GET  /runtime/:vpsId/preflight — Preflight checklist for a given VPS
- */
 
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -14,9 +8,6 @@ import { SSHService } from '@deployforge/vps';
 
 export default async function runtimeRoutes(fastify: FastifyInstance) {
 
-    // ── POST /runtime/:vpsId/prepare ─────────────────────────────────────────
-    // Manual environment preparation (no active deployment required).
-    // Returns full PrepareResult including scan, diff, plan, logs, verification.
     fastify.post('/:vpsId/prepare', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 3, timeWindow: '5 minutes' } },
@@ -45,8 +36,6 @@ export default async function runtimeRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // ── GET /runtime/:vpsId/preflight ────────────────────────────────────────
-    /** @deprecated Retained for API compatibility; the web client no longer uses this endpoint. */
     fastify.get('/:vpsId/preflight', {
         preHandler: [(fastify as any).authGuard],
         config: { rateLimit: { max: 12, timeWindow: '1 minute' } },
@@ -79,8 +68,6 @@ export default async function runtimeRoutes(fastify: FastifyInstance) {
         }
     });
 
-    // ── GET /runtime/runtimes ────────────────────────────────────────────────
-    // Returns the list of runtimes that can be installed via the API (allow-list).
     fastify.get('/runtimes', {
         preHandler: [(fastify as any).authGuard],
     }, async (_request, _reply) => {

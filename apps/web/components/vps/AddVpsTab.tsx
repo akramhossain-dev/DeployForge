@@ -85,7 +85,6 @@ export default function AddVpsTab({ onAdded }: { onAdded?: () => void }) {
 
     return (
         <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-6 font-mono text-xs">
-            {/* Header & Steps */}
             <div className="border-b border-[#1F1F1F] pb-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-bold text-white">
                     <Server size={16} />
@@ -107,7 +106,6 @@ export default function AddVpsTab({ onAdded }: { onAdded?: () => void }) {
                 </div>
             </div>
 
-            {/* Step 0: Form inputs */}
             {step === 0 && (
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -215,7 +213,6 @@ export default function AddVpsTab({ onAdded }: { onAdded?: () => void }) {
                 </div>
             )}
 
-            {/* Step 1: Probe test */}
             {step === 1 && (
                 <div className="space-y-4">
                     <div className="rounded border border-[#1F1F1F] bg-[#000000] p-4 space-y-1 text-[#A1A1A1]">
@@ -267,7 +264,6 @@ export default function AddVpsTab({ onAdded }: { onAdded?: () => void }) {
                 </div>
             )}
 
-            {/* Step 2: Register VPS */}
             {step === 2 && (
                 <form onSubmit={handleAdd} className="space-y-4">
                     <div className="rounded border border-emerald-900/50 bg-emerald-950/20 p-4 text-emerald-300 space-y-1">

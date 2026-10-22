@@ -10,7 +10,6 @@ export default function AdminOverviewPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -36,7 +35,6 @@ export default function AdminOverviewPage() {
                 </div>
             )}
 
-            {/* Users row */}
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
                 {overview.isLoading ? <LoadingGrid count={4} className="h-24" /> : (
                     <>
@@ -48,7 +46,6 @@ export default function AdminOverviewPage() {
                 )}
             </div>
 
-            {/* Platform row */}
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
                 {overview.isLoading ? <LoadingGrid count={4} className="h-24" /> : (
                     <>
@@ -60,9 +57,7 @@ export default function AdminOverviewPage() {
                 )}
             </div>
 
-            {/* Content Grids */}
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-                {/* Recent Registrations */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
                         <Users size={14} />
@@ -82,7 +77,6 @@ export default function AdminOverviewPage() {
                     />
                 </div>
 
-                {/* Resource Summary */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
                         <Zap size={14} />
@@ -91,7 +85,6 @@ export default function AdminOverviewPage() {
                     <ResourceBars cpu={data?.resources.cpuUsage} ram={data?.resources.memoryUsage} disk={data?.resources.diskUsage} />
                 </div>
 
-                {/* Recent Activities */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
                         <Activity size={14} />

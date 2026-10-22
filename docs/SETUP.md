@@ -1,319 +1,254 @@
-# 🚀 DeployForge Setup & Installation Guide
+# DeployForge Setup and Production Guide
 
-This guide provides comprehensive instructions for installing, configuring, and running DeployForge in both local development and production environments.
+## Prerequisites
 
----
+### Local development
 
-## 1. Prerequisites
+- Node.js 24
+- pnpm 8.15.4 through Corepack
+- PostgreSQL 16
+- Redis 7
+- Git and Docker with the Compose plugin
 
-Before installing DeployForge, ensure your host machine and target VPS systems meet these requirements:
+### Production control plane
 
-### 1.1 Development Host Requirements
-* **Node.js:** v18.0.0 or higher (v20+ recommended)
-* **Package Manager:** `pnpm` v8.x or v9.x
-* **Database:** PostgreSQL v14 or higher (local or managed)
-* **Cache & Queues:** Redis v6 or higher
+- Linux VPS with Docker Engine, Docker Compose, Git, and SSH.
+- Domain with `A`/`AAAA` records pointing to the VPS.
+- Public TCP ports 80 and 443.
+- Restricted deployment user with Docker access.
+- Offsite storage for database backups and encryption-key recovery material.
 
-### 1.2 Target VPS Requirements (Data Plane)
-* **Operating System:** Ubuntu 22.04 LTS or 24.04 LTS (recommended)
-* **SSH Access:** SSH server enabled (Key-based or password authentication)
-* **Dependencies:** Docker Engine must be installed on the target VPS. If not present, DeployForge can automatically detect and perform setup during target server onboarding.
-* **Firewall Ports:** Ports `22` (SSH), `80` (HTTP), and `443` (HTTPS) must be open.
+### Target deployment VPS
 
----
+Target nodes require SSH access and sufficient privileges for the selected bootstrap/deployment workflow. DeployForge prepares and operates Docker-based application infrastructure without installing a proprietary agent.
 
-## 2. Local Development Setup
+## Local development
 
-### 2.1 Clone the Repository
 ```bash
 git clone https://github.com/akramhossain-dev/DeployForge.git
 cd DeployForge
-```
-
-### 2.2 Install Workspace Dependencies
-DeployForge uses `pnpm` workspaces to manage dependencies across packages and apps. Install all dependencies from the root directory:
-```bash
-pnpm install
-```
-
-### 2.3 Configure Environment Variables
-Copy `.env.example` and fill in values:
-```bash
+corepack enable
+pnpm install --frozen-lockfile
 cp .env.example .env
 ```
 
-Edit `.env` with your local configuration:
-```env
-# Application
-NODE_ENV=development
-PORT=3001
-APP_URL=http://localhost:3000
-API_URL=http://localhost:3001
-LOG_LEVEL=info
+Complete `.env`, then initialize the development database and generated Prisma client:
 
-# Frontend
-NEXT_PUBLIC_API_URL=http://localhost:3001
-
-# Database
-POSTGRES_USER=postgres_user
-POSTGRES_PASSWORD=postgres_password
-POSTGRES_DB=deployforge_database
-DATABASE_URL="postgresql://postgres_user:postgres_password@localhost:5432/deployforge_database?schema=public"
-
-# Redis
-REDIS_ENABLED=true
-REDIS_URL="redis://localhost:6379"
-
-# Cryptographic Keys — generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  # 64 hex chars
-JWT_SECRET=your_super_secret_jwt_sign_key_minimum_32_chars
-ADMIN_SECRET=your_super_secret_admin_panel_creation_key
-ADMIN_JWT_SECRET=your_super_secret_admin_jwt_sign_key_minimum_32_chars
-
-# Super Admin Account (created/synced automatically on every startup)
-SUPER_ADMIN_EMAIL=superadmin@deployforge.local
-SUPER_ADMIN_PASSWORD=supersecretpassword123
-
-# GitHub OAuth — create app at https://github.com/settings/developers
-GITHUB_CLIENT_ID=your_github_client_id
-GITHUB_CLIENT_SECRET=your_github_client_secret
-GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback   # ← Note: /auth/github/callback
-GITHUB_WEBHOOK_SECRET=your_github_webhook_secret_key
-
-# Google OAuth (Optional — set GOOGLE_OAUTH_ENABLED=false to skip)
-GOOGLE_OAUTH_ENABLED=false
-GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_CALLBACK_URL=http://localhost:3001/auth/google/callback   # ← Note: /auth/google/callback
-
-# SMTP Mail Server
-SMTP_HOST=smtp.mailtrap.io
-SMTP_PORT=2525
-SMTP_SECURE=false
-SMTP_USER=your_smtp_user
-SMTP_PASS=your_smtp_password
-SMTP_FROM=no-reply@deployforge.com
-
-# Security & Rate Limiting
-RATE_LIMIT_MAX=100
-RATE_LIMIT_WINDOW="1 minute"
-ADMIN_MAX_ATTEMPTS=5
-ADMIN_LOCKOUT_TIME=900
-
-# Metrics endpoint protection (leave empty in dev)
-METRICS_TOKEN=
-```
-
-> **⚠️ Important OAuth Callback URLs:**
-> - GitHub: `http://localhost:3001/auth/github/callback`
-> - Google: `http://localhost:3001/auth/google/callback`
-> 
-> These must exactly match the callback URLs registered in your OAuth app settings.
-
-### 2.4 Initialize Database & Schema
-Prisma handles schema synchronization. Build the client and push the schema to your local database:
 ```bash
-# Push schema changes to PostgreSQL
 pnpm db:push
-
-# Generate Prisma client bindings
 pnpm db:generate
-```
-
-### 2.5 Run the Development Servers
-Start the Next.js frontend app and the Fastify backend concurrently using Turborepo:
-```bash
 pnpm dev
 ```
-Once compilation completes:
-* **Frontend Web App:** `http://localhost:3000`
-* **Backend REST API:** `http://localhost:3001`
 
-The Super Admin account is created automatically on the first API startup using `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` from your `.env`.
+Default endpoints:
 
----
+- Web: `http://localhost:3000`
+- API: `http://localhost:3001`
+- Liveness: `http://localhost:3001/live`
+- Readiness: `http://localhost:3001/ready`
 
-## 3. Production Deployment
+Before submitting changes:
 
-### 3.1 Deploying via Docker Compose (Recommended)
-
-DeployForge includes production-hardened multi-stage Dockerfiles and a Docker Compose manifest with full security configuration.
-
-#### Step 1: Prepare Environment File
-Copy the production template and fill in **all** values:
 ```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+Development workflow and pull-request standards are documented in [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+## Production environment
+
+Create the deployment checkout and restricted environment file:
+
+```bash
+sudo mkdir -p /opt/deployforge
+sudo chown "$USER:$USER" /opt/deployforge
+git clone https://github.com/akramhossain-dev/DeployForge.git /opt/deployforge
+cd /opt/deployforge
 cp .env.production.example .env
+chmod 600 .env
 ```
 
-> **🔐 Generate secure secrets:**
-> ```bash
-> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-> ```
+Required groups of values:
 
-Key production values to set:
-```env
-NODE_ENV=production
-PORT=3001
-APP_URL=https://yourdomain.com
-API_URL=https://yourdomain.com
-LOG_LEVEL=warn
+- Public HTTPS URLs: `APP_URL`, `API_URL`, `NEXT_PUBLIC_API_URL`, `DOMAIN`.
+- Data services: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `REDIS_PASSWORD`.
+- Authentication: `JWT_SECRET`, `ADMIN_SECRET`, `ADMIN_JWT_SECRET`.
+- Encryption: `ENCRYPTION_KEY` and optional separate `MASTER_KEY`, each 64 hexadecimal characters.
+- GitHub: client ID, client secret, callback URL, and webhook secret.
+- Google: disable with `GOOGLE_OAUTH_ENABLED=false` or provide a valid client ID, secret, and callback URL.
+- Mail: SMTP host, port, user, password, and sender.
+- Initial administrator: `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`.
+- Operations: `METRICS_TOKEN`, `CERTBOT_EMAIL`, rate limits, lockout settings, and log level.
 
-NEXT_PUBLIC_API_URL=https://yourdomain.com
+Generate independent secrets rather than reusing one value:
 
-POSTGRES_USER=deployforge
-POSTGRES_PASSWORD=<strong-random-password>
-POSTGRES_DB=deployforge
-DATABASE_URL=postgresql://deployforge:<password>@postgres:5432/deployforge?schema=public
-
-REDIS_ENABLED=true
-REDIS_PASSWORD=<strong-random-password>
-REDIS_URL=redis://:<REDIS_PASSWORD>@redis:6379
-
-JWT_SECRET=<64-hex-chars>
-ADMIN_SECRET=<48-hex-chars>
-ADMIN_JWT_SECRET=<64-hex-chars>
-ENCRYPTION_KEY=<64-hex-chars>
-
-SUPER_ADMIN_EMAIL=admin@yourdomain.com
-SUPER_ADMIN_PASSWORD=<strong-password>
-
-GITHUB_CLIENT_ID=<your-github-oauth-client-id>
-GITHUB_CLIENT_SECRET=<your-github-oauth-client-secret>
-GITHUB_CALLBACK_URL=https://yourdomain.com/auth/github/callback
-GITHUB_WEBHOOK_SECRET=<64-hex-chars>
-
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your@gmail.com
-SMTP_PASS=<gmail-app-password>
-
-DOMAIN=yourdomain.com
-CERTBOT_EMAIL=you@yourdomain.com
-
-# REQUIRED for production — protects /metrics endpoint
-METRICS_TOKEN=<64-hex-chars>
-```
-
-#### Step 2: Run Infrastructure Services
-Start the production stack. The one-shot `migrate` service applies migrations before API/worker startup:
 ```bash
-docker compose -f docker-compose.yml --profile production up -d
+openssl rand -hex 32
+openssl rand -base64 48 | tr -d '\n'
 ```
 
-The Compose stack orchestrates:
-- **`postgres`:** PostgreSQL 16 with health checks and persistent volume.
-- **`redis`:** Redis 7 with password auth, AOF persistence, and health check.
-- **`api`:** Fastify orchestrator in read-only mode, no new privileges, all capabilities dropped.
-- **`worker`:** BullMQ worker, isolated from the API process.
-- **`web`:** Next.js server with telemetry disabled and production optimizations.
+Production validation rejects localhost or non-HTTPS `APP_URL`/`API_URL`. `JWT_SECRET` and `ADMIN_JWT_SECRET` must be separate. Loss of `ENCRYPTION_KEY` makes encrypted application data unrecoverable.
 
-#### Step 3: Apply Database Migrations
-Migrations are applied automatically by the one-shot `migrate` service. Do not run schema migration from the API startup process.
+Validate interpolation before starting services:
 
-#### Step 4: Enable Nginx + SSL (Production Profile)
-Nginx first starts with an HTTP-only ACME configuration. Issue the certificate, then restart Nginx so its entrypoint verifies the files and enables TLS:
 ```bash
-DOMAIN=yourdomain.com CERTBOT_EMAIL=you@yourdomain.com \
-  sh docker/bootstrap-production-tls.sh
+docker compose config --quiet
+docker compose build migrate api worker web
 ```
 
-> **Note:** Make sure your domain's DNS A record points to your server's IP before running Certbot.
+## First production deployment
 
-#### Step 5: Verify Services
+Start data services and apply committed Prisma migrations:
+
 ```bash
-# Check all containers are healthy
+docker compose pull postgres redis
+docker compose up -d --wait postgres redis
+docker compose run --rm migrate
+```
+
+Start the application services:
+
+```bash
+docker compose up -d --no-deps --wait api worker web
 docker compose ps
-
-# View API logs
-docker compose logs api --tail=50
-
-# Test health endpoints
-curl https://yourdomain.com/health
-curl https://yourdomain.com/live
 ```
 
----
+Do not use `pnpm db:push` for production schema changes. The `migrate` service runs the production migration sequence and must succeed before application restart.
 
-### 3.2 Automated Tagged Releases (GitHub Actions)
+## Nginx and TLS
 
-Create a GitHub Environment named `production` and configure these environment secrets:
-
-- Required: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`
-- Optional: `DEPLOY_PORT` (defaults to `22`), `SLACK_WEBHOOK_URL`
-- Recommended: `DEPLOY_HOST_FINGERPRINT` for SSH host verification
-
-The production server's `DEPLOY_PATH` must contain a clone of this repository and a complete `.env` file. A release deploy runs only when the tagged commit is on `main` and the same commit already has a successful completed CI run.
+The `production` profile publishes Nginx on ports 80 and 443. When no certificate exists, the Nginx entrypoint uses its HTTP bootstrap configuration for the ACME challenge.
 
 ```bash
+docker compose --profile production up -d nginx
+docker compose --profile production run --rm certbot
+docker compose --profile production restart nginx
+```
+
+Verify the public service:
+
+```bash
+curl --fail --show-error https://yourdomain.com/live
+curl --fail --show-error https://yourdomain.com/ready
+docker compose --profile production ps
+```
+
+Renew certificates and validate Nginx before reload:
+
+```bash
+docker compose --profile production run --rm certbot renew
+docker compose --profile production exec nginx nginx -t
+docker compose --profile production exec nginx nginx -s reload
+```
+
+Automate renewal with a monitored systemd timer or cron job.
+
+## Tagged production releases
+
+The CD workflow runs for tags matching `v*.*.*`. It requires the tag SHA to be contained in `main` and to have a successful completed CI push run.
+
+Configure a GitHub environment named `production` with:
+
+| Secret | Purpose |
+| --- | --- |
+| `DEPLOY_HOST` | Production VPS hostname/IP. |
+| `DEPLOY_USER` | SSH deployment user. |
+| `DEPLOY_SSH_KEY` | Restricted deployment private key. |
+| `DEPLOY_PATH` | Absolute checkout path, for example `/opt/deployforge`. |
+| `DEPLOY_PORT` | Optional SSH port. |
+| `DEPLOY_HOST_FINGERPRINT` | Recommended SSH host-key pin. |
+| `SLACK_WEBHOOK_URL` | Optional failure notification. |
+
+Publish a release only after `main` CI succeeds:
+
+```bash
+git switch main
+git pull --ff-only origin main
 git tag -a v1.0.0 -m "DeployForge v1.0.0"
 git push origin v1.0.0
 ```
 
-The CD workflow validates the tag and CI result, verifies the Compose configuration, builds the application images, runs the dedicated migration service, restarts API/worker/web services, and waits for their health checks.
+CD validates the exact SHA, validates Compose, builds images, waits for PostgreSQL/Redis, runs migrations, restarts API/worker/web, verifies service state, and prunes unused images. Production deployments are serialized and are not cancelled by newer releases.
 
-### 3.3 Manual Production Setup (PM2)
+Do not move or reuse a released tag. Fix forward and create a new version. Redeploying an older application commit requires a new tag, successful CI for that commit, and confirmation that its code remains compatible with the current database schema.
 
-If running outside Docker:
+## Operations
 
-#### Step 1: Build All Packages
+### Status and logs
+
 ```bash
-pnpm install --frozen-lockfile
-pnpm db:generate
-pnpm build
+docker compose --profile production ps
+docker compose logs --tail=200 api worker web nginx
+docker compose logs --follow --tail=100 api worker
 ```
 
-#### Step 2: Run Services via PM2
+### PostgreSQL backup
+
 ```bash
-# Install PM2 globally
-npm install -g pm2
-
-# Start Fastify API backend
-pm2 start apps/api/dist/server.js --name "deployforge-api"
-
-# Start Next.js frontend
-pm2 start pnpm --name "deployforge-web" -- start --prefix apps/web --port 3000
-
-# Save process list and enable startup
-pm2 save
-pm2 startup
+install -d -m 700 backups
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "backups/postgres-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+chmod 600 backups/postgres-*.sql.gz
+gzip --test backups/postgres-*.sql.gz
 ```
 
-#### Step 3: Setup Nginx Reverse Proxy
-Deploy Nginx on the host machine to terminate TLS and proxy to the respective services:
-- Forward `yourdomain.com` requests to `http://127.0.0.1:3000`
-- Forward `yourdomain.com/api` or API subdomain requests to `http://127.0.0.1:3001`
+Copy encrypted backups off the VPS. Docker volumes are persistent storage, not an offsite backup.
 
----
+### Database restore
 
-## 4. Available pnpm Scripts
+Restore is destructive. Stop writers, take a fresh backup, and verify the target archive first:
 
-| Script | Description |
-|--------|-------------|
-| `pnpm dev` | Start all apps in development mode (Turborepo) |
-| `pnpm build` | Build all packages and apps for production |
-| `pnpm lint` | Run ESLint across all packages |
-| `pnpm typecheck` | Run TypeScript type checking across all packages |
-| `pnpm db:push` | Push Prisma schema changes to database (dev only) |
-| `pnpm db:generate` | Regenerate Prisma client bindings |
-| `pnpm db:studio` | Open Prisma Studio database browser |
+```bash
+docker compose stop api worker web
+gunzip -c backups/postgres-TIMESTAMP.sql.gz | docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" "$POSTGRES_DB"'
+docker compose up -d --no-deps --wait api worker web
+```
 
----
+Test this procedure in a separate environment before relying on it.
 
-## 5. Troubleshooting
+## Troubleshooting
 
-### API fails to start — "Invalid environment configuration"
-The API performs strict environment validation at startup via Zod. Read the error messages carefully — they will name the exact variable that's missing or invalid.
+### Invalid environment configuration
 
-Common issues:
-- `ENCRYPTION_KEY` must be exactly 64 lowercase hex characters
-- `JWT_SECRET` must be at least 32 characters and not start with `replace_with_`, `your_`, etc.
-- `APP_URL` and `API_URL` must be valid `https://` URLs in production
-- `GOOGLE_CLIENT_ID` must end with `.apps.googleusercontent.com` if Google OAuth is enabled
+Compare `.env` with `.env.production.example`, confirm secrets meet length/format rules, and run:
 
-### Database connection fails
-Ensure `DATABASE_URL` uses the correct hostname:
-- Local dev: `localhost:5432`
-- Docker Compose: `postgres:5432` (service name)
+```bash
+docker compose config --quiet
+docker compose logs --tail=200 api worker
+```
 
-### Redis connection error
-If `REDIS_ENABLED=true`, `REDIS_URL` must be provided and reachable. Use `REDIS_ENABLED=false` to run without Redis (queues and caching will be disabled).
+### API is live but not ready
+
+```bash
+docker compose ps postgres redis api
+docker compose logs --tail=200 postgres redis api
+```
+
+`/ready` requires PostgreSQL and, when enabled, Redis.
+
+### Migration failure
+
+Do not restart a new application release. Preserve the failure output and backup, then inspect migration state:
+
+```bash
+docker compose run --rm migrate
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB" -c "select migration_name, finished_at, rolled_back_at from _prisma_migrations order by started_at desc limit 20;"'
+```
+
+### Certificate failure
+
+Confirm DNS, inbound port 80, Nginx bootstrap state, and Certbot output. Do not repeatedly request certificates until the underlying validation failure is fixed.
+
+### Disk pressure
+
+Inspect usage and live resources before cleanup:
+
+```bash
+df -h
+docker system df -v
+docker compose ps --all
+```
+
+Never prune volumes without verifying ownership and recovery requirements.

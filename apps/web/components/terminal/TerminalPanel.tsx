@@ -291,9 +291,7 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
             'rounded-md border border-[#1F1F1F] bg-[#000000] overflow-hidden font-mono text-xs flex flex-col transition-all',
             isFullscreen ? 'fixed inset-4 z-50 h-[calc(100vh-32px)]' : 'h-[640px]'
         )}>
-            {/* Window Topbar */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] bg-[#0A0A0A] px-4 py-2.5 gap-3 shrink-0">
-                {/* Left: Window Controls + Server Switcher */}
                 <div className="flex items-center gap-3 min-w-0">
                     <div className="flex items-center gap-1.5 shrink-0">
                         <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
@@ -303,7 +301,6 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
 
                     <div className="h-3 w-px bg-[#1F1F1F] shrink-0" />
 
-                    {/* Server selector */}
                     {vpsList.length > 0 ? (
                         <div className="relative flex items-center gap-2">
                             <Server size={13} className="text-[#A1A1A1] shrink-0" />
@@ -330,7 +327,6 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
                     )}
                 </div>
 
-                {/* Right: Status Pill & Action Buttons */}
                 <div className="flex items-center gap-2 shrink-0">
                     <span className={clsx(
                         'flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
@@ -392,7 +388,6 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
                 </div>
             </div>
 
-            {/* Quick Command Shortcuts Bar */}
             {status === 'connected' && (
                 <div className="flex items-center gap-2 border-b border-[#1F1F1F] bg-[#000000] px-4 py-1.5 text-[11px] overflow-x-auto no-scrollbar shrink-0">
                     <span className="text-[#666666] font-semibold uppercase text-[9px] shrink-0">Quick Commands:</span>
@@ -415,7 +410,6 @@ export function TerminalPanel({ vpsList = [], activeVps, onSelectVps }: Terminal
                 </div>
             )}
 
-            {/* xterm.js Terminal Container */}
             <div
                 ref={containerRef}
                 className="flex-1 overflow-hidden p-3 bg-[#000000]"

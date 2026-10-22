@@ -86,12 +86,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
         <div className="h-screen min-h-[100dvh] overflow-hidden bg-black text-white">
             <div className="flex h-screen min-h-[100dvh] overflow-hidden">
-                {/* Desktop sidebar */}
                 <aside className="sticky top-0 hidden h-screen min-h-[100dvh] w-56 shrink-0 flex-col border-r border-[#1F1F1F] bg-[#0A0A0A] lg:flex">
                     <SidebarContent pathname={pathname} user={user} onLogout={signOut} />
                 </aside>
 
-                {/* Mobile sidebar overlay */}
                 {sidebarOpen && (
                     <div className="fixed inset-0 z-40 lg:hidden">
                         <button
@@ -106,7 +104,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 )}
 
                 <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-black">
-                    {/* Topbar Header */}
                     <header className="z-30 shrink-0 border-b border-[#1F1F1F] bg-[#0A0A0A] px-4 py-2.5 sm:px-6 lg:px-8">
                         <div className="mx-auto flex w-full max-w-[1800px] 2xl:max-w-[2200px] items-center justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
@@ -145,7 +142,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </div>
                     </header>
 
-                    {/* Scrollable Content Container */}
                     <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar">
                         <div className="mx-auto w-full max-w-[1800px] 2xl:max-w-[2200px] px-4 py-6 sm:px-6 lg:px-8">
                             {children}
@@ -160,7 +156,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: string; user: any; onLogout: () => void; onClose?: () => void; }) {
     return (
         <div className="flex h-full flex-col font-mono text-xs">
-            {/* Brand Header */}
             <div className="flex items-center justify-between border-b border-[#1F1F1F] px-4 py-3">
                 <Link href="/dashboard">
                     <DeployForgeLogo variant="primary" size="md" />
@@ -177,7 +172,6 @@ function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: strin
                 )}
             </div>
 
-            {/* Navigation Groups */}
             <nav className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-4">
                 {NAV_GROUPS.map(group => (
                     <div key={group.label}>
@@ -206,7 +200,6 @@ function SidebarContent({ pathname, user, onLogout, onClose }: { pathname: strin
                 ))}
             </nav>
 
-            {/* User Profile Footer */}
             <div className="border-t border-[#1F1F1F] p-3">
                 <div className="flex items-center justify-between gap-2 rounded border border-[#1F1F1F] bg-[#000000] p-2">
                     <Link href="/profile" className="flex items-center gap-2.5 min-w-0 flex-1 group" title="View Profile">

@@ -40,7 +40,6 @@ export function HostingConfiguration({
             </div>
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {/* Auto Subdomain (.sslip.io) */}
                 <label
                     className={clsx(
                         'rounded-md border p-3.5 cursor-pointer transition-colors flex flex-col justify-between',
@@ -75,7 +74,6 @@ export function HostingConfiguration({
                     </div>
                 </label>
 
-                {/* Custom Domain */}
                 <label
                     className={clsx(
                         'rounded-md border p-3.5 cursor-pointer transition-colors flex flex-col justify-between',

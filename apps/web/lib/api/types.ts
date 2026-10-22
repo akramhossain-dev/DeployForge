@@ -100,7 +100,6 @@ export type Domain = {
     sslRetryCount?: number;
     sslNextRetryAt?: string | null;
     nginxConfigPath?: string | null;
-    /** Whether the HTTP → HTTPS Auto-HTTPS redirect is currently active on the Traefik/nginx config. */
     autoHttps?: boolean;
     deployment?: {
         id: string;
@@ -148,11 +147,11 @@ export type VpsServerInfo = {
     architecture: string;
     cpuModel: string;
     cpuCores: number;
-    ramTotal: number;   // kB
-    ramUsed: number;    // kB
-    ramFree: number;    // kB
-    swapTotal: number;  // kB
-    swapUsed: number;   // kB
+    ramTotal: number;
+    ramUsed: number;
+    ramFree: number;
+    swapTotal: number;
+    swapUsed: number;
     diskTotal: string;
     diskUsed: string;
     diskFree: string;
@@ -506,7 +505,6 @@ export type UserSession = {
     isCurrent?: boolean;
 };
 
-// ── Runtime Manager Types ─────────────────────────────────────────────────────
 
 export type RuntimeName =
     | 'nodejs' | 'npm' | 'pnpm' | 'yarn' | 'bun'

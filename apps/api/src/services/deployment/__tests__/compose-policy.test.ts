@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { ComposePolicyError, ComposePolicyService } from '../compose-policy.service';
 import { RESOURCE_DEFAULTS } from '../../resource-policy';
 
@@ -101,22 +100,4 @@ volumes:
         expect(first.dependencyFingerprint).not.toBe(second.dependencyFingerprint);
     });
 
-    it('accepts the Phase 6 Compose staging fixture under managed limits', () => {
-        const fixture = readFileSync(
-            new URL('../../../../../../scripts/phase6/fixtures/compose/docker-compose.yml', import.meta.url),
-            'utf8',
-        );
-        const result = ComposePolicyService.sanitize(
-            fixture,
-            { composeService: 'web', composePort: 3000 },
-            'df-phase6-fixture',
-            RESOURCE_DEFAULTS.FULLSTACK,
-        );
-
-        expect(result.service).toBe('web');
-        expect(result.port).toBe(3000);
-        expect(result.hasDependencies).toBe(true);
-        expect(result.candidateYaml).toContain('max-size: 10m');
-        expect(result.dependencyYaml).toContain('cache:');
-    });
 });

@@ -72,7 +72,6 @@ export default function DashboardPage() {
     return (
         <div className="space-y-6">
 
-            {/* ── 1. Header Section ── */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -91,7 +90,6 @@ export default function DashboardPage() {
                 </Link>
             </div>
 
-            {/* ── Error Banner ── */}
             {isError && (
                 <div className="flex items-center justify-between rounded-md border border-rose-900/50 bg-rose-950/20 p-3 font-mono text-xs text-rose-300">
                     <span>Unable to fetch real-time dashboard data.</span>
@@ -105,7 +103,6 @@ export default function DashboardPage() {
                 </div>
             )}
 
-            {/* ── 2. Stat Cards Grid ── */}
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4 2xl:gap-6">
                 {isLoading ? Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="h-24 animate-pulse rounded-md border border-[#1F1F1F] bg-[#0A0A0A]" />
@@ -119,10 +116,8 @@ export default function DashboardPage() {
                 )}
             </div>
 
-            {/* ── 3. Deployments & Server Status Grid ── */}
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 2xl:grid-cols-12 2xl:gap-8">
 
-                {/* Left Column: Recent Deployments (2 cols / 8 cols on 2xl) */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 lg:p-6 xl:col-span-2 2xl:col-span-8 space-y-4">
                     <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
                         <div className="flex items-center gap-2">
@@ -188,7 +183,6 @@ export default function DashboardPage() {
                     )}
                 </div>
 
-                {/* Right Column: Server Status VPS Nodes (1 col / 4 cols on 2xl) */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 lg:p-6 2xl:col-span-4 space-y-4">
                     <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
                         <div className="flex items-center gap-2">
@@ -242,10 +236,8 @@ export default function DashboardPage() {
 
             </div>
 
-            {/* ── 4. Repositories & Recent Activity Stream ── */}
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2 2xl:gap-8">
 
-                {/* Left Column: Repositories */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 lg:p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-[#1F1F1F] pb-3">
                         <div className="flex items-center gap-2">
@@ -293,7 +285,6 @@ export default function DashboardPage() {
                     )}
                 </div>
 
-                {/* Right Column: Recent Activity Feed */}
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 lg:p-6 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3">
                         <Zap size={15} className="text-white" />

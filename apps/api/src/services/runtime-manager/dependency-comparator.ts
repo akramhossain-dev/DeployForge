@@ -1,20 +1,8 @@
-/**
- * DependencyComparator
- *
- * Compares the project's required runtimes against what is installed on the VPS.
- * Performs semantic version comparison without external dependencies.
- */
 
 import { DetectedRuntime, EnvironmentScanResult, InstalledRuntime, RuntimeDiff, RuntimeDiffStatus } from './types';
 
 export class DependencyComparator {
 
-    /**
-     * Compare requirements against the installed environment.
-     *
-     * @param requirements  Output from RequirementsDetector.detect()
-     * @param scan          Output from EnvironmentScanner.scan()
-     */
     static compare(requirements: DetectedRuntime[], scan: EnvironmentScanResult): RuntimeDiff[] {
         const installedMap = new Map<string, InstalledRuntime>(
             scan.runtimes.map((r) => [r.name, r]),
@@ -47,24 +35,14 @@ export class DependencyComparator {
         });
     }
 
-    // ─── Version Compatibility ────────────────────────────────────────────────
 
-    /**
-     * Determine if the installed version satisfies the requirement.
-     *
-     * Rules:
-     *  - No required version specified → ok if installed (any version)
-     *  - Required version specified → compare major versions; minor/patch differences are ok
-     *    (we don't want to force exact patch upgrades)
-     */
     private static evaluateCompatibility(
         required: string | null,
         installed: string | null,
     ): RuntimeDiffStatus {
         if (!installed) return 'missing';
-        if (!required) return 'ok'; // Any version is fine
+        if (!required) return 'ok';
 
-        // Normalise: strip leading 'v', take the version part from range operators
         const clean = (v: string) => v.replace(/^[v=~^>=<]+/, '').split(/\s+/)[0].trim();
 
         const req = clean(required);
@@ -78,10 +56,8 @@ export class DependencyComparator {
         const reqMajor = reqParts[0] ?? 0;
         const instMajor = instParts[0] ?? 0;
 
-        // Major version mismatch → incompatible (e.g. Node 16 vs Node 20)
         if (reqMajor !== 0 && instMajor < reqMajor) return 'incompatible';
 
-        // Check minor if specified (e.g. Python 3.12 needs >= 3.12)
         if (reqParts.length >= 2 && instParts.length >= 2) {
             const reqMinor = reqParts[1] ?? 0;
             const instMinor = instParts[1] ?? 0;
@@ -91,16 +67,10 @@ export class DependencyComparator {
         return 'ok';
     }
 
-    /**
-     * Filter the diff to only items that need action.
-     */
     static getMissing(diff: RuntimeDiff[]): RuntimeDiff[] {
         return diff.filter((d) => d.status === 'missing' || d.status === 'incompatible');
     }
 
-    /**
-     * Format a human-readable comparison table for log output.
-     */
     static formatTable(diff: RuntimeDiff[]): string {
         const lines: string[] = ['Project Requirements', ''];
         for (const d of diff) {

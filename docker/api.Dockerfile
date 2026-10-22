@@ -38,9 +38,6 @@ COPY packages/shared/package.json packages/shared/package.json
 COPY packages/vps/package.json packages/vps/package.json
 RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
     && pnpm install --prod --frozen-lockfile --filter api...
-# Generate the Prisma client into prod node_modules. The CLI is an API runtime
-# dependency for the dedicated migrator; invoke it through that workspace so
-# pnpm resolves the package-local binary in an isolated production install.
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 COPY docker/prisma.config.ts ./apps/api/prisma.config.ts
@@ -56,8 +53,6 @@ CMD ["node", "apps/api/node_modules/prisma/build/index.js", "migrate", "deploy",
 FROM base AS runner
 ENV NODE_ENV=production
 WORKDIR /app
-# node_modules from prod-deps already contains the generated Prisma client
-# (written into the pnpm virtual store during the npx generate step above).
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=prod-deps --chown=node:node /app/apps/api/package.json ./apps/api/package.json
 COPY --from=prod-deps --chown=node:node /app/apps/api/node_modules ./apps/api/node_modules

@@ -66,7 +66,6 @@ services:
       - deployforge_internal
       - deployforge_dev
     healthcheck:
-      # L-4: Use REDISCLI_AUTH env var — avoids password appearing in `ps aux`
       test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping"]
       interval: 10s
       timeout: 5s
@@ -120,7 +119,6 @@ services:
     tmpfs:
       - /tmp
     volumes:
-      # M-3: Named volume for backups — container fs is read_only, /app/backups must be a writable mount
       - backup_data:/app/backups
 
   worker:
@@ -156,7 +154,6 @@ services:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:3001}}
     restart: unless-stopped
     environment:
-      # Explicitly set PORT=3000 — MUST come before env_file to override any PORT from .env
       PORT: "3000"
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:3001}}
@@ -181,9 +178,6 @@ services:
       - /tmp
       - /tmp/.next
 
-  # H-3: Nginx reverse proxy — TLS termination for production.
-  # Set DOMAIN to your real domain (e.g. deployforge.example.com).
-  # Certbot auto-renews Let's Encrypt certificates.
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
@@ -191,8 +185,6 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      # 'dollar' is used inside the nginx template to escape Nginx-native variables
-      # so envsubst only expands ${DOMAIN} and leaves $host, $scheme, etc. intact.
       dollar: "$$"
       DOMAIN: ${DOMAIN:-localhost}
     volumes:
@@ -222,8 +214,6 @@ services:
     volumes:
       - certbot_webroot:/var/www/certbot
       - certbot_certs:/etc/letsencrypt
-    # Run manually to issue cert: docker compose run --rm certbot
-    # Then reload nginx:           docker compose exec nginx nginx -s reload
     command: >
       certonly --webroot
       --webroot-path=/var/www/certbot
@@ -240,8 +230,6 @@ networks:
   deployforge_proxy:    # nginx <-> api/web (not host-exposed)
   deployforge_public:   # legacy dev alias (kept for backward compat)
   deployforge_dev:
-    # Non-internal network for host access to postgres/redis in local dev.
-    # Port bindings on internal networks are blocked by Docker.
 
 volumes:
   postgres_data:

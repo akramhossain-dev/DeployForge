@@ -1,35 +1,13 @@
-/**
- * RuntimeInstaller
- *
- * Executes idempotent, whitelisted installation commands on the VPS via SSH.
- *
- * Safety rules enforced here:
- *  1. Every runtime name is validated against the INSTALL_REGISTRY whitelist.
- *  2. Commands are constructed from fixed templates — no user-supplied strings
- *     are interpolated into shell commands.
- *  3. Passwords, keys, and env vars are NEVER included in log messages.
- *  4. The installer uses DEBIAN_FRONTEND=noninteractive to prevent interactive prompts.
- *  5. Each install step checks if the tool is already present before installing
- *     (idempotent — safe to run multiple times).
- */
 
 import { SSHService } from '@deployforge/vps';
 import { InstallationLogEntry, InstallationPlan, InstallationPlanItem, RuntimeName } from './types';
 
 export type InstallLogCallback = (entry: InstallationLogEntry) => void;
 
-// ─── Install Registry ─────────────────────────────────────────────────────────
-// Only runtimes listed here can ever be installed. Each entry has:
-//   - checkCmd: command that exits 0 if already installed
-//   - installScript: idempotent shell script run via SSH
-//   - verifyCmd: command used to confirm success
 
 type RegistryEntry = {
-    /** Shell command that exits 0 if already installed (used for idempotency check). */
     checkCmd: (version: string | null) => string;
-    /** Full install script — must be idempotent and non-interactive. */
     installScript: (version: string | null) => string;
-    /** Short verify command for post-install check. */
     verifyCmd: string;
 };
 
@@ -56,7 +34,6 @@ const INSTALL_REGISTRY: Partial<Record<RuntimeName, RegistryEntry>> = {
     },
 
     npm: {
-        // npm ships with Node.js — just ensure it's present
         checkCmd: () => 'npm --version > /dev/null 2>&1',
         installScript: () => 'npm install -g npm@latest 2>/dev/null || true',
         verifyCmd: 'npm --version',
@@ -187,7 +164,6 @@ const INSTALL_REGISTRY: Partial<Record<RuntimeName, RegistryEntry>> = {
     'docker-compose': {
         checkCmd: () => 'docker compose version > /dev/null 2>&1',
         installScript: () => {
-            // docker-compose-plugin comes with Docker CE — install it if missing
             return [
                 APT_UPDATE,
                 `${APT_INSTALL} docker-compose-plugin`,
@@ -252,15 +228,9 @@ const INSTALL_REGISTRY: Partial<Record<RuntimeName, RegistryEntry>> = {
     },
 };
 
-// ─── RuntimeInstaller ─────────────────────────────────────────────────────────
 
 export class RuntimeInstaller {
 
-    /**
-     * Execute an installation plan on the VPS.
-     * Only items with action='install' are executed.
-     * Each step is idempotent — already-present runtimes are skipped.
-     */
     static async install(
         ssh: SSHService,
         plan: InstallationPlan,
@@ -273,7 +243,6 @@ export class RuntimeInstaller {
 
         const toInstall = plan.items.filter((item) => item.action === 'install');
 
-        // Check sudo availability once before starting
         const sudoOk = await this.checkSudo(ssh);
         if (!sudoOk) {
             onLog(this.log('warn', 'sudo is not available or requires a password — installation may fail. Attempting anyway.'));
@@ -297,7 +266,6 @@ export class RuntimeInstaller {
             return;
         }
 
-        // Idempotency check
         const checkResult = await ssh.execute(entry.checkCmd(item.targetVersion)).catch(() => ({ code: 1 }));
         if (checkResult.code === 0) {
             onLog(this.log('info', `✓ ${item.name} already satisfies requirements — skipping install.`, item.name));
@@ -307,10 +275,9 @@ export class RuntimeInstaller {
         onLog(this.log('info', `→ Installing ${item.name}${item.targetVersion ? ` (${item.targetVersion})` : ''}...`, item.name));
 
         const script = `sudo sh -c ${shellQuoteArg(entry.installScript(item.targetVersion))} 2>&1`;
-        const { code, stdout, stderr } = await ssh.execute(script, 300_000 /* 5 min timeout */);
+        const { code, stdout, stderr } = await ssh.execute(script, 300_000 );
 
         if (code !== 0) {
-            // Strip any potentially sensitive output from the error message
             const safeOutput = sanitizeOutput(stdout || stderr || '');
             onLog(this.log('error', `✗ Failed to install ${item.name}: ${safeOutput}`, item.name));
             throw new Error(`Installation of ${item.name} failed (exit ${code}): ${safeOutput}`);
@@ -328,10 +295,6 @@ export class RuntimeInstaller {
         return { timestamp: new Date().toISOString(), message, level, runtimeName };
     }
 
-    /**
-     * Validate that a runtime name is in the allow-list.
-     * Used by API routes to prevent arbitrary installation requests.
-     */
     static isAllowed(name: string): name is RuntimeName {
         return name in INSTALL_REGISTRY;
     }
@@ -341,36 +304,26 @@ export class RuntimeInstaller {
     }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Extract the major version number from a version string like "3.12" or ">=20". */
 function extractMajor(v: string | null): number | null {
     if (!v) return null;
     const m = v.match(/(\d+)/);
     return m ? parseInt(m[1], 10) : null;
 }
 
-/** Extract "major.minor" string for Python/PHP versioned packages. */
 function extractMinorStr(v: string | null): string | null {
     if (!v) return null;
     const m = v.match(/(\d+)\.(\d+)/);
     return m ? `${m[1]}.${m[2]}` : null;
 }
 
-/** Shell-quote a string for use as a single argument to sh -c. */
 function shellQuoteArg(script: string): string {
     return `'${script.replace(/'/g, "'\\''")}'`;
 }
 
-/**
- * Remove potentially sensitive patterns from command output before logging.
- * This is a defence-in-depth measure — install scripts should never emit secrets,
- * but we sanitize anyway.
- */
 function sanitizeOutput(output: string): string {
-    // Remove anything that looks like a token, key, or password
     return output
         .replace(/(?:password|secret|key|token|credential)[^\n]{0,200}/gi, '[REDACTED]')
-        .replace(/([A-Za-z0-9+/]{40,}={0,2})/g, '[REDACTED]')  // base64-like strings
-        .substring(0, 500); // Cap length
+        .replace(/([A-Za-z0-9+/]{40,}={0,2})/g, '[REDACTED]')
+        .substring(0, 500);
 }

@@ -1,473 +1,209 @@
-# 🔌 DeployForge API Reference
+# DeployForge API Reference
 
-The DeployForge backend is powered by a Fastify REST API and WebSocket gateway.
+The Fastify API listens on `PORT` (`3001` by default). In the production Compose stack, Nginx proxies API and WebSocket traffic through the public HTTPS origin.
 
----
+## Conventions
 
-## 1. Global API Configuration
+### Authentication
 
-### 1.1 Authentication & CSRF
-* **Cookies:** Authentication uses HttpOnly, secure cookies: `accessToken` (JWT) and `refreshToken` (opaque token).
-* **CSRF Protection:** Non-safe HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`) require a CSRF token.
-  1. Retrieve the CSRF token via `GET /auth/csrf` (sets a `csrfToken` cookie).
-  2. Send the token value in every mutating request header: `X-CSRF-Token: <token>`.
-  3. The backend validates the header against the cookie using timing-safe comparison.
+Protected routes require a valid user or administrator session. Browser state-changing requests also require the CSRF token issued by `GET /auth/csrf`. GitHub webhooks use their HMAC signature instead of a user session.
 
-### 1.2 Response Shapes
+WebSocket routes use the socket-token flow or an authenticated session as implemented by the route. Tokens must not be placed in logs or persisted by clients.
 
-**Success:**
-```json
-{ "success": true, "data": { ... } }
-```
-**Error:**
+### Response and error shape
+
+Most successful HTTP operations return:
+
 ```json
 {
-  "success": false,
-  "error": { "code": "ERROR_CODE", "message": "Human-readable description" }
+  "success": true,
+  "data": {}
 }
 ```
 
-### 1.3 Common Error Codes
-| Code | HTTP | Description |
-|------|------|-------------|
-| `UNAUTHORIZED` | 401 | Missing or invalid access token |
-| `FORBIDDEN` | 403 | Authenticated but insufficient permissions |
-| `NOT_FOUND` | 404 | Resource does not exist |
-| `CONFLICT` | 409 | Duplicate resource (e.g., email already registered) |
-| `VALIDATION_ERROR` | 400 | Invalid request payload |
-| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
-| `INTERNAL_ERROR` | 500 | Unexpected server error |
-
----
-
-## 2. Health & System (`/health`, `/live`, `/ready`, `/metrics`)
-
-### `GET /live`
-* Liveness probe — returns `200 OK` if the process is running.
-
-### `GET /ready`
-* Readiness probe — returns `200 OK` if database and Redis connections are healthy.
-
-### `GET /health`
-* Combined health status: returns JSON with API, database, and Redis states.
-
-### `GET /metrics`
-* Platform request counters, latency, queue states, gateway/release/TLS states, capacity reservations, and cleanup failures.
-* **Protected** by `Authorization: Bearer <METRICS_TOKEN>` in production.
-
-Error responses include an `X-Request-Id` header and additive `error.requestId`, `error.stage`, and structured `error.details` fields when safe to expose.
-
----
-
-## 3. Authentication API (`/auth`)
-
-### `GET /auth/csrf`
-Retrieve a double-submit CSRF token.
-* **Auth:** None | **Rate Limit:** 60/min
-
-### `POST /auth/register`
-Register a new user account.
-* **Auth:** None | **Rate Limit:** 10/min
-* **Body:** `{ email, password, name, termsAccepted }`
-* **Response:** `{ success, message, email }`
-
-### `POST /auth/verify-otp`
-Verify the email registration OTP.
-* **Body:** `{ email, otp }`
-
-### `POST /auth/resend-otp`
-Resend the email verification OTP.
-* **Body:** `{ email }`
-
-### `POST /auth/login`
-Authenticate and create a session.
-* **Body:** `{ email, password }`
-* **Sets Cookies:** `accessToken`, `refreshToken`
-
-### `POST /auth/refresh`
-Rotate tokens using the refresh cookie.
-* **Auth:** `refreshToken` cookie | **Sets Cookies:** new `accessToken`, `refreshToken`
-
-### `POST /auth/logout`
-Terminate the current session.
-* **Auth:** Required
-
-### `GET /auth/me`
-Get currently authenticated user details.
-* **Auth:** Required | **Rate Limit:** 30/min
-
-### `POST /auth/forgot-password`
-Request a password-reset email.
-* **Body:** `{ email }`
-
-### `POST /auth/reset-password`
-Reset password using token from email.
-* **Body:** `{ token, password }`
-
----
-
-## 4. Profile API (`/profile`)
-
-### `GET /profile`
-Get the current user's profile details (name, avatar, GitHub/Google links, verification status).
-* **Auth:** Required
-
-### `PUT /profile`
-Update profile fields (name, username, avatar).
-* **Auth:** Required
-* **Body:** `{ name?, username?, avatarUrl? }`
-
-### `PUT /profile/password`
-Change the authenticated user's password.
-* **Auth:** Required
-* **Body:** `{ currentPassword, newPassword }`
-
----
-
-## 5. Sessions API (`/sessions`)
-
-### `GET /sessions`
-List all active sessions for the current user.
-* **Auth:** Required
-* **Response:** Array of sessions with device, browser, OS, IP, and last activity.
-
-### `DELETE /sessions/:id`
-Revoke a specific session by ID.
-* **Auth:** Required
-
-### `DELETE /sessions`
-Revoke all sessions except the current one.
-* **Auth:** Required
-
----
-
-## 6. VPS Management API (`/vps`)
-
-### `POST /vps/add`
-Add a new target VPS.
-* **Auth:** Required | **Rate Limit:** 8/10 min
-* **Body:** `{ name, ipAddress, port, username, authType, password?, privateKey? }`
-
-### `GET /vps/list`
-List all onboarded VPS instances for the current user.
-* **Auth:** Required
-
-### `GET /vps/:id`
-Get details of a single VPS.
-* **Auth:** Required
-
-### `PUT /vps/:id`
-Update VPS configuration (name, credentials).
-* **Auth:** Required
-
-### `DELETE /vps/:id`
-Delete a VPS record.
-* **Auth:** Required
-
-### `POST /vps/test-connection`
-Validate SSH connectivity to a stored VPS.
-* **Auth:** Required
-* **Body:** `{ id }`
-
-### `GET /vps/:id/health`
-Get the latest health record for a VPS (CPU, RAM, Disk, Docker status).
-* **Auth:** Required
-
-### `GET /vps/:id/metrics`
-Get historical system metrics for a VPS.
-* **Auth:** Required
-
----
-
-## 7. Deployments API (`/deploy` & `/deployments`)
-
-### `POST /deploy/github`
-Deploy from a synced GitHub repository.
-* **Auth:** Required
-* **Body:** `{ vpsId, projectId, branch, env?, name?, port?, buildCommand?, startCommand?, type? }`
-
-### `POST /deploy/upload`
-Deploy via ZIP/tar.gz file upload.
-* **Auth:** Required
-* **Body:** Multipart form-data with `file`, `vpsId`, `projectId`, `name`, `env?`
-
-### `POST /deploy/rollback/:id`
-Rollback to a previous successful deployment version.
-* **Auth:** Required
-
-### `GET /deploy/:id/logs`
-Get static deployment logs for a deployment.
-* **Auth:** Required
-
-### `GET /deployments`
-List all deployments for the current user.
-* **Auth:** Required
-
-### `GET /deployments/:id`
-Get full details of a single deployment including history and sandbox.
-* **Auth:** Required
-
-### `DELETE /deployments/:id`
-Delete a deployment and remove its container from the VPS.
-* **Auth:** Required
-
-### `POST /deployments/:id/stop`
-Stop a running deployment container without deleting it.
-* **Auth:** Required
-
-### `POST /deployments/:id/restart`
-Restart a stopped or failed deployment.
-* **Auth:** Required
-
----
-
-## 8. Domain & SSL Management (`/domain`)
-
-### `POST /domain/attach`
-Attach a custom domain to a deployment.
-* **Auth:** Required
-* **Body:** `{ deploymentId, domainName }`
-
-### `POST /domain/ssl/issue/:domainId`
-Issue a Let's Encrypt SSL certificate for an attached domain.
-* **Auth:** Required
-
-### `GET /domain/list`
-List all domains attached to the user's deployments.
-* **Auth:** Required
-
-### `DELETE /domain/:id`
-Remove a domain and delete the Nginx config from the VPS.
-* **Auth:** Required
-
----
-
-## 9. GitHub Integration (`/auth/github`)
-
-### `GET /auth/github`
-Redirect to GitHub OAuth authorization page.
-
-### `GET /auth/github/callback`
-GitHub OAuth callback — exchanges code for token and links account.
-
-### `GET /auth/github/repos`
-List synced GitHub repositories for the authenticated user.
-* **Auth:** Required
-
-### `POST /auth/github/sync`
-Manually sync the GitHub repository list.
-* **Auth:** Required
-
-### `POST /auth/github/disconnect`
-Disconnect the GitHub OAuth account.
-* **Auth:** Required
-
----
-
-## 10. Google OAuth (`/auth/google`)
-
-### `GET /auth/google`
-Redirect to Google OAuth authorization page.
-
-### `GET /auth/google/callback`
-Google OAuth callback — exchanges code and creates/links account.
-
----
-
-## 11. GitHub Webhooks (`/api/webhooks`)
-
-### `POST /api/webhooks/github`
-Receives GitHub push/PR webhook events. Validates `X-Hub-Signature-256` against `GITHUB_WEBHOOK_SECRET`.
-* **Auth:** Webhook signature verification (not user auth)
-
----
-
-## 12. Server Monitoring (`/monitor`)
-
-### `GET /monitor/metrics/:vpsId`
-Get CPU, RAM, and Disk metrics history for a VPS.
-* **Auth:** Required
-* **Response:** Array of `{ cpuUsage, memoryUsage, diskUsage, activeContainers, timestamp }`
-
----
-
-## 13. Notifications (`/notifications`)
-
-### `GET /notifications`
-Get paginated notifications for the current user.
-* **Auth:** Required
-* **Query:** `?page=1&limit=20&unreadOnly=false`
-
-### `PUT /notifications/:id/read`
-Mark a single notification as read.
-* **Auth:** Required
-
-### `PUT /notifications/read-all`
-Mark all notifications as read.
-* **Auth:** Required
-
-### `DELETE /notifications/:id`
-Delete a notification.
-* **Auth:** Required
-
----
-
-## 14. Alert Settings (`/alert-settings`)
-
-### `GET /alert-settings`
-Get the current user's alert rule thresholds.
-* **Auth:** Required
-* **Response:** `{ cpuThreshold, ramThreshold, diskThreshold, swapThreshold, emailAlerts, browserAlerts, realtimeAlerts }`
-
-### `PUT /alert-settings`
-Update alert thresholds and preferences.
-* **Auth:** Required
-* **Body:** `{ cpuThreshold?, ramThreshold?, diskThreshold?, swapThreshold?, emailAlerts?, browserAlerts?, realtimeAlerts? }`
-
----
-
-## 15. Sandbox (`/sandbox`)
-
-### `GET /sandbox/:deploymentId`
-Get the sandbox pre-flight analysis result for a deployment.
-* **Auth:** Required
-* **Response:** `{ score, status, issues, estimatedCPU, estimatedRAM, estimatedDisk }`
-
----
-
-## 16. Web SSH Terminal (`/terminal` & `/ws`)
-
-### `POST /terminal/token`
-Generate a one-time token for establishing a WebSocket terminal session.
-* **Auth:** Required
-* **Body:** `{ vpsId }`
-* **Response:** `{ token }` (short-lived, single-use)
-
-### `WS /ws/terminal/:vpsId?token=<token>&cols=<N>&rows=<N>`
-Establish an interactive SSH terminal session with the VPS.
-* **Auth:** One-time query token from `POST /terminal/token`
-* **Protocol:** Binary WebSocket frames forwarded to/from SSH shell.
-* **Params:** `cols`, `rows` for initial terminal geometry.
-
----
-
-## 17. File Manager API (`/file-manager`)
-
-All endpoints require `Auth: Required` and target a specific `:vpsId`.
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/file-manager/:vpsId/info` | Connection status & home directory |
-| `GET` | `/file-manager/:vpsId/list?path=` | List directory contents |
-| `GET` | `/file-manager/:vpsId/read?path=` | Read file content |
-| `GET` | `/file-manager/:vpsId/properties?path=` | File metadata, size, permissions |
-| `GET` | `/file-manager/:vpsId/search?path=&query=&extension=` | Search files by name |
-| `GET` | `/file-manager/:vpsId/download?path=` | Download file as binary |
-| `POST` | `/file-manager/:vpsId/create` | Create file or folder `{ path, type }` |
-| `PUT` | `/file-manager/:vpsId/save` | Save file content `{ path, content }` |
-| `PUT` | `/file-manager/:vpsId/rename` | Move/rename `{ oldPath, newPath }` |
-| `PUT` | `/file-manager/:vpsId/copy` | Copy `{ srcPath, dstPath }` |
-| `DELETE` | `/file-manager/:vpsId/delete` | Bulk delete `{ paths: [] }` |
-| `POST` | `/file-manager/:vpsId/upload?path=` | Upload file (multipart `file`) |
-| `POST` | `/file-manager/:vpsId/compress` | Zip items `{ parentDir, paths, archiveName }` |
-| `POST` | `/file-manager/:vpsId/decompress` | Extract zip `{ zipFilePath, destDir }` |
-
----
-
-## 18. Admin API (`/admin`)
-
-All admin endpoints require authentication as an `ADMIN` or `SUPER_ADMIN` role via the separate admin session.
-
-### Auth
-* `POST /admin/login` — Admin login with email/password.
-* `POST /admin/logout` — Terminate admin session.
-* `GET /admin/me` — Get current admin profile.
-
-### User Management
-* `GET /admin/users` — List all platform users (paginated).
-* `GET /admin/users/:id` — Get a specific user's details.
-* `PUT /admin/users/:id/role` — Change a user's role.
-* `PUT /admin/users/:id/status` — Suspend or activate a user.
-* `DELETE /admin/users/:id` — Permanently delete a user account.
-
-### Platform Overview
-* `GET /admin/stats` — Platform-wide stats: total users, deployments, VPS nodes, active sessions.
-
-### Deployments
-* `GET /admin/deployments` — List all deployments across all users.
-* `DELETE /admin/deployments/:id` — Force-delete any deployment.
-* `GET /admin/projects/:projectId/resource-policy` — Read the future deployment resource override.
-* `PUT /admin/projects/:projectId/resource-policy` — Validate and update the future deployment resource override.
-
-### Audit Logs
-* `GET /admin/audit-logs` — Paginated audit log with filters by user, action, and date.
-
-### Experimental Local Backup Utilities
-* `POST /admin/backup` — Trigger a manual database backup.
-* `GET /admin/backups` — List available backup files.
-* `POST /admin/restore` — Restore from a backup file.
-
-These endpoints are internal utilities and do not provide scheduled/offsite backup or disaster-recovery guarantees.
-
-### Contact Messages
-* `GET /admin/contact` — List all contact form submissions.
-* `PUT /admin/contact/:id` — Update message status.
-
----
-
-## 19. Public API (`/public`)
-
-### `GET /public/stats`
-Publicly accessible platform statistics (total users, deployments, servers — for landing page display).
-* **Auth:** None
-
----
-
-## 20. Projects & Collaboration API (`/projects`)
-
-All routes require authentication (`Auth: Required`) and validate user ownership or membership role.
-
-### `GET /projects`
-Retrieve all projects the authenticated user owns or is a collaborator/member of.
-* **Response:** Array of projects, including creator metadata, list of project members (with their user profiles and roles), and basic deployment status list.
-
-### `GET /projects/:projectId/members`
-Retrieve all active members and pending invitations for a specific project.
-* **Response:** `{ members: [...], invites: [...] }`
-
-### `POST /projects/:projectId/invites`
-Invite a new collaborator to the project.
-* **Role Check:** Only `OWNER` or `ADMIN` can invite.
-* **Body:** `{ email, role }` where role must be one of `OWNER`, `ADMIN`, `DEVELOPER`, `VIEWER`.
-* **Response:** `{ invite: { id, email, role, token, expiresAt, ... } }`
-
-### `DELETE /projects/:projectId/invites/:inviteId`
-Revoke a pending project invitation.
-* **Role Check:** Only `OWNER` or `ADMIN`.
-
-### `PATCH /projects/:projectId/members/:memberId`
-Update the role of an existing project member.
-* **Role Check:** Only `OWNER` or `ADMIN`. Project creator cannot be modified.
-* **Body:** `{ role }`
-
-### `DELETE /projects/:projectId/members/:memberId`
-Remove a member from the project.
-* **Role Check:** Users can remove themselves. `OWNER` or `ADMIN` can remove other members. Project creator cannot be removed.
-
----
-
-## 21. Project Invitations API (`/invitations`)
-
-For users managing invitations sent to them.
-
-### `GET /invitations`
-Retrieve all active, non-expired project invitations sent to the currently authenticated user's email.
-* **Auth:** Required
-
-### `POST /invitations/:inviteId/accept`
-Accept a project invitation, adding the user as a project member with the invited role.
-* **Auth:** Required
-
-### `POST /invitations/:inviteId/decline`
-Decline and delete the project invitation.
-* **Auth:** Required
+Errors use a stable code, message, and request correlation identifier:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Safe client message",
+    "requestId": "request-id"
+  }
+}
+```
+
+Validation and authorization failures use 4xx responses. Unexpected internal failures are sanitized before returning HTTP 500.
+
+## Health and system
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/live`, `/health`, `/liveness` | API process liveness. |
+| `GET` | `/ready`, `/readiness` | PostgreSQL and Redis readiness; returns 503 when unavailable. |
+| `GET` | `/metrics` | Application metrics; bearer token required when `METRICS_TOKEN` is set. |
+
+The same handlers are also available under `/api/live`, `/api/health`, `/api/liveness`, `/api/ready`, `/api/readiness`, and `/api/metrics`.
+
+## Authentication, profile, and sessions
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/auth/csrf` | Issue CSRF token/cookie. |
+| `POST` | `/auth/register` | Create a user registration. |
+| `POST` | `/auth/verify-otp` | Verify registration OTP. |
+| `POST` | `/auth/login` | Create an authenticated session. |
+| `POST` | `/auth/refresh` | Rotate/refresh the session. |
+| `POST` | `/auth/logout` | End the current session. |
+| `GET` | `/auth/me` | Return the current user. |
+| `GET` | `/auth/socket-token` | Issue a short-lived WebSocket token. |
+| `POST` | `/auth/forgot-password` | Request password reset. |
+| `POST` | `/auth/reset-password` | Complete password reset. |
+| `POST` | `/auth/send-verification` | Send an email verification message. |
+| `POST` | `/auth/verify-email` | Verify an email token. |
+| `GET`, `PATCH` | `/profile` | Read or update the current profile. |
+| `POST` | `/profile/change-password` | Change password. |
+| `GET`, `PATCH` | `/profile/preferences` | Read or update preferences. |
+| `GET` | `/profile/audit-logs` | List account audit events. |
+| `DELETE` | `/profile` | Delete the current account. |
+| `GET` | `/sessions` | List active sessions. |
+| `DELETE` | `/sessions/:id` | Revoke one session. |
+| `DELETE` | `/sessions/logout-others` | Revoke all sessions except the current one. |
+| `DELETE` | `/sessions/logout-all` | Revoke all sessions. |
+
+## OAuth and GitHub
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/auth/github` | Begin GitHub login. |
+| `GET` | `/auth/github/connect` | Begin GitHub connection for an authenticated user. |
+| `GET` | `/auth/github/callback` | GitHub OAuth callback. |
+| `GET` | `/auth/github/profile` | Connected GitHub profile. |
+| `GET` | `/auth/github/repos` | List synchronized repositories. |
+| `POST` | `/auth/github/repos/sync` | Synchronize repositories. |
+| `POST` | `/auth/github/webhooks/create` | Create repository webhook. |
+| `DELETE` | `/auth/github/disconnect` | Disconnect GitHub. |
+| `GET` | `/auth/google` | Begin Google login. |
+| `GET` | `/auth/google/callback` | Google OAuth callback. |
+| `POST` | `/api/webhooks/github` | Receive signed GitHub webhook deliveries. |
+
+## VPS and runtime management
+
+All VPS routes are under `/vps` unless shown otherwise.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/vps/add` | Add a target VPS. |
+| `POST` | `/vps/test-connection` | Test supplied connection details. |
+| `GET` | `/vps/list` | List accessible VPS records. |
+| `GET`, `PATCH`, `DELETE` | `/vps/:id` | Read, update, or remove a VPS. |
+| `GET` | `/vps/:id/health` | Stored health records. |
+| `POST` | `/vps/:id/health-check` | Trigger health collection. |
+| `POST` | `/vps/:id/bootstrap` | Queue gateway/bootstrap preparation. |
+| `GET` | `/vps/:id/operations/:operationId` | Read operation status. |
+| `GET` | `/vps/:id/info` | System information. |
+| `GET` | `/vps/:id/live-metrics` | Current resource metrics. |
+| `GET` | `/vps/:id/environment` | Runtime/environment inventory. |
+| `POST` | `/vps/:id/install-runtime` | Install a selected runtime. |
+| `GET` | `/vps/:id/installation-logs` | Runtime installation logs. |
+| `GET` | `/vps/:id/history` | Historical resource usage. |
+| `POST` | `/runtime/:vpsId/prepare` | Prepare required deployment runtimes. |
+| `GET` | `/runtime/:vpsId/preflight` | Runtime readiness plan. |
+| `GET` | `/runtime/runtimes` | Supported runtime catalog. |
+
+## Deployments
+
+Deployment creation and legacy lifecycle routes use `/deploy`; project/release management uses `/deployments`.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/deploy/github` | Create deployment from GitHub. |
+| `POST` | `/deploy/upload` | Create deployment from archive upload. |
+| `GET` | `/deploy/list` | List deployments. |
+| `GET` | `/deploy/:id/logs` | Read deployment logs. |
+| `GET` | `/deploy/:id/logs/stream` | WebSocket log stream. |
+| `GET` | `/deploy/status/:id` | Deployment status. |
+| `POST` | `/deploy/rollback/:id` | Roll back a deployment. |
+| `POST` | `/deploy/:id/start`, `/deploy/:id/stop` | Legacy lifecycle actions. |
+| `GET` | `/deployments` | List project deployments. |
+| `GET` | `/deployments/analytics` | Deployment analytics. |
+| `GET` | `/deployments/:id` | Deployment detail and releases. |
+| `GET`, `PUT` | `/deployments/:id/env` | Read or update environment files. |
+| `GET` | `/deployments/:id/env/history` | Environment revision history. |
+| `POST` | `/deployments/:id/redeploy` | Build another release. |
+| `POST` | `/deployments/:id/rollback` | Activate a retained release. |
+| `POST` | `/deployments/:id/restart`, `/start`, `/stop`, `/pause`, `/resume` | Lifecycle actions. |
+| `DELETE` | `/deployments/:id` | Delete a deployment through its cleanup policy. |
+| `POST` | `/sandbox/analyze/:deploymentId` | Run pre-flight analysis. |
+| `GET` | `/sandbox/:deploymentId/result` | Read analysis result. |
+| `POST` | `/sandbox/validate-deploy/:deploymentId` | Validate sandbox deployment. |
+
+## Domains and monitoring
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/domain/attach` | Attach a domain. |
+| `DELETE` | `/domain/remove/:domainId` | Remove a domain. |
+| `POST` | `/domain/ssl/issue/:domainId` | Issue TLS certificate. |
+| `POST` | `/domain/auto-https/:domainId` | Configure automatic HTTPS. |
+| `GET` | `/domain/list` | List domains. |
+| `GET` | `/domain/subdomains/:deploymentId` | List deployment subdomains. |
+| `GET` | `/domain/verify-dns/:domainName` | Verify DNS resolution. |
+| `GET` | `/monitor/logs/:deploymentId` | Deployment logs. |
+| `GET` | `/monitor/metrics/:vpsId` | VPS metrics. |
+| `POST` | `/monitor/metrics/:vpsId/collect` | Trigger metric collection. |
+| `GET` | `/monitor/history/:deploymentId` | Deployment history. |
+| `POST` | `/monitor/rollback/:deploymentId` | Monitoring rollback action. |
+
+## Projects and invitations
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/projects` | List accessible projects. |
+| `GET` | `/projects/:projectId/members` | Project membership. |
+| `POST` | `/projects/:projectId/invites` | Invite a member. |
+| `DELETE` | `/projects/:projectId/invites/:inviteId` | Cancel invitation. |
+| `PATCH`, `DELETE` | `/projects/:projectId/members/:memberId` | Change role or remove member. |
+| `GET` | `/invitations` | List received invitations. |
+| `POST` | `/invitations/:inviteId/accept` | Accept invitation. |
+| `POST` | `/invitations/:inviteId/decline` | Decline invitation. |
+
+## Notifications and alert settings
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/notifications` | Paginated notifications. |
+| `GET` | `/notifications/unread-count`, `/recent` | Notification summaries. |
+| `PATCH` | `/notifications/:id/read`, `/read-all` | Mark notifications read. |
+| `DELETE` | `/notifications/:id`, `/all` | Delete one or all notifications. |
+| `GET`, `PATCH` | `/alert-settings` | Read or update alert thresholds/channels. |
+
+## File manager
+
+Routes are scoped by `/file-manager/:vpsId`:
+
+- `GET /info`, `/list`, `/read`, `/properties`, `/search`, `/download`, `/download-zip`
+- `POST /create`, `/upload`, `/compress`, `/decompress`
+- `PUT /save`, `/rename`, `/copy`
+- `DELETE /delete`
+
+Path normalization and VPS authorization are enforced server-side. Clients must not assume arbitrary filesystem access.
+
+## WebSockets
+
+| Path | Description |
+| --- | --- |
+| `WS /terminal/:vpsId` | Interactive SSH terminal. |
+| `WS /ws/deployments/:id/logs` | Live deployment logs. |
+| `WS /ws/deployments/:id/status` | Live deployment state. |
+| `WS /ws/notifications` | Real-time user notifications. |
+
+## Administration and public endpoints
+
+- `POST /contact` submits the public contact form.
+- `GET /public/stats` returns public platform statistics.
+- `/admin/login`, `/logout`, and `/me` manage the separate administrator session.
+- `/admin/users`, `/platform-users`, `/projects/:projectId/resource-policy`, `/deployments`, `/vps`, `/github/accounts`, `/monitoring`, `/logs`, `/settings`, and `/backups` expose role-gated administration operations.
+
+Administrator routes enforce moderator, administrator, or super-administrator access per operation. Destructive administration calls must not be exposed to ordinary user sessions.

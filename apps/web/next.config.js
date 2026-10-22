@@ -1,9 +1,5 @@
-/** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== 'production';
 
-// 'unsafe-eval' is needed by Next.js HMR in development only.
-// In production, only 'unsafe-inline' remains (required by Next.js inline script chunks).
-// A full nonce-based CSP would remove 'unsafe-inline' too but requires server-side nonce injection.
 const scriptSrc = isDev
   ? "'self' 'unsafe-eval' 'unsafe-inline'"
   : "'self' 'unsafe-inline'";

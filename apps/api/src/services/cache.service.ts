@@ -137,8 +137,6 @@ export class CacheService {
                     },
                 };
             } catch (err) {
-                // Distributed deployment locks must fail closed. Falling back to
-                // process memory would let another API/worker acquire the same lock.
                 logger.error({ err, lockKey }, 'Redis lock operation failed');
                 return null;
             }

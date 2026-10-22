@@ -19,15 +19,12 @@ export class EnvironmentService {
         if (!trimmed) {
             throw new DeploymentError('building', 'Environment file path cannot be empty', 'INVALID_ENV_PATH');
         }
-        // Reject absolute paths
         if (trimmed.startsWith('/') || trimmed.startsWith('\\') || /^[a-zA-Z]:/.test(trimmed)) {
             throw new DeploymentError('building', `Absolute paths are not allowed: ${trimmed}`, 'INVALID_ENV_PATH');
         }
-        // Reject path traversal
         if (trimmed.split(/[/\\]/).some(part => part === '..')) {
             throw new DeploymentError('building', `Path traversal is not allowed: ${trimmed}`, 'INVALID_ENV_PATH');
         }
-        // Normalize backslashes to forward slashes, remove multiple slashes and leading dot-slashes
         const normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
         if (!normalized || normalized === '.' || normalized === '.env') {
             return '.env';
@@ -64,7 +61,6 @@ export class EnvironmentService {
                 files: normalizedFiles
             };
         } else {
-            // Legacy / flat env
             const variables = this.normalizeEnv(env || {});
             toEncrypt = {
                 version: 2,
@@ -123,7 +119,6 @@ export class EnvironmentService {
                 };
             }
 
-            // Legacy flat format
             return {
                 version: 2,
                 files: [

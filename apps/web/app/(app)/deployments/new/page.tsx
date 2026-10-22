@@ -28,7 +28,6 @@ function NewDeploymentPageContent() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div className="flex items-center gap-3">
                     <Link href="/deployments">
@@ -47,7 +46,6 @@ function NewDeploymentPageContent() {
                 </div>
             </div>
 
-            {/* Source Tab Selector */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4 space-y-3 font-mono text-xs">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-[#666666]">
                     Step 1: Select Release Source

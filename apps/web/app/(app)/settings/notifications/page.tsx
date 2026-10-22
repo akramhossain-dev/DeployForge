@@ -96,7 +96,6 @@ export default function NotificationsPage() {
 
     return (
         <form onSubmit={handleSave} className="space-y-6 font-mono text-xs">
-            {/* Alert Thresholds */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
                 <div className="border-b border-[#1F1F1F] pb-3">
                     <h3 className="font-bold text-white text-sm">Alert Thresholds</h3>
@@ -111,7 +110,6 @@ export default function NotificationsPage() {
                 </div>
             </div>
 
-            {/* Notification Channels */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-4">
                 <div className="border-b border-[#1F1F1F] pb-3">
                     <h3 className="font-bold text-white text-sm">Notification Delivery Channels</h3>
@@ -139,7 +137,6 @@ export default function NotificationsPage() {
                 </div>
             </div>
 
-            {/* Save Button */}
             <div className="flex justify-end">
                 <button
                     type="submit"

@@ -34,7 +34,6 @@ export function DeployForgeSymbol({ size = 20, className }: { size?: number; cla
             className={clsx('shrink-0 text-white select-none', className)}
             aria-hidden="true"
         >
-            {/* DeployForge Dual Diagonal Parallel Bars (45° Precision Vector) */}
             <path
                 d="M4 3H11L21 13V17H17L7 7H4V3Z"
                 fill="currentColor"
@@ -94,7 +93,6 @@ export function DeployForgeLogo({
         );
     }
 
-    // Default: 'primary' (Symbol + Wordmark)
     return (
         <div className={clsx('inline-flex items-center gap-2.5 font-mono select-none', className)}>
             <div className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] bg-[#0A0A0A]">

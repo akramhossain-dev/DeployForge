@@ -71,7 +71,6 @@ export default function AdminLoginPage() {
 
     return (
         <div className="min-h-screen bg-[#000000] text-white font-mono text-xs flex flex-col justify-between p-4 sm:p-6 lg:p-8">
-            {/* Header */}
             <header className="flex items-center justify-between border-b border-[#1F1F1F] pb-4">
                 <Link href="/" className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded border border-[#1F1F1F] bg-[#0A0A0A] text-white">
@@ -91,7 +90,6 @@ export default function AdminLoginPage() {
                 </Link>
             </header>
 
-            {/* Main Form */}
             <main className="mx-auto w-full max-w-sm my-auto py-8">
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-6 space-y-6">
                     <div className="border-b border-[#1F1F1F] pb-4 space-y-1">
@@ -171,7 +169,6 @@ export default function AdminLoginPage() {
                 </div>
             </main>
 
-            {/* Footer */}
             <footer className="flex items-center justify-between border-t border-[#1F1F1F] pt-4 text-[#666666]">
                 <p>DeployForge Administrative Control Plane</p>
                 <div className="flex gap-4">

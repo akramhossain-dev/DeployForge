@@ -11,9 +11,7 @@ export function Footer() {
     return (
         <footer className="border-t border-[#1F1F1F] bg-black text-white">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                {/* Main grid */}
                 <div className="grid gap-8 py-12 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-                    {/* Brand column */}
                     <div>
                         <Link href="/" className="flex items-center gap-2 group w-fit" aria-label="DeployForge home">
                             <div className="flex h-7 w-7 items-center justify-center rounded-md border border-[#1F1F1F] bg-[#0A0A0A] text-white">
@@ -34,7 +32,6 @@ export function Footer() {
                         </a>
                     </div>
 
-                    {/* Link groups */}
                     {Object.entries(FOOTER_LINKS).map(([group, links]) => (
                         <div key={group}>
                             <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-[#666666]">{group}</h3>
@@ -53,7 +50,6 @@ export function Footer() {
                     ))}
                 </div>
 
-                {/* Bottom bar */}
                 <div className="border-t border-[#1F1F1F] py-4">
                     <div className="flex flex-col gap-3 text-xs text-[#666666] sm:flex-row sm:items-center sm:justify-between">
                         <span>© {new Date().getFullYear()} DeployForge. Open source self-hosted orchestration.</span>

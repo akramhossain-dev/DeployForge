@@ -141,7 +141,6 @@ export default function AdminUsersPage() {
 
     return (
         <div className="space-y-6 font-mono text-xs">
-            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#1F1F1F] pb-5">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
@@ -155,7 +154,6 @@ export default function AdminUsersPage() {
 
             {platformUsers.isError && <div className="rounded-md border border-rose-900/50 bg-rose-950/20 p-4 text-rose-300">{(platformUsers.error as Error)?.message}</div>}
 
-            {/* Super Admin Provisioning Form */}
             {isSuperAdmin && (
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#1F1F1F] pb-3 text-white font-bold">
@@ -193,7 +191,6 @@ export default function AdminUsersPage() {
                 </div>
             )}
 
-            {/* Tab switcher */}
             <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-1 flex items-center gap-1">
                 {[
                     { id: 'platform', label: `Platform Users (${platformCount})`, icon: <Users size={13} /> },
@@ -214,7 +211,6 @@ export default function AdminUsersPage() {
                 ))}
             </div>
 
-            {/* Table */}
             {activeTab === 'platform' && (
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-5 space-y-4">
                     <div className="flex flex-col sm:flex-row gap-3 justify-between">
