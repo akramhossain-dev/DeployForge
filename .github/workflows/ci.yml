@@ -31,6 +31,8 @@ jobs:
 
       - name: Generate Prisma Client
         run: pnpm db:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/deployforge_ci?schema=public
 
       - name: Run Tests
         run: pnpm test
