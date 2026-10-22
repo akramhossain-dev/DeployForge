@@ -28,6 +28,7 @@
         },
         "test": {
             "dependsOn": [
+                "^build",
                 "^test"
             ]
         }
