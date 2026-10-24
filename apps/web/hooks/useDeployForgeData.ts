@@ -16,6 +16,7 @@ import type {
     AdminUser,
     AdminVps,
     Deployment,
+    DeploymentQueueStatus,
     Domain,
     ProjectAnalytics,
     DeploymentLog,
@@ -70,6 +71,7 @@ export const queryKeys = {
     deployments: ['deployments'] as const,
     deploymentAnalytics: ['deployments', 'analytics'] as const,
     deployment: (id: string) => ['deployments', id] as const,
+    deploymentQueue: (id: string) => ['deployments', id, 'queue'] as const,
     domains: ['domains'] as const,
     domainSubdomains: (deploymentId: string) => ['domains', 'subdomains', deploymentId] as const,
     domainDns: (domainName: string) => ['domains', 'dns', domainName] as const,
@@ -220,6 +222,18 @@ export function useDeployment(deploymentId?: string) {
         refetchInterval: (query) => {
             const status = query.state.data?.status;
             return status && ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'DELETING'].includes(status) ? 3000 : 15000;
+        },
+    });
+}
+
+export function useDeploymentQueueStatus(deploymentId?: string, enabled = true) {
+    return useQuery({
+        queryKey: queryKeys.deploymentQueue(deploymentId || 'none'),
+        queryFn: () => api.get<DeploymentQueueStatus>(`/deployments/${deploymentId}/queue`),
+        enabled: !!deploymentId && enabled,
+        refetchInterval: (query) => {
+            const state = query.state.data?.state;
+            return state && ['QUEUED', 'WAITING_FOR_VPS', 'WAITING_FOR_PROJECT', 'RUNNING'].includes(state) ? 3000 : 15000;
         },
     });
 }

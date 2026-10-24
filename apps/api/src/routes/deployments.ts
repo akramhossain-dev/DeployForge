@@ -6,6 +6,7 @@ import { RollbackService } from '../services/rollback.service';
 import { formatDeploymentResponse } from '../utils/sanitizers';
 import { apiError, apiMessage, apiSuccess } from '../utils/http';
 import { EnvironmentService } from '../services/deployment/environment.service';
+import { deploymentQueueState } from '../utils/deployment-slot';
 
 const deploymentParamsSchema = z.object({
     id: z.string().uuid({ message: 'Invalid deployment ID format' }),
@@ -167,6 +168,58 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         });
 
         return apiSuccess(analytics);
+    });
+
+    fastify.get('/:id/queue', {
+        config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        const deployment = await prisma.deployment.findFirst({
+            where: {
+                id,
+                OR: [
+                    { userId: request.user.id },
+                    {
+                        project: {
+                            OR: [
+                                { userId: request.user.id },
+                                { members: { some: { userId: request.user.id } } },
+                            ],
+                        },
+                    },
+                ],
+            },
+            select: {
+                id: true,
+                vpsId: true,
+                jobs: { take: 1, orderBy: { createdAt: 'desc' } },
+            },
+        });
+        if (!deployment) {
+            return apiError(reply, 404, 'NOT_FOUND', 'Deployment not found');
+        }
+
+        const latestJob = deployment.jobs[0];
+        const state = deploymentQueueState(latestJob?.status, latestJob?.waitReason);
+        const queuedAhead = latestJob?.status === 'QUEUED'
+            ? await prisma.deploymentJob.count({
+                where: {
+                    status: 'QUEUED',
+                    createdAt: { lt: latestJob.createdAt },
+                    deployment: { vpsId: deployment.vpsId },
+                },
+            })
+            : 0;
+
+        return apiSuccess({
+            state,
+            status: latestJob?.status || null,
+            waitReason: latestJob?.waitReason || null,
+            position: latestJob?.status === 'QUEUED' ? queuedAhead + 1 : null,
+            retryCount: latestJob?.retryCount || 0,
+            createdAt: latestJob?.createdAt || null,
+            updatedAt: latestJob?.updatedAt || null,
+        });
     });
 
     fastify.get('/:id', {

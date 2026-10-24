@@ -235,6 +235,16 @@ export type Deployment = {
     updatedAt: string;
 };
 
+export type DeploymentQueueStatus = {
+    state: 'IDLE' | 'QUEUED' | 'WAITING_FOR_VPS' | 'WAITING_FOR_PROJECT' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+    status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | null;
+    waitReason: 'VPS_BUSY' | 'PROJECT_BUSY' | string | null;
+    position: number | null;
+    retryCount: number;
+    createdAt: string | null;
+    updatedAt: string | null;
+};
+
 export type DeploymentRelease = {
     id: string;
     version: string;
@@ -591,4 +601,3 @@ export type InstallRuntimeResponse = {
     verification: VerificationResult[];
     plan: InstallationPlan;
 };
-

@@ -611,9 +611,11 @@ model Deployment {
 
 model DeploymentJob {
   id           String     @id @default(uuid())
+  queueJobId   String?    @unique
   deploymentId String
   deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   status       JobStatus  @default(QUEUED)
+  waitReason   String?
   retryCount   Int        @default(0)
   lastError    String?
   createdAt    DateTime   @default(now())

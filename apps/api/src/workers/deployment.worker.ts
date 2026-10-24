@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { DelayedError, UnrecoverableError, Worker } from 'bullmq';
 import { redisConnection } from '../utils/queue';
 import { DeploymentService } from '../services/deployment.service';
 import prisma from '@deployforge/database';
@@ -11,14 +11,20 @@ import { config } from '../config/env';
 import { parseDeploymentJobPayload } from '../utils/deployment-job';
 import { RollbackService } from '../services/rollback.service';
 import { ResourcePolicyService } from '../services/resource-policy.service';
+import { LoggingService } from '../services/logging.service';
+import { deploymentRetryDecision, type DeploymentRetryClassification } from '../utils/deployment-retry';
+import { DeploymentSlotBusyError } from '../utils/deployment-slot';
 
 const lockTtlMs = config.security.deploymentLockTtlMs;
 
-function publicJobError(error: any) {
+function publicJobError(error: any, classification?: DeploymentRetryClassification, attempt?: number, maxAttempts?: number) {
     return JSON.stringify({
         message: String(error?.message || 'Deployment operation failed').slice(0, 500),
-        errorCode: String(error?.errorCode || 'DEPLOYMENT_OPERATION_FAILED').slice(0, 100),
+        errorCode: String(classification?.errorCode || error?.errorCode || error?.code || 'DEPLOYMENT_OPERATION_FAILED').slice(0, 100),
         stage: String(error?.stage || 'worker').slice(0, 100),
+        ...(classification ? { retryable: classification.retryable } : {}),
+        ...(attempt ? { attempt } : {}),
+        ...(maxAttempts ? { maxAttempts } : {}),
         ...(error?.details && typeof error.details === 'object' ? { details: error.details } : {}),
     }).slice(0, 4000);
 }
@@ -30,12 +36,12 @@ async function currentReleaseId(projectId: string) {
 
 async function withDeploymentLocks<T>(projectId: string, vpsId: string, operation: () => Promise<T>): Promise<T> {
     const projectLock = await CacheService.acquireRenewableLock(`project-deploy:${projectId}`, lockTtlMs);
-    if (!projectLock) throw new Error('Another deployment for this project is already running');
+    if (!projectLock) throw new DeploymentSlotBusyError('PROJECT');
 
     const vpsLock = await CacheService.acquireRenewableLock(`vps-build:${vpsId}`, lockTtlMs);
     if (!vpsLock) {
         await projectLock.release();
-        throw new Error('The VPS build slot is currently busy');
+        throw new DeploymentSlotBusyError('VPS');
     }
 
     let lockLost = false;
@@ -71,7 +77,7 @@ async function withDeploymentLocks<T>(projectId: string, vpsId: string, operatio
 
 export const deploymentWorker = new Worker(
     'deployment-queue',
-    async (job) => {
+    async (job, token) => {
         const { deploymentId, operation: jobOperation } = parseDeploymentJobPayload(job.data);
         if (jobOperation === 'sandbox-cleanup') {
             const deployment = await prisma.deployment.findUnique({ where: { id: deploymentId }, select: { id: true, userId: true, mode: true, status: true } });
@@ -91,21 +97,32 @@ export const deploymentWorker = new Worker(
             return;
         }
 
-        const jobRecord = await prisma.deploymentJob.create({
-            data: {
+        const queueJobId = String(job.id || `${deploymentId}-${job.timestamp}`);
+        const jobRecord = await prisma.deploymentJob.upsert({
+            where: { queueJobId },
+            create: {
+                queueJobId,
                 deploymentId,
                 status: 'RUNNING',
+                retryCount: job.attemptsMade,
+            },
+            update: {
+                retryCount: job.attemptsMade,
             },
         });
-        logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job started');
-
         const deployment = await prisma.deployment.findUnique({
             where: { id: deploymentId },
             select: { id: true, userId: true, vpsId: true, name: true, vps: { select: { name: true } } },
         });
 
+        let retainReservationForRetry = false;
         try {
             await withDeploymentLocks(deploymentExists.projectId, deploymentExists.vpsId, async () => {
+                await prisma.deploymentJob.update({
+                    where: { id: jobRecord.id },
+                    data: { status: 'RUNNING', waitReason: null, lastError: null, retryCount: job.attemptsMade },
+                });
+                logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job started');
                 if (jobOperation === 'rollback') {
                     await RollbackService.executeRollback(deploymentId);
                     return;
@@ -149,7 +166,7 @@ export const deploymentWorker = new Worker(
 
             await prisma.deploymentJob.update({
                 where: { id: jobRecord.id },
-                data: { status: 'SUCCESS' },
+                data: { status: 'SUCCESS', waitReason: null, lastError: null, retryCount: job.attemptsMade },
             });
             logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, releaseId: await currentReleaseId(deploymentExists.projectId), vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job completed');
 
@@ -164,8 +181,62 @@ export const deploymentWorker = new Worker(
             }
 
         } catch (err: any) {
-            logger.error({ err, jobId: job.id, deploymentId, projectId: deploymentExists.projectId, releaseId: await currentReleaseId(deploymentExists.projectId), vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job operation failed');
-            if (jobOperation === 'deploy') {
+            if (err instanceof DeploymentSlotBusyError) {
+                retainReservationForRetry = true;
+                const waitReason = err.scope === 'VPS' ? 'VPS_BUSY' : 'PROJECT_BUSY';
+                await prisma.deploymentJob.update({
+                    where: { id: jobRecord.id },
+                    data: {
+                        status: 'QUEUED',
+                        waitReason,
+                        lastError: null,
+                        retryCount: job.attemptsMade,
+                    },
+                });
+                if (jobOperation === 'deploy') {
+                    await prisma.deployment.update({
+                        where: { id: deploymentId },
+                        data: {
+                            status: 'PENDING',
+                            domain: deploymentExists.domain,
+                            hostType: deploymentExists.domain ? 'domain' : 'ip',
+                        },
+                    }).catch(() => undefined);
+                }
+                if (jobRecord.waitReason !== waitReason) {
+                    await LoggingService.log(
+                        deploymentId,
+                        err.scope === 'VPS'
+                            ? 'Waiting for the VPS build slot. The deployment remains queued.'
+                            : 'Waiting for another deployment of this project to finish.',
+                        'system',
+                        'info',
+                    ).catch(() => undefined);
+                }
+                logger.info({ jobId: job.id, deploymentId, vpsId: deploymentExists.vpsId, scope: err.scope }, 'Deployment is waiting for an available build slot');
+                await job.moveToDelayed(Date.now() + 5000, token);
+                throw new DelayedError();
+            }
+
+            const decision = deploymentRetryDecision(err, job.attemptsMade, Number(job.opts.attempts || 1));
+            retainReservationForRetry = decision.shouldRetry;
+            logger.error({ err, retryable: decision.retryable, shouldRetry: decision.shouldRetry, attempt: decision.attempt, maxAttempts: decision.maxAttempts, jobId: job.id, deploymentId, projectId: deploymentExists.projectId, releaseId: await currentReleaseId(deploymentExists.projectId), vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job operation failed');
+            if (jobOperation === 'deploy' && decision.shouldRetry) {
+                await prisma.deployment.update({
+                    where: { id: deploymentId },
+                    data: {
+                        status: 'PENDING',
+                        domain: deploymentExists.domain,
+                        hostType: deploymentExists.domain ? 'domain' : 'ip',
+                    },
+                }).catch(() => undefined);
+                await LoggingService.log(
+                    deploymentId,
+                    `Transient failure (${decision.errorCode}). Retry ${decision.attempt + 1} of ${decision.maxAttempts} scheduled.`,
+                    'system',
+                    'warn',
+                ).catch(() => undefined);
+            } else if (jobOperation === 'deploy') {
                 await prisma.deployment.update({
                     where: { id: deploymentId },
                     data: { status: 'FAILED' },
@@ -174,13 +245,16 @@ export const deploymentWorker = new Worker(
             await prisma.deploymentJob.update({
                 where: { id: jobRecord.id },
                 data: {
-                    status: 'FAILED',
-                    lastError: publicJobError(err),
-                    retryCount: job.attemptsMade,
+                    status: decision.shouldRetry ? 'QUEUED' : 'FAILED',
+                    waitReason: null,
+                    lastError: publicJobError(err, decision, decision.attempt, decision.maxAttempts),
+                    retryCount: decision.attempt,
                 },
             });
 
-            if (deployment) {
+            if (decision.shouldRetry) {
+                logger.warn({ jobId: job.id, deploymentId, attempt: decision.attempt, maxAttempts: decision.maxAttempts, errorCode: decision.errorCode }, 'Transient deployment failure; retry scheduled');
+            } else if (deployment) {
                 AlertService.handleDeploymentEvent(
                     deployment.userId,
                     deployment.vpsId,
@@ -190,11 +264,16 @@ export const deploymentWorker = new Worker(
                 ).catch(() => undefined);
             }
 
-            throw err; 
+            if (!decision.retryable) {
+                throw new UnrecoverableError(String(err?.message || 'Permanent deployment failure'));
+            }
+            throw err;
         } finally {
-            await ResourcePolicyService.releaseReservation(deploymentId).catch((err) => {
-                logger.error({ err, deploymentId }, 'Failed to release deployment capacity reservation');
-            });
+            if (!retainReservationForRetry) {
+                await ResourcePolicyService.releaseReservation(deploymentId).catch((err) => {
+                    logger.error({ err, deploymentId }, 'Failed to release deployment capacity reservation');
+                });
+            }
         }
     },
     {
@@ -204,5 +283,11 @@ export const deploymentWorker = new Worker(
 );
 
 deploymentWorker.on('failed', (job, err) => {
-    logger.error({ err, jobId: job?.id }, 'Deployment job failed');
+    const maxAttempts = Number(job?.opts.attempts || 1);
+    const retrying = Boolean(job && !(err instanceof UnrecoverableError) && job.attemptsMade < maxAttempts);
+    if (retrying) {
+        logger.warn({ err, jobId: job?.id, attempt: job?.attemptsMade, maxAttempts }, 'Deployment attempt failed; job will retry');
+        return;
+    }
+    logger.error({ err, jobId: job?.id, attemptsMade: job?.attemptsMade, maxAttempts }, 'Deployment job failed permanently');
 });

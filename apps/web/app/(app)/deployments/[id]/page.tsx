@@ -37,6 +37,7 @@ import { DeploymentTimeline } from '@/components/deployments/detail/DeploymentTi
 import {
     useDeleteDeployment,
     useDeployment,
+    useDeploymentQueueStatus,
     useDeploymentLogs,
     useDeploymentLogStream,
     useDeploymentStatusStream,
@@ -124,6 +125,7 @@ export default function DeploymentDetailsPage() {
 
     const deployment = useDeployment(id);
     const deploymentExists = deployment.isSuccess && Boolean(deployment.data);
+    const queueStatus = useDeploymentQueueStatus(id, deploymentExists);
     const initialLogs = useDeploymentLogs(id, deploymentExists);
     const [logsPaused, setLogsPaused] = useState(false);
     const [autoScroll, setAutoScroll] = useState(true);
@@ -634,6 +636,28 @@ export default function DeploymentDetailsPage() {
                     </button>
                 </div>
             </div>
+
+            {queueStatus.data && ['QUEUED', 'WAITING_FOR_VPS', 'WAITING_FOR_PROJECT'].includes(queueStatus.data.state) ? (
+                <div className="flex flex-col gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p className="font-semibold">
+                            {queueStatus.data.state === 'WAITING_FOR_VPS'
+                                ? 'Waiting for VPS build slot'
+                                : queueStatus.data.state === 'WAITING_FOR_PROJECT'
+                                    ? 'Waiting for another project deployment'
+                                    : 'Deployment queued'}
+                        </p>
+                        <p className="mt-1 text-[11px] text-amber-200">
+                            It will start automatically when the required slot becomes available. Waiting does not consume a retry attempt.
+                        </p>
+                    </div>
+                    {queueStatus.data.position ? (
+                        <span className="shrink-0 rounded border border-amber-400/30 bg-black/20 px-3 py-1.5 font-semibold">
+                            Queue position #{queueStatus.data.position}
+                        </span>
+                    ) : null}
+                </div>
+            ) : null}
 
             {current.status === 'FAILED' && parsedError ? (
                 <DeploymentErrorBanner
