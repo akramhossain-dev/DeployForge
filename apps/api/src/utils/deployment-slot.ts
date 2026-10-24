@@ -17,8 +17,18 @@ export type DeploymentQueueState =
     | 'WAITING_FOR_VPS'
     | 'WAITING_FOR_PROJECT'
     | 'RUNNING'
+    | 'WAITING_APPROVAL'
+    | 'BLOCKED'
     | 'SUCCESS'
-    | 'FAILED';
+    | 'FAILED'
+    | 'CANCELLED'
+    | 'CANCELED';
+
+const cancellableQueueStates = new Set(['waiting', 'delayed', 'prioritized', 'paused']);
+
+export function isCancellableQueueJobState(state: string): boolean {
+    return cancellableQueueStates.has(state);
+}
 
 export function deploymentQueueState(status?: string | null, waitReason?: string | null): DeploymentQueueState {
     if (!status) return 'IDLE';
@@ -26,7 +36,11 @@ export function deploymentQueueState(status?: string | null, waitReason?: string
     if (status === 'QUEUED' && waitReason === 'PROJECT_BUSY') return 'WAITING_FOR_PROJECT';
     if (status === 'QUEUED') return 'QUEUED';
     if (status === 'RUNNING') return 'RUNNING';
+    if (status === 'WAITING_APPROVAL') return 'WAITING_APPROVAL';
+    if (status === 'BLOCKED') return 'BLOCKED';
     if (status === 'SUCCESS') return 'SUCCESS';
     if (status === 'FAILED') return 'FAILED';
+    if (status === 'CANCELLED') return 'CANCELLED';
+    if (status === 'CANCELED') return 'CANCELED';
     return 'IDLE';
 }

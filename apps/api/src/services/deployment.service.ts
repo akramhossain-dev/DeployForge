@@ -17,14 +17,23 @@ import { ValidationService } from './deployment/validation.service';
 import { runCommand } from './deployment/runner';
 import { RuntimeManagerService } from './runtime-manager';
 import { ComposePolicyService } from './deployment/compose-policy.service';
+import { PreflightService } from './deployment/preflight.service';
 import { ReleaseService } from './release.service';
 import { EffectiveResourcePolicy, ResourcePolicyService, tierForRuntime } from './resource-policy.service';
+import { isCancellableQueueJobState } from '../utils/deployment-slot';
+import {
+    DeploymentCancellationError,
+    deploymentCancellationKey,
+    isDeploymentCancellation,
+} from '../utils/deployment-cancellation';
+import { isPreflightGate } from '../utils/deployment-preflight';
 
 import {
     shellQuote,
     shellPath,
     sanitizeName,
     computeFileHash,
+    traefikHostRuleLabel,
 } from './deployment/utils';
 import {
     DeploymentSource,
@@ -403,6 +412,23 @@ export class DeploymentService {
                 },
             });
 
+            await this.setStatus(deploymentId, 'PREFLIGHT');
+            await LoggingService.log(deploymentId, 'Running deployment preflight checks before build', 'system');
+            const preflight = await PreflightService.run({
+                deploymentId,
+                ssh,
+                workDir,
+                detected,
+                encryptedEnv: deployment.env,
+                effectiveDomain,
+                vpsIp: vps.ipAddress,
+                composeService: composeIngress?.service,
+                composePort: composeIngress?.port,
+                warningsAccepted: deployment.preflightWarningsAccepted,
+            });
+            await LoggingService.log(deploymentId, `Preflight passed: ${preflight.summary.passed} passed, ${preflight.summary.warnings} approved warnings`, 'system');
+            await this.setStatus(deploymentId, 'BUILDING');
+
             if (!isSandbox) {
                 const release = await ReleaseService.begin({
                     deploymentId,
@@ -623,6 +649,7 @@ export class DeploymentService {
             }
 
             if (!isSandbox) {
+                await this.assertNotCancelled(deploymentId);
                 await ReleaseService.recordRuntime(deploymentReleaseId, createdContainerId, createdContainerId.startsWith('compose:') ? undefined : createdContainerId);
                 await ReleaseService.activate(ssh, { releaseId: deploymentReleaseId, deploymentId, domain: effectiveDomain, routerId });
                 releaseActivated = true;
@@ -633,6 +660,7 @@ export class DeploymentService {
                 if (domainName) await this.persistDomainBinding(deploymentId, vps.id, domainName);
             }
 
+            await this.assertNotCancelled(deploymentId);
             await prisma.deployment.update({
                 where: { id: deploymentId },
                 data: {
@@ -686,12 +714,37 @@ export class DeploymentService {
         } catch (err: any) {
             const stage = err.stage || 'deploying';
             const message = err.message || 'Deployment failed';
+            const cancelled = isDeploymentCancellation(err);
+            if (isPreflightGate(err)) {
+                const nextStatus = err.kind === 'BLOCKED' ? 'PREFLIGHT_BLOCKED' : 'AWAITING_PREFLIGHT';
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { status: nextStatus } });
+                await ssh.execute(`rm -rf ${shellQuote(workDir)} ${shellQuote(staticDir)}`, 30_000).catch(() => undefined);
+                await LoggingService.log(
+                    deploymentId,
+                    err.kind === 'BLOCKED'
+                        ? 'Preflight blocked the deployment. Fix the blocked checks before redeploying.'
+                        : 'Preflight found warnings. Review and approve them to continue.',
+                    'system',
+                    'warn',
+                );
+                throw err;
+            }
             if (deploymentReleaseId && !releaseActivated) {
                 await ReleaseService.markReadinessFailed(deploymentReleaseId, err);
             }
-            if (createdContainerId && !releaseActivated) {
+            if (createdContainerId && !releaseActivated && !cancelled) {
                 await this.captureContainerLogs(ssh, deploymentId, createdContainerId);
                 await this.removeContainerQuietly(ssh, deploymentId, createdContainerId);
+            }
+            if (cancelled) {
+                await ssh.execute(`docker ps -aq --filter ${shellQuote(`label=com.deployforge.deployment=${deploymentId}`)} | xargs -r docker rm -f`, 30_000).catch(() => undefined);
+                await ssh.execute(`docker images -q --filter ${shellQuote(`label=com.deployforge.deployment=${deploymentId}`)} | xargs -r docker rmi -f`, 30_000).catch(() => undefined);
+                await ssh.execute(`rm -rf ${shellQuote(workDir)} ${shellQuote(staticDir)}`, 30_000).catch(() => undefined);
+                await this.cleanupDeploymentWorkspace(deploymentId, source.type === 'uploaded_file' ? source.uploadPath : undefined);
+                if (domainName) await prisma.domain.updateMany({ where: { deploymentId }, data: { status: 'DELETED' } });
+                await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'CANCELED', containerId: null, domain: null, hostType: 'ip' } });
+                await LoggingService.log(deploymentId, 'Deployment cancellation completed; candidate resources were removed.', 'system', 'warn');
+                throw err;
             }
             if (isSandbox) {
                 await this.cleanupDeploymentWorkspace(deploymentId, source.type === 'uploaded_file' ? source.uploadPath : undefined);
@@ -821,6 +874,77 @@ export class DeploymentService {
         }
 
         return deployment;
+    }
+
+    static async cancelDeployment(userId: string, deploymentId: string) {
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
+        if (['CANCELED', 'CANCELLED'].includes(deployment.status)) {
+            await ResourcePolicyService.releaseReservation(deploymentId);
+            return { success: true, canceled: true, state: 'CANCELED' };
+        }
+        if (deployment.status === 'CANCELING') {
+            return { success: true, canceled: false, state: 'CANCELING' };
+        }
+
+        const jobRecord = await prisma.deploymentJob.findFirst({
+            where: { deploymentId },
+            orderBy: { createdAt: 'desc' },
+        });
+        if (!jobRecord || !['QUEUED', 'RUNNING'].includes(jobRecord.status) || !jobRecord.queueJobId) {
+            throw new DeploymentError('queue', 'Only a queued or active deployment can be canceled', 'DEPLOYMENT_NOT_CANCELLABLE', 409);
+        }
+
+        if (jobRecord.status === 'QUEUED') {
+            let queuedOperation = 'deploy';
+            const queuedJob = await deploymentQueue.getJob(jobRecord.queueJobId);
+            if (queuedJob) {
+                queuedOperation = typeof queuedJob.data?.operation === 'string' ? queuedJob.data.operation : 'deploy';
+                const state = await queuedJob.getState();
+                if (!isCancellableQueueJobState(state)) {
+                    throw new DeploymentError('queue', `Deployment job is already ${state}`, 'QUEUE_JOB_NOT_CANCELLABLE', 409, { state });
+                }
+                try {
+                    await queuedJob.remove();
+                } catch {
+                    throw new DeploymentError('queue', 'Deployment job started before cancellation completed', 'QUEUE_JOB_NOT_CANCELLABLE', 409, { state: 'active' });
+                }
+            }
+
+            await prisma.$transaction(async (tx) => {
+                const updated = await tx.deploymentJob.updateMany({
+                    where: { id: jobRecord.id, status: 'QUEUED' },
+                    data: { status: 'CANCELED', waitReason: null, lastError: null },
+                });
+                if (updated.count !== 1) {
+                    throw new DeploymentError('queue', 'Deployment job started before cancellation completed', 'QUEUE_JOB_NOT_CANCELLABLE', 409);
+                }
+                if (queuedOperation === 'deploy') {
+                    await tx.deployment.update({
+                        where: { id: deploymentId },
+                        data: { status: 'CANCELED' },
+                    });
+                }
+                await tx.capacityReservation.updateMany({
+                    where: { deploymentId, status: 'RESERVED' },
+                    data: { status: 'RELEASED', releasedAt: new Date() },
+                });
+            });
+            await LoggingService.log(deploymentId, `Queued ${queuedOperation} operation canceled by userId=${userId}`, 'system', 'info').catch(() => undefined);
+            return { success: true, canceled: true, state: 'CANCELED' };
+        }
+
+        const candidate = await prisma.deploymentRelease.findFirst({
+            where: { deploymentId },
+            orderBy: { createdAt: 'desc' },
+            select: { status: true },
+        });
+        if (candidate && ['ACTIVATING', 'ACTIVE'].includes(candidate.status)) {
+            throw new DeploymentError('cancellation', 'Traffic activation has already started; cancellation is no longer safe', 'DEPLOYMENT_NOT_CANCELLABLE', 409);
+        }
+        await CacheService.set(deploymentCancellationKey(deploymentId), { requestedAt: new Date().toISOString(), userId }, 10 * 60);
+        await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'CANCELING' } });
+        await LoggingService.log(deploymentId, `Cancellation requested by userId=${userId}; stopping the active remote process.`, 'system', 'warn').catch(() => undefined);
+        return { success: true, canceled: false, state: 'CANCELING' };
     }
 
     static async stopDeployment(userId: string, deploymentId: string) {
@@ -1096,10 +1220,67 @@ export class DeploymentService {
                 deploymentLogs: { take: 25, orderBy: { createdAt: 'desc' } },
                 history: { take: 5, orderBy: { createdAt: 'desc' } },
                 jobs: { take: 1, orderBy: { createdAt: 'desc' } },
+                preflightChecks: { orderBy: [{ status: 'desc' }, { category: 'asc' }, { title: 'asc' }] },
             },
         });
         if (!deployment) throw new DeploymentError('status', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
         return deployment;
+    }
+
+    static async approvePreflightWarnings(userId: string, deploymentId: string) {
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
+        if (deployment.status !== 'AWAITING_PREFLIGHT') {
+            throw new DeploymentError('preflight', 'This deployment is not awaiting preflight warning approval', 'PREFLIGHT_NOT_AWAITING_APPROVAL', 409);
+        }
+        const checks = await prisma.deploymentPreflightCheck.findMany({ where: { deploymentId } });
+        if (checks.some((check) => check.status === 'BLOCKED')) {
+            throw new DeploymentError('preflight', 'Blocked preflight checks cannot be overridden', 'PREFLIGHT_BLOCKED', 409);
+        }
+        if (!checks.some((check) => check.status === 'WARNING')) {
+            throw new DeploymentError('preflight', 'No preflight warnings require approval', 'PREFLIGHT_NO_WARNINGS', 409);
+        }
+
+        const policy = await ResourcePolicyService.resolve(deployment.projectId, deployment.requestedResourceTier);
+        if (policy) await ResourcePolicyService.reserve(deploymentId, policy);
+        try {
+            await prisma.deployment.update({
+                where: { id: deploymentId },
+                data: { preflightWarningsAccepted: true, status: 'PENDING' },
+            });
+            await LoggingService.log(deploymentId, `Preflight warnings approved by userId=${userId}; deployment queued again`, 'system');
+            const job = await deploymentQueue.add('deploy', deploymentJobPayload(deploymentId, 'deploy'), {
+                jobId: `preflight-approved-${deploymentId}-${Date.now()}`,
+            });
+            return { queued: true, jobId: String(job.id) };
+        } catch (error) {
+            await ResourcePolicyService.releaseReservation(deploymentId);
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'AWAITING_PREFLIGHT' } }).catch(() => undefined);
+            throw error;
+        }
+    }
+
+    static async retryBlockedPreflight(userId: string, deploymentId: string) {
+        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
+        if (deployment.status !== 'PREFLIGHT_BLOCKED') {
+            throw new DeploymentError('preflight', 'This deployment is not blocked by preflight checks', 'PREFLIGHT_NOT_BLOCKED', 409);
+        }
+        const policy = await ResourcePolicyService.resolve(deployment.projectId, deployment.requestedResourceTier);
+        if (policy) await ResourcePolicyService.reserve(deploymentId, policy);
+        try {
+            await prisma.deployment.update({
+                where: { id: deploymentId },
+                data: { preflightWarningsAccepted: false, status: 'PENDING' },
+            });
+            await LoggingService.log(deploymentId, `Blocked preflight retry requested by userId=${userId}`, 'system');
+            const job = await deploymentQueue.add('deploy', deploymentJobPayload(deploymentId, 'deploy'), {
+                jobId: `preflight-retry-${deploymentId}-${Date.now()}`,
+            });
+            return { queued: true, jobId: String(job.id) };
+        } catch (error) {
+            await ResourcePolicyService.releaseReservation(deploymentId);
+            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'PREFLIGHT_BLOCKED' } }).catch(() => undefined);
+            throw error;
+        }
     }
 
     static envPreview(encryptedEnv?: string | null) {
@@ -1124,7 +1305,7 @@ export class DeploymentService {
         const aliasFlag = releaseAlias ? ` --network-alias ${shellQuote(releaseAlias)}` : '';
         const labels = isSandbox ? `
             --label "traefik.enable=true" \\
-            --label "traefik.http.routers.${routerId}.rule=Host(\`${effectiveDomain}\`)" \\
+            --label ${traefikHostRuleLabel(routerId, effectiveDomain)} \\
             --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
             --label "traefik.http.routers.${routerId}.tls=true" \\
             --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
@@ -1185,7 +1366,7 @@ export class DeploymentService {
         const aliasFlag = releaseAlias ? ` --network-alias ${shellQuote(releaseAlias)}` : '';
         const labels = isSandbox ? `
             --label "traefik.enable=true" \\
-            --label "traefik.http.routers.${routerId}.rule=Host(\`${effectiveDomain}\`)" \\
+            --label ${traefikHostRuleLabel(routerId, effectiveDomain)} \\
             --label "traefik.http.routers.${routerId}.entrypoints=websecure" \\
             --label "traefik.http.routers.${routerId}.tls=true" \\
             --label "traefik.http.routers.${routerId}.tls.certresolver=letsencrypt" \\
@@ -1518,12 +1699,18 @@ services:
             CLONING:    ['BUILDING', 'DELETING', 'FAILED'],
             UPLOADING:  ['EXTRACTING', 'BUILDING', 'DELETING', 'FAILED'],
             EXTRACTING: ['BUILDING', 'DELETING', 'FAILED'],
-            BUILDING:   ['DEPLOYING', 'DELETING', 'FAILED'],
+            BUILDING:   ['PREFLIGHT', 'DEPLOYING', 'DELETING', 'FAILED'],
+            PREFLIGHT:  ['BUILDING', 'AWAITING_PREFLIGHT', 'PREFLIGHT_BLOCKED', 'DELETING', 'FAILED'],
+            AWAITING_PREFLIGHT: ['PENDING', 'DELETING'],
+            PREFLIGHT_BLOCKED: ['PENDING', 'DELETING'],
             DEPLOYING:  ['RUNNING', 'DELETING', 'FAILED'],
             RUNNING:    ['STOPPED', 'PAUSED', 'DELETING', 'FAILED'],
             PAUSED:     ['RUNNING', 'DELETING'],
             STOPPED:    ['RUNNING', 'DELETING'],
             FAILED:     ['RUNNING', 'DELETING'],
+            CANCELLED:  ['DELETING'],
+            CANCELING:  ['CANCELED', 'FAILED'],
+            CANCELED:   ['DELETING'],
             ROLLED_BACK: ['STOPPED', 'PAUSED', 'DELETING', 'FAILED'],
             DELETING:   ['DELETED'],
             DELETED:    [],
@@ -1538,7 +1725,17 @@ services:
     }
 
     private static async setStatus(deploymentId: string, status: DeploymentStatus) {
-        await prisma.deployment.update({ where: { id: deploymentId }, data: { status } });
+        const updated = await prisma.deployment.updateMany({
+            where: { id: deploymentId, status: { notIn: ['CANCELING', 'CANCELED', 'CANCELLED'] } },
+            data: { status },
+        });
+        if (updated.count !== 1) throw new DeploymentCancellationError();
+    }
+
+    private static async assertNotCancelled(deploymentId: string) {
+        if (await CacheService.get(deploymentCancellationKey(deploymentId))) {
+            throw new DeploymentCancellationError();
+        }
     }
 
     private static getVpsAuth(vps: any) {

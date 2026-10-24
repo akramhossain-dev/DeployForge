@@ -52,7 +52,7 @@ export class ResourcePolicyService {
         const rows = await prisma.deployment.findMany({
             where: {
                 project: { userId: ownerId },
-                status: { in: ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'RUNNING', 'PAUSED', 'ROLLED_BACK'] },
+                status: { in: ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'PREFLIGHT', 'DEPLOYING', 'RUNNING', 'PAUSED', 'ROLLED_BACK'] },
                 projectId: { not: projectId },
             },
             distinct: ['projectId'],

@@ -14,6 +14,11 @@ import { ResourcePolicyService } from '../services/resource-policy.service';
 import { LoggingService } from '../services/logging.service';
 import { deploymentRetryDecision, type DeploymentRetryClassification } from '../utils/deployment-retry';
 import { DeploymentSlotBusyError } from '../utils/deployment-slot';
+import {
+    deploymentCancellationKey,
+    isDeploymentCancellation,
+} from '../utils/deployment-cancellation';
+import { isPreflightGate } from '../utils/deployment-preflight';
 
 const lockTtlMs = config.security.deploymentLockTtlMs;
 
@@ -168,6 +173,7 @@ export const deploymentWorker = new Worker(
                 where: { id: jobRecord.id },
                 data: { status: 'SUCCESS', waitReason: null, lastError: null, retryCount: job.attemptsMade },
             });
+            await CacheService.del(deploymentCancellationKey(deploymentId));
             logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, releaseId: await currentReleaseId(deploymentExists.projectId), vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job completed');
 
             if (deployment) {
@@ -181,6 +187,34 @@ export const deploymentWorker = new Worker(
             }
 
         } catch (err: any) {
+            if (isDeploymentCancellation(err)) {
+                await prisma.deploymentJob.update({
+                    where: { id: jobRecord.id },
+                    data: { status: 'CANCELED', waitReason: null, lastError: null, retryCount: job.attemptsMade },
+                });
+                await prisma.deployment.update({
+                    where: { id: deploymentId },
+                    data: { status: 'CANCELED' },
+                }).catch(() => undefined);
+                await CacheService.del(deploymentCancellationKey(deploymentId));
+                logger.info({ jobId: job.id, deploymentId, vpsId: deploymentExists.vpsId }, 'Deployment job canceled');
+                return;
+            }
+
+            if (isPreflightGate(err)) {
+                await prisma.deploymentJob.update({
+                    where: { id: jobRecord.id },
+                    data: {
+                        status: err.kind === 'BLOCKED' ? 'BLOCKED' : 'WAITING_APPROVAL',
+                        waitReason: err.kind === 'BLOCKED' ? 'PREFLIGHT_BLOCKED' : 'PREFLIGHT_WARNING_APPROVAL',
+                        lastError: publicJobError(err),
+                        retryCount: job.attemptsMade,
+                    },
+                });
+                logger.info({ jobId: job.id, deploymentId, kind: err.kind }, 'Deployment stopped at preflight gate');
+                return;
+            }
+
             if (err instanceof DeploymentSlotBusyError) {
                 retainReservationForRetry = true;
                 const waitReason = err.scope === 'VPS' ? 'VPS_BUSY' : 'PROJECT_BUSY';

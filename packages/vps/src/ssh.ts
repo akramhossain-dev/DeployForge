@@ -5,6 +5,12 @@ export interface SSHConfig extends ConnectConfig {
     host: string;
 }
 
+export type SSHExecuteOptions = {
+    timeoutMs?: number;
+    onStdout?: (chunk: string) => void;
+    onStderr?: (chunk: string) => void;
+};
+
 export type SSHConnectionErrorCode =
     | 'SSH_TIMEOUT'
     | 'INVALID_CREDENTIALS'
@@ -133,8 +139,14 @@ export class SSHService {
     }
 
     async execute(command: string, timeoutMs = 15 * 60 * 1000): Promise<{ stdout: string; stderr: string; code: number | null }> {
+        return this.executeStreaming(command, { timeoutMs });
+    }
+
+    async executeStreaming(command: string, options: SSHExecuteOptions = {}): Promise<{ stdout: string; stderr: string; code: number | null }> {
         return new Promise((resolve, reject) => {
             let settled = false;
+            let stream: ClientChannel | null = null;
+            const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000;
             const finish = (fn: () => void) => {
                 if (settled) return;
                 settled = true;
@@ -142,28 +154,34 @@ export class SSHService {
             };
 
             const timer = setTimeout(() => {
+                stream?.close();
                 finish(() => reject(new SSHConnectionError(`Command timed out after ${Math.round(timeoutMs / 1000)}s`, 'SSH_COMMAND_FAILED')));
             }, timeoutMs);
 
-            this.getClient().exec(command, (err, stream) => {
+            this.getClient().exec(command, (err, channel) => {
                 if (err) {
                     clearTimeout(timer);
                     return reject(err);
                 }
+                stream = channel;
 
                 let stdout = '';
                 let stderr = '';
 
-                stream
+                channel
                     .on('close', (code: number | null) => {
                         clearTimeout(timer);
                         finish(() => resolve({ stdout, stderr, code }));
                     })
                     .on('data', (data: Buffer) => {
-                        stdout += data.toString();
+                        const chunk = data.toString();
+                        stdout += chunk;
+                        options.onStdout?.(chunk);
                     })
                     .stderr.on('data', (data: Buffer) => {
-                        stderr += data.toString();
+                        const chunk = data.toString();
+                        stderr += chunk;
+                        options.onStderr?.(chunk);
                     });
             });
         });

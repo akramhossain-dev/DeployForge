@@ -27,6 +27,9 @@ enum AuthProvider {
 
 enum DeploymentStatus {
   PENDING
+  PREFLIGHT
+  AWAITING_PREFLIGHT
+  PREFLIGHT_BLOCKED
   BUILDING
   DEPLOYING
   CLONING
@@ -40,6 +43,9 @@ enum DeploymentStatus {
   DELETING
   ROLLED_BACK
   DELETED
+  CANCELLED
+  CANCELING
+  CANCELED
 }
 
 enum DomainStatus {
@@ -178,8 +184,18 @@ enum AlertType {
 enum JobStatus {
   QUEUED
   RUNNING
+  WAITING_APPROVAL
+  BLOCKED
   SUCCESS
   FAILED
+  CANCELLED
+  CANCELED
+}
+
+enum PreflightCheckStatus {
+  PASS
+  WARNING
+  BLOCKED
 }
 
 model User {
@@ -582,6 +598,8 @@ model Deployment {
   domain                String?
   hostType              String               @default("ip")
   mode                  String               @default("production")
+  preflightWarningsAccepted Boolean          @default(false)
+  preflightChecks       DeploymentPreflightCheck[]
   deploymentLogs        DeploymentLog[]
   history               DeploymentHistory[]
   releases              DeploymentRelease[]
@@ -607,6 +625,23 @@ model Deployment {
   @@index([status])
   @@index([createdAt])
   @@index([updatedAt])
+}
+
+model DeploymentPreflightCheck {
+  id           String               @id @default(uuid())
+  deploymentId String
+  deployment   Deployment           @relation(fields: [deploymentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  code         String
+  category     String
+  title        String
+  status       PreflightCheckStatus
+  message      String
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([deploymentId, code])
+  @@index([deploymentId, status])
+  @@index([createdAt])
 }
 
 model DeploymentJob {

@@ -200,7 +200,7 @@ export function useDeployments(enabled = true) {
         enabled,
         refetchInterval: (query) => {
             const deployments = query.state.data || [];
-            return deployments.some((deployment) => ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'DELETING'].includes(deployment.status)) ? 4000 : 20000;
+            return deployments.some((deployment) => ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'PREFLIGHT', 'DEPLOYING', 'CANCELING', 'DELETING'].includes(deployment.status)) ? 4000 : 20000;
         },
     });
 }
@@ -221,7 +221,7 @@ export function useDeployment(deploymentId?: string) {
         enabled: !!deploymentId,
         refetchInterval: (query) => {
             const status = query.state.data?.status;
-            return status && ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'DELETING'].includes(status) ? 3000 : 15000;
+            return status && ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'PREFLIGHT', 'DEPLOYING', 'CANCELING', 'DELETING'].includes(status) ? 3000 : 15000;
         },
     });
 }
@@ -395,6 +395,56 @@ export function useDeleteDeployment() {
             queryClient.invalidateQueries({ queryKey: queryKeys.domains });
         },
         onError: (err, id) => handleMutationError('Deletion Failed', err, id),
+    });
+}
+
+export function useCancelDeployment() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => api.post<{ success: boolean; canceled: boolean; state: 'CANCELING' | 'CANCELED' }>(`/deployments/${id}/cancel`),
+        onSuccess: (data, id) => {
+            handleMutationSuccess(
+                data.state === 'CANCELING' ? 'Cancellation Started' : 'Deployment Canceled',
+                data.state === 'CANCELING'
+                    ? 'The active remote build is being stopped and candidate resources will be removed.'
+                    : 'The queued deployment was canceled and its reserved capacity was released.'
+            );
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentQueue(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentLogs(id) });
+        },
+        onError: (err, id) => handleMutationError('Cancellation Failed', err, id),
+    });
+}
+
+export function useApprovePreflightWarnings() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => api.post<{ queued: boolean; jobId: string }>(`/deployments/${id}/preflight/approve`),
+        onSuccess: (_data, id) => {
+            handleMutationSuccess('Warnings Approved', 'Preflight warnings were approved and the deployment was queued again.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentQueue(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentLogs(id) });
+        },
+        onError: (err, id) => handleMutationError('Preflight Approval Failed', err, id),
+    });
+}
+
+export function useRetryBlockedPreflight() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => api.post<{ queued: boolean; jobId: string }>(`/deployments/${id}/preflight/retry`),
+        onSuccess: (_data, id) => {
+            handleMutationSuccess('Preflight Queued', 'Preflight will run again using the updated configuration.');
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployments });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deployment(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentQueue(id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.deploymentLogs(id) });
+        },
+        onError: (err, id) => handleMutationError('Preflight Retry Failed', err, id),
     });
 }
 

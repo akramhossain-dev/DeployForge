@@ -25,6 +25,10 @@ export function shellPath(value: string) {
     return value.replace(/[^A-Za-z0-9._-]/g, '');
 }
 
+export function traefikHostRuleLabel(routerId: string, domain: string) {
+    return shellQuote(`traefik.http.routers.${routerId}.rule=Host(\`${domain}\`)`);
+}
+
 export function extractRepoFullName(repositoryUrl: string) {
     const match = repositoryUrl.match(/github\.com[:/](?<owner>[^/\s]+)\/(?<repo>[^/\s.]+)(?:\.git)?/i);
     if (!match?.groups) return null;

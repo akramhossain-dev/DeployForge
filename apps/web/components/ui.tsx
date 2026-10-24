@@ -117,10 +117,12 @@ export function StatusBadge({ status }: { status?: string }) {
     let style = 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]';
     if (['RUNNING', 'SUCCESS', 'ACTIVE', 'COMPLETED', 'ROLLED_BACK'].includes(s)) {
         style = 'border-[#1F1F1F] bg-[#000000] text-emerald-400';
-    } else if (['FAILED', 'ERROR', 'CRITICAL', 'BROKEN'].includes(s)) {
+    } else if (['FAILED', 'ERROR', 'CRITICAL', 'BROKEN', 'PREFLIGHT_BLOCKED'].includes(s)) {
         style = 'border-rose-900/40 bg-rose-950/20 text-rose-400';
-    } else if (['BUILDING', 'DEPLOYING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'PENDING', 'QUEUED'].includes(s)) {
+    } else if (['BUILDING', 'PREFLIGHT', 'DEPLOYING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'PENDING', 'QUEUED', 'CANCELING'].includes(s)) {
         style = 'border-[#1F1F1F] bg-[#000000] text-cyan-400';
+    } else if (s === 'AWAITING_PREFLIGHT') {
+        style = 'border-amber-500/30 bg-amber-500/10 text-amber-300';
     }
 
     return (

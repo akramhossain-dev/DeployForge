@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeploymentSlotBusyError, deploymentQueueState } from '../deployment-slot';
+import { DeploymentSlotBusyError, deploymentQueueState, isCancellableQueueJobState } from '../deployment-slot';
 
 describe('deploymentQueueState', () => {
     it('exposes VPS and project waits without adding deployment statuses', () => {
@@ -10,9 +10,23 @@ describe('deploymentQueueState', () => {
 
     it('preserves terminal and running states', () => {
         expect(deploymentQueueState('RUNNING')).toBe('RUNNING');
+        expect(deploymentQueueState('WAITING_APPROVAL')).toBe('WAITING_APPROVAL');
+        expect(deploymentQueueState('BLOCKED')).toBe('BLOCKED');
         expect(deploymentQueueState('SUCCESS')).toBe('SUCCESS');
         expect(deploymentQueueState('FAILED')).toBe('FAILED');
+        expect(deploymentQueueState('CANCELLED')).toBe('CANCELLED');
+        expect(deploymentQueueState('CANCELED')).toBe('CANCELED');
         expect(deploymentQueueState()).toBe('IDLE');
+    });
+});
+
+describe('isCancellableQueueJobState', () => {
+    it.each(['waiting', 'delayed', 'prioritized', 'paused'])('allows %s jobs', (state) => {
+        expect(isCancellableQueueJobState(state)).toBe(true);
+    });
+
+    it.each(['active', 'completed', 'failed', 'unknown'])('rejects %s jobs', (state) => {
+        expect(isCancellableQueueJobState(state)).toBe(false);
     });
 });
 

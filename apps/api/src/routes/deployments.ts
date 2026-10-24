@@ -110,7 +110,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
                 : 0;
 
             const completedDeps = deps.filter(d => 
-                !['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING'].includes(d.status)
+                !['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'PREFLIGHT', 'DEPLOYING', 'CANCELING'].includes(d.status)
             );
 
             const successfulDeps = completedDeps.filter(d => 
@@ -293,7 +293,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
             const encrypted = EnvironmentService.encryptEnv(body);
             await prisma.deployment.update({
                 where: { id },
-                data: { env: encrypted }
+                data: { env: encrypted, preflightWarningsAccepted: false }
             });
             return apiSuccess({ message: 'Environment variables updated. Restart or redeploy the application to apply changes.' });
         } catch (err: any) {
@@ -425,6 +425,42 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
         } catch (err: any) {
             const status = err.statusCode || (['NO_CONTAINER', 'DEPLOYMENT_NOT_RUNNING', 'CONTAINER_NOT_FOUND'].includes(err.errorCode) ? 409 : err.errorCode === 'DEPLOYMENT_NOT_FOUND' ? 404 : 500);
             return apiError(reply, status, err.errorCode || 'RESTART_FAILED', err.message || 'Restart failed');
+        }
+    });
+
+    fastify.post('/:id/cancel', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        try {
+            const result = await DeploymentService.cancelDeployment(request.user.id, id);
+            return reply.status(result.state === 'CANCELING' ? 202 : 200).send(apiSuccess(result));
+        } catch (err: any) {
+            return sendLifecycleError(reply, err, 'CANCEL_FAILED');
+        }
+    });
+
+    fastify.post('/:id/preflight/approve', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        try {
+            const result = await DeploymentService.approvePreflightWarnings(request.user.id, id);
+            return reply.status(202).send(apiSuccess(result));
+        } catch (err: any) {
+            return apiError(reply, err.statusCode || 409, err.errorCode || 'PREFLIGHT_APPROVAL_FAILED', err.message || 'Preflight warnings could not be approved');
+        }
+    });
+
+    fastify.post('/:id/preflight/retry', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
+        const { id } = deploymentParamsSchema.parse(request.params);
+        try {
+            const result = await DeploymentService.retryBlockedPreflight(request.user.id, id);
+            return reply.status(202).send(apiSuccess(result));
+        } catch (err: any) {
+            return apiError(reply, err.statusCode || 409, err.errorCode || 'PREFLIGHT_RETRY_FAILED', err.message || 'Preflight could not be retried');
         }
     });
 

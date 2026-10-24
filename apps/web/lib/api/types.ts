@@ -190,7 +190,7 @@ export type Project = {
 export type Deployment = {
     id: string;
     name?: string | null;
-    status: 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'PAUSED' | 'FAILED' | 'ROLLED_BACK' | 'STOPPED' | 'DELETING' | 'DELETED' | string;
+    status: 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'PAUSED' | 'FAILED' | 'ROLLED_BACK' | 'STOPPED' | 'DELETING' | 'DELETED' | 'CANCELLED' | 'CANCELING' | 'CANCELED' | string;
     framework?: string | null;
     type?: 'STATIC' | 'SERVER' | 'FULLSTACK' | string;
     requestedResourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' | null;
@@ -227,6 +227,17 @@ export type Deployment = {
         stage: string;
         details?: Record<string, unknown>;
     } | null;
+    preflightWarningsAccepted?: boolean;
+    preflightChecks?: Array<{
+        id: string;
+        code: string;
+        category: string;
+        title: string;
+        status: 'PASS' | 'WARNING' | 'BLOCKED';
+        message: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
     envPreview?: Array<{ key: string; value: string }>;
     hostType?: 'domain' | 'ip';
     domain?: string | null;
@@ -236,8 +247,8 @@ export type Deployment = {
 };
 
 export type DeploymentQueueStatus = {
-    state: 'IDLE' | 'QUEUED' | 'WAITING_FOR_VPS' | 'WAITING_FOR_PROJECT' | 'RUNNING' | 'SUCCESS' | 'FAILED';
-    status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | null;
+    state: 'IDLE' | 'QUEUED' | 'WAITING_FOR_VPS' | 'WAITING_FOR_PROJECT' | 'RUNNING' | 'WAITING_APPROVAL' | 'BLOCKED' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'CANCELED';
+    status: 'QUEUED' | 'RUNNING' | 'WAITING_APPROVAL' | 'BLOCKED' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'CANCELED' | null;
     waitReason: 'VPS_BUSY' | 'PROJECT_BUSY' | string | null;
     position: number | null;
     retryCount: number;

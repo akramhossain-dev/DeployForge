@@ -7,13 +7,13 @@ import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
 import { useDeployments, useDeploymentAnalytics } from '@/hooks/useDeployForgeData';
 
-const activeStates = new Set(['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'RUNNING']);
-const STATUS_FILTERS = ['all', 'running', 'building', 'failed', 'stopped', 'paused', 'deleted'] as const;
+const activeStates = new Set(['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'PREFLIGHT', 'DEPLOYING', 'CANCELING', 'RUNNING']);
+const STATUS_FILTERS = ['all', 'running', 'building', 'failed', 'stopped', 'paused', 'canceled', 'deleted'] as const;
 
 function statusIndicator(status: string) {
     const s = status.toUpperCase();
     if (s === 'RUNNING') return <CheckCircle2 size={13} className="text-emerald-400" />;
-    if (['BUILDING', 'PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'DEPLOYING'].includes(s)) return <Zap size={13} className="text-cyan-400" />;
+    if (['BUILDING', 'PREFLIGHT', 'PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'DEPLOYING', 'CANCELING'].includes(s)) return <Zap size={13} className="text-cyan-400" />;
     if (s === 'FAILED' || s === 'BROKEN') return <XCircle size={13} className="text-rose-400" />;
     return <Clock size={13} className="text-[#666666]" />;
 }
@@ -22,8 +22,9 @@ function StatusTag({ status }: { status: string }) {
     const s = status.toUpperCase();
     let style = 'border-[#1F1F1F] bg-[#111111] text-[#A1A1A1]';
     if (['RUNNING', 'SUCCESS', 'ACTIVE', 'COMPLETED'].includes(s)) style = 'border-[#1F1F1F] bg-[#000000] text-emerald-400';
-    else if (['FAILED', 'ERROR', 'BROKEN'].includes(s)) style = 'border-rose-900/40 bg-rose-950/20 text-rose-400';
-    else if (['BUILDING', 'DEPLOYING', 'CLONING', 'PENDING'].includes(s)) style = 'border-[#1F1F1F] bg-[#000000] text-cyan-400';
+    else if (['FAILED', 'ERROR', 'BROKEN', 'PREFLIGHT_BLOCKED'].includes(s)) style = 'border-rose-900/40 bg-rose-950/20 text-rose-400';
+    else if (['BUILDING', 'PREFLIGHT', 'DEPLOYING', 'CLONING', 'PENDING', 'CANCELING'].includes(s)) style = 'border-[#1F1F1F] bg-[#000000] text-cyan-400';
+    else if (s === 'AWAITING_PREFLIGHT') style = 'border-amber-500/30 bg-amber-500/10 text-amber-300';
 
     return (
         <span className={clsx('inline-flex items-center gap-1 rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider', style)}>

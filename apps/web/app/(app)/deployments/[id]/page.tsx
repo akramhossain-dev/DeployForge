@@ -36,6 +36,9 @@ import { DeploymentErrorBanner } from '@/components/deployments/detail/Deploymen
 import { DeploymentTimeline } from '@/components/deployments/detail/DeploymentTimeline';
 import {
     useDeleteDeployment,
+    useCancelDeployment,
+    useApprovePreflightWarnings,
+    useRetryBlockedPreflight,
     useDeployment,
     useDeploymentQueueStatus,
     useDeploymentLogs,
@@ -143,6 +146,9 @@ export default function DeploymentDetailsPage() {
     const restart = useRestartDeployment();
     const rollback = useRollbackDeployment();
     const deleteDeployment = useDeleteDeployment();
+    const cancelDeployment = useCancelDeployment();
+    const approvePreflightWarnings = useApprovePreflightWarnings();
+    const retryBlockedPreflight = useRetryBlockedPreflight();
     const consoleRef = useRef<HTMLDivElement>(null);
 
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -507,6 +513,8 @@ export default function DeploymentDetailsPage() {
     const isPaused = current?.status === 'PAUSED';
     const isStopped = current?.status === 'STOPPED';
     const isSandbox = current?.mode === 'sandbox';
+    const canCancelActive = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING'].includes(current?.status || '')
+        && queueStatus.data?.state === 'RUNNING';
 
     const rawErrorText = useMemo(() => {
         if (current?.status !== 'FAILED') return '';
@@ -571,7 +579,7 @@ export default function DeploymentDetailsPage() {
 
     return (
         <div className="space-y-4 sm:space-y-6 font-mono text-xs max-w-full overflow-x-hidden">
-            {[start, stop, pauseDeployment, resume, restart, rollback, deleteDeployment].map((m, i) =>
+            {[start, stop, pauseDeployment, resume, restart, rollback, deleteDeployment, cancelDeployment, approvePreflightWarnings, retryBlockedPreflight].map((m, i) =>
                 m.isError ? (
                     <div key={i} className="rounded border border-rose-900/50 bg-rose-950/20 p-3 text-rose-300">
                         Action failed: {(m.error as Error)?.message}
@@ -628,6 +636,17 @@ export default function DeploymentDetailsPage() {
                             {rollback.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Rollback
                         </button>
                     )}
+                    {(canCancelActive || current.status === 'CANCELING') && (
+                        <button
+                            type="button"
+                            onClick={() => cancelDeployment.mutate(id)}
+                            disabled={cancelDeployment.isPending || current.status === 'CANCELING'}
+                            className="flex h-8 items-center gap-1 rounded border border-rose-900/50 bg-rose-950/30 px-2.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:opacity-50"
+                        >
+                            {cancelDeployment.isPending || current.status === 'CANCELING' ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                            {current.status === 'CANCELING' ? 'Canceling…' : 'Cancel Deployment'}
+                        </button>
+                    )}
                     <button onClick={() => setEnvModalOpen(true)} className="flex h-8 items-center gap-1 rounded border border-[#1F1F1F] bg-[#111111] px-2.5 text-xs text-white hover:bg-[#1A1A1A]">
                         <Edit2 size={13} /> Env Vars
                     </button>
@@ -651,11 +670,91 @@ export default function DeploymentDetailsPage() {
                             It will start automatically when the required slot becomes available. Waiting does not consume a retry attempt.
                         </p>
                     </div>
-                    {queueStatus.data.position ? (
-                        <span className="shrink-0 rounded border border-amber-400/30 bg-black/20 px-3 py-1.5 font-semibold">
-                            Queue position #{queueStatus.data.position}
-                        </span>
-                    ) : null}
+                    <div className="flex shrink-0 items-center gap-2">
+                        {queueStatus.data.position ? (
+                            <span className="rounded border border-amber-400/30 bg-black/20 px-3 py-1.5 font-semibold">
+                                Queue position #{queueStatus.data.position}
+                            </span>
+                        ) : null}
+                        <button
+                            type="button"
+                            onClick={() => cancelDeployment.mutate(id)}
+                            disabled={cancelDeployment.isPending}
+                            className="flex h-8 items-center gap-1 rounded border border-rose-900/50 bg-rose-950/30 px-3 font-semibold text-rose-300 hover:bg-rose-900/40 disabled:opacity-50"
+                        >
+                            {cancelDeployment.isPending ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                            Cancel queued deployment
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+
+            {current.status === 'CANCELING' ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100">
+                    <p className="flex items-center gap-2 font-semibold"><Loader2 size={13} className="animate-spin" /> Canceling deployment</p>
+                    <p className="mt-1 text-[11px] text-amber-200">Stopping the remote process group and removing candidate-only resources. The active website remains untouched.</p>
+                </div>
+            ) : null}
+
+            {['CANCELED', 'CANCELLED'].includes(current.status) ? (
+                <div className="rounded-md border border-[#2A2A2A] bg-[#111111] p-4 text-[#A1A1A1]">
+                    <p className="font-semibold text-white">Deployment canceled</p>
+                    <p className="mt-1 text-[11px]">The queued or active candidate run was stopped and its reserved VPS capacity was released.</p>
+                </div>
+            ) : null}
+
+            {current.preflightChecks?.length ? (
+                <div className={clsx(
+                    'rounded-md border p-4',
+                    current.status === 'PREFLIGHT_BLOCKED' ? 'border-rose-500/30 bg-rose-500/10' :
+                    current.status === 'AWAITING_PREFLIGHT' ? 'border-amber-500/30 bg-amber-500/10' :
+                    'border-[#1F1F1F] bg-[#0A0A0A]'
+                )}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <p className="font-semibold text-white">Preflight validation</p>
+                            <p className="mt-1 text-[11px] text-[#A1A1A1]">
+                                Checks run before dependency installation and image build. Blocked checks must be fixed; warnings require explicit approval.
+                            </p>
+                        </div>
+                        {current.status === 'AWAITING_PREFLIGHT' ? (
+                            <button
+                                type="button"
+                                onClick={() => approvePreflightWarnings.mutate(id)}
+                                disabled={approvePreflightWarnings.isPending}
+                                className="flex h-8 shrink-0 items-center gap-1 rounded bg-white px-3 font-semibold text-black disabled:opacity-50"
+                            >
+                                {approvePreflightWarnings.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                                Approve warnings & continue
+                            </button>
+                        ) : current.status === 'PREFLIGHT_BLOCKED' ? (
+                            <button
+                                type="button"
+                                onClick={() => retryBlockedPreflight.mutate(id)}
+                                disabled={retryBlockedPreflight.isPending}
+                                className="flex h-8 shrink-0 items-center gap-1 rounded border border-rose-500/40 bg-rose-500/10 px-3 font-semibold text-rose-200 disabled:opacity-50"
+                            >
+                                {retryBlockedPreflight.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                                Retry after fixes
+                            </button>
+                        ) : null}
+                    </div>
+                    <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                        {current.preflightChecks.map((check) => (
+                            <div key={check.id || check.code} className="rounded border border-black/20 bg-black/20 px-3 py-2">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="font-semibold text-white">{check.title}</span>
+                                    <span className={clsx(
+                                        'rounded px-1.5 py-0.5 text-[9px] font-bold',
+                                        check.status === 'PASS' ? 'bg-emerald-500/15 text-emerald-300' :
+                                        check.status === 'WARNING' ? 'bg-amber-500/15 text-amber-300' :
+                                        'bg-rose-500/15 text-rose-300'
+                                    )}>{check.status}</span>
+                                </div>
+                                <p className="mt-1 text-[11px] text-[#A1A1A1]">{check.message}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             ) : null}
 

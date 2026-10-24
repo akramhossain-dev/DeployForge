@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
 import { useToastStore } from '@/lib/store/useToastStore';
 
-const TIMELINE = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'DEPLOYING', 'RUNNING'] as const;
+const TIMELINE = ['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'PREFLIGHT', 'DEPLOYING', 'RUNNING'] as const;
 
 export function DeploymentTimeline({
     current,
@@ -18,7 +18,8 @@ export function DeploymentTimeline({
     failedStepIndex: number;
 }) {
     const addToast = useToastStore((s) => s.addToast);
-    const status = (current.status || '').toUpperCase();
+    const rawStatus = (current.status || '').toUpperCase();
+    const status = ['AWAITING_PREFLIGHT', 'PREFLIGHT_BLOCKED'].includes(rawStatus) ? 'PREFLIGHT' : rawStatus;
     const isFailed = status === 'FAILED';
 
     const getStepState = (stepIndex: number) => {
@@ -106,7 +107,7 @@ export function DeploymentTimeline({
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-[#666666]">Release Pipeline Progression</p>
                     <span className="text-[10px] text-[#A1A1A1] font-bold">{status}</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                     {TIMELINE.map((stepState, idx) => {
                         const state = getStepState(idx);
                         return (

@@ -1,4 +1,4 @@
-export type DeploymentStatus = 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'PAUSED' | 'DELETING' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED';
+export type DeploymentStatus = 'PENDING' | 'CLONING' | 'UPLOADING' | 'EXTRACTING' | 'BUILDING' | 'PREFLIGHT' | 'AWAITING_PREFLIGHT' | 'PREFLIGHT_BLOCKED' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'PAUSED' | 'DELETING' | 'ROLLED_BACK' | 'STOPPED' | 'DELETED' | 'CANCELLED' | 'CANCELING' | 'CANCELED';
 export type ProjectKind = 'DOCKER' | 'DOCKER_COMPOSE' | 'NEXTJS' | 'ASTRO' | 'VITE_REACT' | 'NODE_API' | 'NODEJS' | 'STATIC';
 export type SourceType = 'github' | 'upload';
 export type DeploymentMode = 'production' | 'sandbox';
