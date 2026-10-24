@@ -564,6 +564,7 @@ model Project {
 
 model Deployment {
   id                    String               @id @default(uuid())
+  correlationId         String?
   userId                String
   user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   projectId             String
@@ -611,6 +612,7 @@ model Deployment {
   updatedAt             DateTime             @updatedAt
 
   @@index([userId])
+  @@index([correlationId])
   @@index([userId, status])
   @@index([userId, status, createdAt])
   @@index([projectId])

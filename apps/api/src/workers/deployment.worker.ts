@@ -19,6 +19,7 @@ import {
     isDeploymentCancellation,
 } from '../utils/deployment-cancellation';
 import { isPreflightGate } from '../utils/deployment-preflight';
+import { withTraceSpan } from '../utils/telemetry';
 
 const lockTtlMs = config.security.deploymentLockTtlMs;
 
@@ -83,7 +84,7 @@ async function withDeploymentLocks<T>(projectId: string, vpsId: string, operatio
 export const deploymentWorker = new Worker(
     'deployment-queue',
     async (job, token) => {
-        const { deploymentId, operation: jobOperation } = parseDeploymentJobPayload(job.data);
+        const { deploymentId, operation: jobOperation, correlationId, traceContext } = parseDeploymentJobPayload(job.data);
         if (jobOperation === 'sandbox-cleanup') {
             const deployment = await prisma.deployment.findUnique({ where: { id: deploymentId }, select: { id: true, userId: true, mode: true, status: true } });
             if (deployment?.mode === 'sandbox' && deployment.status !== 'DELETED') {
@@ -127,7 +128,7 @@ export const deploymentWorker = new Worker(
                     where: { id: jobRecord.id },
                     data: { status: 'RUNNING', waitReason: null, lastError: null, retryCount: job.attemptsMade },
                 });
-                logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job started');
+                logger.info({ jobId: job.id, deploymentId, correlationId, projectId: deploymentExists.projectId, vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job started');
                 if (jobOperation === 'rollback') {
                     await RollbackService.executeRollback(deploymentId);
                     return;
@@ -166,7 +167,13 @@ export const deploymentWorker = new Worker(
                         composePort: deploymentExists.composePort || undefined,
                         mode: deploymentExists.mode === 'sandbox' ? 'sandbox' as const : 'production' as const,
                     };
-                await DeploymentService.executeDeployment(deploymentId, source);
+                await withTraceSpan('deployment.execute', {
+                    'deployment.id': deploymentId,
+                    'deployment.project_id': deploymentExists.projectId,
+                    'deployment.vps_id': deploymentExists.vpsId,
+                    'deployment.operation': jobOperation,
+                    'deployforge.correlation_id': correlationId || deploymentExists.correlationId || undefined,
+                }, () => DeploymentService.executeDeployment(deploymentId, source), traceContext);
             });
 
             await prisma.deploymentJob.update({
@@ -174,7 +181,7 @@ export const deploymentWorker = new Worker(
                 data: { status: 'SUCCESS', waitReason: null, lastError: null, retryCount: job.attemptsMade },
             });
             await CacheService.del(deploymentCancellationKey(deploymentId));
-            logger.info({ jobId: job.id, deploymentId, projectId: deploymentExists.projectId, releaseId: await currentReleaseId(deploymentExists.projectId), vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job completed');
+            logger.info({ jobId: job.id, deploymentId, correlationId, projectId: deploymentExists.projectId, releaseId: await currentReleaseId(deploymentExists.projectId), vpsId: deploymentExists.vpsId, operation: jobOperation }, 'Deployment job completed');
 
             if (deployment) {
                 AlertService.handleDeploymentEvent(

@@ -34,6 +34,8 @@ import { formatDate, StatusBadge, PasswordInput, INPUT_STYLE } from '@/component
 import { AnsiText } from '@/components/deployments/detail/AnsiLogViewer';
 import { DeploymentErrorBanner } from '@/components/deployments/detail/DeploymentErrorBanner';
 import { DeploymentTimeline } from '@/components/deployments/detail/DeploymentTimeline';
+import { DeploymentTlsStatus } from '@/components/deployments/detail/DeploymentTlsStatus';
+import { useDeploymentEnvironmentEditor } from '@/components/deployments/detail/useDeploymentEnvironmentEditor';
 import {
     useDeleteDeployment,
     useCancelDeployment,
@@ -50,10 +52,6 @@ import {
     useRollbackDeployment,
     useStartDeployment,
     useStopDeployment,
-    useDeploymentEnv,
-    useUpdateDeploymentEnv,
-    useDeploymentEnvHistory,
-    useRedeploy,
     type EnvFile
 } from '@/hooks/useDeployForgeData';
 import type { DeploymentLog } from '@/lib/api/types';
@@ -152,309 +150,19 @@ export default function DeploymentDetailsPage() {
     const consoleRef = useRef<HTMLDivElement>(null);
 
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [envModalOpen, setEnvModalOpen] = useState(false);
-    const { data: decEnvResponse, isLoading: envLoading } = useDeploymentEnv(id, deploymentExists);
-    const updateEnv = useUpdateDeploymentEnv();
-    const envHistory = useDeploymentEnvHistory(id, deploymentExists);
-    const redeploy = useRedeploy();
-
-    const [draftFiles, setDraftFiles] = useState<EnvFile[]>([{ path: '.env', variables: {} }]);
-    const [activeFileIndex, setActiveFileIndex] = useState(0);
-    const [isBulkEdit, setIsBulkEdit] = useState(false);
-    const [bulkText, setBulkText] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState<'none' | 'key'>('none');
-    const [newFilePath, setNewFilePath] = useState('');
-    const [showAddFile, setShowAddFile] = useState(false);
-    const [historyPreviewId, setHistoryPreviewId] = useState<string | null>(null);
-    const [showConfirmOverwrite, setShowConfirmOverwrite] = useState(false);
-    const [pendingImportVars, setPendingImportVars] = useState<Record<string, string>>({});
-    const [historyOpen, setHistoryOpen] = useState(false);
     const [composeServiceOverride, setComposeServiceOverride] = useState('');
     const [composePortOverride, setComposePortOverride] = useState('');
-
-    const [renamingIndex, setRenamingIndex] = useState<number | null>(null);
-    const [renamingPath, setRenamingPath] = useState('');
-
-    useEffect(() => {
-        if (decEnvResponse?.files && decEnvResponse.files.length > 0) {
-            setDraftFiles(JSON.parse(JSON.stringify(decEnvResponse.files)));
-        } else if (envModalOpen && draftFiles.length === 0) {
-            setDraftFiles([{ path: '.env', variables: {} }]);
-        }
-    }, [decEnvResponse, envModalOpen, draftFiles.length]);
-
-    const activeFile = draftFiles[activeFileIndex] || { path: '.env', variables: {} };
-
-    useEffect(() => {
-        if (isBulkEdit) {
-            const text = Object.entries(activeFile.variables || {})
-                .map(([k, v]) => `${k}=${v}`)
-                .join('\n');
-            setBulkText(text);
-        }
-    }, [isBulkEdit, activeFileIndex, activeFile.variables]);
-
-    const validateKey = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
-    const validatePath = (path: string) => {
-        if (!path.trim()) return false;
-        if (path.startsWith('/') || path.startsWith('\\') || /^[a-zA-Z]:/.test(path)) return false;
-        if (path.split(/[/\\]/).some((p) => p === '..')) return false;
-        const normalized = path.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '');
-        const fileName = normalized.split('/').pop() || '';
-        return fileName.startsWith('.env');
-    };
-
-    const handleUpdateVarKey = (oldKey: string, newKey: string) => {
-        if (oldKey === newKey) return;
-        setDraftFiles((currentFiles) => {
-            const next = [...currentFiles];
-            const file = next[activeFileIndex];
-            if (!file) return currentFiles;
-            const vars = { ...file.variables };
-            const value = vars[oldKey];
-            delete vars[oldKey];
-            vars[newKey] = value || '';
-            file.variables = vars;
-            return next;
-        });
-    };
-
-    const handleUpdateVarValue = (key: string, value: string) => {
-        setDraftFiles((currentFiles) => {
-            const next = [...currentFiles];
-            const file = next[activeFileIndex];
-            if (!file) return currentFiles;
-            file.variables = { ...file.variables, [key]: value };
-            return next;
-        });
-    };
-
-    const handleDeleteVar = (key: string) => {
-        setDraftFiles((currentFiles) => {
-            const next = [...currentFiles];
-            const file = next[activeFileIndex];
-            if (!file) return currentFiles;
-            const vars = { ...file.variables };
-            delete vars[key];
-            file.variables = vars;
-            return next;
-        });
-    };
-
-    const handleAddVar = () => {
-        setDraftFiles((currentFiles) => {
-            const next = [...currentFiles];
-            const file = next[activeFileIndex];
-            if (!file) return currentFiles;
-            let baseName = 'NEW_VARIABLE';
-            let index = 1;
-            let finalName = baseName;
-            while (finalName in file.variables) {
-                finalName = `${baseName}_${index}`;
-                index++;
-            }
-            file.variables = { ...file.variables, [finalName]: '' };
-            return next;
-        });
-    };
-
-    const handleDuplicateVar = (key: string, value: string) => {
-        setDraftFiles((currentFiles) => {
-            const next = [...currentFiles];
-            const file = next[activeFileIndex];
-            if (!file) return currentFiles;
-            let finalName = `${key}_COPY`;
-            let index = 1;
-            while (finalName in file.variables) {
-                finalName = `${key}_COPY_${index}`;
-                index++;
-            }
-            file.variables = { ...file.variables, [finalName]: value };
-            return next;
-        });
-    };
-
-    const handleBulkImport = () => {
-        const parsed: Record<string, string> = {};
-        const lines = bulkText.split('\n');
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) continue;
-            const equalsIdx = trimmed.indexOf('=');
-            if (equalsIdx <= 0) continue;
-            const k = trimmed.substring(0, equalsIdx).trim();
-            const v = trimmed.substring(equalsIdx + 1).trim();
-            if (validateKey(k)) {
-                parsed[k] = v;
-            }
-        }
-
-        const activeVars = activeFile.variables || {};
-        const duplicates = Object.keys(parsed).filter((k) => k in activeVars);
-        if (duplicates.length > 0) {
-            setPendingImportVars(parsed);
-            setShowConfirmOverwrite(true);
-        } else {
-            setDraftFiles((currentFiles) => {
-                const next = [...currentFiles];
-                const file = next[activeFileIndex];
-                if (file) {
-                    file.variables = { ...file.variables, ...parsed };
-                }
-                return next;
-            });
-            setIsBulkEdit(false);
-        }
-    };
-
-    const confirmBulkImport = () => {
-        setDraftFiles((currentFiles) => {
-            const next = [...currentFiles];
-            const file = next[activeFileIndex];
-            if (file) {
-                file.variables = { ...file.variables, ...pendingImportVars };
-            }
-            return next;
-        });
-        setShowConfirmOverwrite(false);
-        setPendingImportVars({});
-        setIsBulkEdit(false);
-    };
-
-    const handleAddFile = () => {
-        if (!validatePath(newFilePath)) {
-            addToast({
-                title: 'Invalid Path',
-                description: 'File path must be relative and start with .env (e.g. apps/client/.env).',
-                severity: 'error'
-            });
-            return;
-        }
-        if (draftFiles.some((f) => f.path === newFilePath)) {
-            addToast({
-                title: 'Duplicate Path',
-                description: 'This environment file path already exists.',
-                severity: 'error'
-            });
-            return;
-        }
-        setDraftFiles((prev) => [...prev, { path: newFilePath, variables: {} }]);
-        setActiveFileIndex(draftFiles.length);
-        setNewFilePath('');
-        setShowAddFile(false);
-    };
-
-    const handleRenameFile = (index: number) => {
-        if (!validatePath(renamingPath)) {
-            addToast({
-                title: 'Invalid Path',
-                description: 'File path must be relative and start with .env.',
-                severity: 'error'
-            });
-            return;
-        }
-        if (draftFiles.some((f, idx) => f.path === renamingPath && idx !== index)) {
-            addToast({
-                title: 'Duplicate Path',
-                description: 'This environment file path already exists.',
-                severity: 'error'
-            });
-            return;
-        }
-        setDraftFiles((prev) => {
-            const next = [...prev];
-            if (next[index]) {
-                next[index].path = renamingPath;
-            }
-            return next;
-        });
-        setRenamingIndex(null);
-        setRenamingPath('');
-    };
-
-    const handleDeleteFile = (index: number) => {
-        if (draftFiles[index]?.path === '.env') {
-            addToast({
-                title: 'Delete Rejected',
-                description: 'The root .env file cannot be deleted.',
-                severity: 'error'
-            });
-            return;
-        }
-        if (draftFiles.length <= 1) {
-            addToast({
-                title: 'Delete Rejected',
-                description: 'At least one environment file must remain.',
-                severity: 'error'
-            });
-            return;
-        }
-        setDraftFiles((prev) => prev.filter((_, idx) => idx !== index));
-        setActiveFileIndex(0);
-    };
-
-    const handleSaveChanges = async () => {
-        for (const file of draftFiles) {
-            if (!validatePath(file.path)) {
-                addToast({ title: 'Validation Error', description: `Invalid file path: ${file.path}`, severity: 'error' });
-                return;
-            }
-            for (const key of Object.keys(file.variables)) {
-                if (!validateKey(key)) {
-                    addToast({ title: 'Validation Error', description: `Invalid variable key "${key}" in ${file.path}`, severity: 'error' });
-                    return;
-                }
-            }
-        }
-        try {
-            await updateEnv.mutateAsync({
-                deploymentId: id,
-                env: {
-                    version: 2,
-                    files: draftFiles
-                }
-            });
-            setEnvModalOpen(false);
-        } catch {}
-    };
-
-    const handleSaveAndRedeploy = async () => {
-        for (const file of draftFiles) {
-            if (!validatePath(file.path)) {
-                addToast({ title: 'Validation Error', description: `Invalid file path: ${file.path}`, severity: 'error' });
-                return;
-            }
-            for (const key of Object.keys(file.variables)) {
-                if (!validateKey(key)) {
-                    addToast({ title: 'Validation Error', description: `Invalid variable key "${key}" in ${file.path}`, severity: 'error' });
-                    return;
-                }
-            }
-        }
-        try {
-            await updateEnv.mutateAsync({
-                deploymentId: id,
-                env: {
-                    version: 2,
-                    files: draftFiles
-                }
-            });
-            const newDep = await redeploy.mutateAsync({ deploymentId: id });
-            setEnvModalOpen(false);
-            router.push(`/deployments/${newDep.id}`);
-        } catch {}
-    };
-
-    const filteredVariables = useMemo(() => {
-        const vars = Object.entries(activeFile.variables || {});
-        let filtered = vars.filter(([k]) => k.toLowerCase().includes(searchQuery.toLowerCase()));
-        if (sortBy === 'key') {
-            filtered.sort((x, y) => x[0].localeCompare(y[0]));
-        }
-        return filtered;
-    }, [activeFile.variables, searchQuery, sortBy]);
-
+    const {
+        envModalOpen, setEnvModalOpen, decEnvResponse, envLoading, updateEnv, envHistory, redeploy,
+        draftFiles, setDraftFiles, activeFileIndex, setActiveFileIndex, activeFile,
+        isBulkEdit, setIsBulkEdit, bulkText, setBulkText, searchQuery, setSearchQuery, sortBy, setSortBy,
+        newFilePath, setNewFilePath, showAddFile, setShowAddFile, historyPreviewId, setHistoryPreviewId,
+        showConfirmOverwrite, setShowConfirmOverwrite, historyOpen, setHistoryOpen,
+        renamingIndex, setRenamingIndex, renamingPath, setRenamingPath, filteredVariables,
+        handleUpdateVarKey, handleUpdateVarValue, handleDeleteVar, handleAddVar, handleDuplicateVar,
+        handleBulkImport, confirmBulkImport, handleAddFile, handleRenameFile, handleDeleteFile,
+        handleSaveChanges, handleSaveAndRedeploy,
+    } = useDeploymentEnvironmentEditor(id, deploymentExists);
     const current = liveStatus ? { ...deployment.data, ...liveStatus } : deployment.data;
     const logs = useMemo(() => mergeLogs(initialLogs.data || [], stream.logs), [initialLogs.data, stream.logs]);
 
@@ -508,6 +216,7 @@ export default function DeploymentDetailsPage() {
     const safeProjectName = current?.project?.name ? current.project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : current?.name ? current.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') : 'app';
     const shortDeployId = (current?.id || id).slice(0, 8);
     const effectiveDomain = current?.domain || (current?.vps?.ipAddress ? `${safeProjectName}-${shortDeployId}.${current.vps.ipAddress}.sslip.io` : null);
+    const primaryDomain = current?.domains?.find((item) => item.domainName === effectiveDomain) || current?.domains?.[0] || null;
     const activeUrl = current?.url || (effectiveDomain ? `https://${effectiveDomain}` : null);
     const isRunning = current?.status === 'RUNNING';
     const isPaused = current?.status === 'PAUSED';
@@ -792,6 +501,10 @@ export default function DeploymentDetailsPage() {
                 failedStepIndex={failedStepIndex}
             />
 
+            {!isSandbox && effectiveDomain ? (
+                <DeploymentTlsStatus domain={primaryDomain} hostname={effectiveDomain} />
+            ) : null}
+
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                     <p className="text-[10px] uppercase text-[#666666]">Active Release</p>
@@ -931,7 +644,7 @@ export default function DeploymentDetailsPage() {
                         <div className="space-y-1">
                             <InfoRow label="Gateway" value="Traefik v3.1" />
                             <InfoRow label="Bridge Net" value="deployforge-net" />
-                            <InfoRow label="TLS Security" value="ACME Let's Encrypt (:443)" />
+                            <InfoRow label="TLS Security" value={<DeploymentTlsStatus domain={primaryDomain} hostname={effectiveDomain} compact />} />
                             <InfoRow label="Host Port" value="Zero Port Exposure" />
                             <InfoRow label="Router Rule" value={`Host(\`${effectiveDomain || '...'}\`)`} />
                         </div>

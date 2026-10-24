@@ -18,9 +18,11 @@ import { runCommand } from './deployment/runner';
 import { RuntimeManagerService } from './runtime-manager';
 import { ComposePolicyService } from './deployment/compose-policy.service';
 import { PreflightService } from './deployment/preflight.service';
+import { DeploymentWorkspaceService } from './deployment/workspace.service';
+import { DeploymentLifecycleService } from './deployment/lifecycle.service';
+import { DeploymentEnqueueService } from './deployment/enqueue.service';
 import { ReleaseService } from './release.service';
 import { EffectiveResourcePolicy, ResourcePolicyService, tierForRuntime } from './resource-policy.service';
-import { isCancellableQueueJobState } from '../utils/deployment-slot';
 import {
     DeploymentCancellationError,
     deploymentCancellationKey,
@@ -57,211 +59,17 @@ export {
 };
 
 export class DeploymentService {
-    static async deployProject(userId: string, source: DeploymentSource) {
-        const projectId = source.projectId;
-        const lockKey = `project-enqueue:${projectId}`;
-        const release = await CacheService.acquireLock(lockKey, 300000);
-        if (!release) {
-            throw new Error('A deployment is already running for this project. Please wait.');
-        }
-
-        try {
-            if (source.type === 'github_repo') {
-                return await this.deployFromGithub(userId, source.projectId, source.vpsId, source.branch, {
-                    commitHash: source.commitHash,
-                    commitMessage: source.commitMessage,
-                    skipWebhookRegistration: source.skipWebhookRegistration,
-                    domainName: source.domainName,
-                    env: source.env,
-                    mode: source.mode,
-                    composeService: source.composeService,
-                    composePort: source.composePort,
-                    resourceTier: source.resourceTier,
-                });
-            }
-
-            return await this.deployFromUpload(userId, source.projectId, source.vpsId, {
-                uploadPath: source.uploadPath,
-                originalFileName: source.originalFileName,
-                domainName: source.domainName,
-                env: source.env,
-                mode: source.mode,
-                composeService: source.composeService,
-                composePort: source.composePort,
-                resourceTier: source.resourceTier,
-            });
-        } finally {
-            await release();
-        }
+    static deployProject(userId: string, source: DeploymentSource) {
+        return DeploymentEnqueueService.deployProject(userId, source);
     }
 
-    static async deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: any; mode?: string; composeService?: string; composePort?: number; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' } = {}) {
-        const project = await prisma.project.findFirst({
-            where: {
-                id: projectId,
-                OR: [
-                    { userId },
-                    { members: { some: { userId, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
-                ]
-            }
-        });
-        if (!project) throw new DeploymentError('pending', 'Project not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
-
-        const vps = await prisma.vPS.findFirst({
-            where: {
-                id: vpsId,
-                OR: [
-                    { userId },
-                    { userId: project.userId }
-                ]
-            }
-        });
-        if (!vps) throw new DeploymentError('pending', 'VPS not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
-
-        const mode = metadata.mode === 'sandbox' ? 'sandbox' : 'production';
-        const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, metadata.domainName, projectId);
-        const encryptedEnv = EnvironmentService.encryptEnv(metadata.env);
-
-        const githubAccount = await prisma.gitHubAccount.findFirst({
-            where: {
-                userId: { in: [userId, project.userId] }
-            }
-        });
-        if (!githubAccount) throw new DeploymentError('pending', 'GitHub account not connected', 'GITHUB_NOT_CONNECTED');
-
-        const deployment = await prisma.deployment.create({
-            data: {
-                userId,
-                projectId,
-                vpsId,
-                status: 'PENDING',
-                port: null,
-                name: `${sanitizeName(project.name)}-${Date.now()}`,
-                sourceType: 'github',
-                repoUrl: project.repositoryUrl,
-                branch,
-                uploadPath: null,
-                commitHash: metadata.commitHash,
-                commitMessage: metadata.commitMessage,
-                env: encryptedEnv,
-                domain: domainName || null,
-                hostType: domainName ? 'domain' : 'ip',
-                mode,
-                composeService: metadata.composeService || null,
-                composePort: metadata.composePort || null,
-                requestedResourceTier: metadata.resourceTier || null,
-            },
-        });
-
-        try {
-            await ResourcePolicyService.enforceActiveProjectLimit(project.userId, projectId);
-            const policy = await ResourcePolicyService.resolve(projectId, metadata.resourceTier);
-            if (policy) await ResourcePolicyService.reserve(deployment.id, policy);
-        } catch (error) {
-            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
-            throw error;
-        }
-
-        try {
-            if (mode === 'production' && !metadata.skipWebhookRegistration) {
-                await GitHubDeploymentService.ensureRepositoryWebhook(githubAccount.userId, project.repositoryUrl, deployment.id);
-            }
-            await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from GitHub for ${project.repositoryUrl} on branch ${branch}` : `Deployment queued from GitHub for ${project.repositoryUrl} on branch ${branch}`, 'system');
-            await deploymentQueue.add('deploy', deploymentJobPayload(deployment.id, 'deploy'), {
-                jobId: `${mode === 'sandbox' ? 'sandbox' : 'deploy'}-${projectId}-${branch}-${Date.now()}`,
-            });
-        } catch (error) {
-            await ResourcePolicyService.releaseReservation(deployment.id);
-            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
-            throw error;
-        }
-
-        return deployment;
+    static deployFromGithub(userId: string, projectId: string, vpsId: string, branch: string, metadata: { commitHash?: string; commitMessage?: string; skipWebhookRegistration?: boolean; domainName?: string; env?: any; mode?: string; composeService?: string; composePort?: number; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK'; correlationId?: string } = {}) {
+        return DeploymentEnqueueService.deployFromGithub(userId, projectId, vpsId, branch, metadata);
     }
 
-    static async deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: any; mode?: string; composeService?: string; composePort?: number; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' }) {
-        const project = await prisma.project.findFirst({
-            where: {
-                id: projectId,
-                OR: [
-                    { userId },
-                    { members: { some: { userId, role: { in: ['OWNER', 'ADMIN', 'DEVELOPER'] } } } }
-                ]
-            }
-        });
-        if (!project) throw new DeploymentError('uploading', 'Project not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
-
-        const vps = await prisma.vPS.findFirst({
-            where: {
-                id: vpsId,
-                OR: [
-                    { userId },
-                    { userId: project.userId }
-                ]
-            }
-        });
-        if (!vps) throw new DeploymentError('uploading', 'VPS not found or access denied', 'PROJECT_OR_VPS_NOT_FOUND');
-        const mode = upload.mode === 'sandbox' ? 'sandbox' : 'production';
-        const domainName = mode === 'sandbox' ? undefined : await ValidationService.validateDomainSelection(userId, upload.domainName, projectId);
-        const encryptedEnv = EnvironmentService.encryptEnv(upload.env);
-
-        ValidationService.validateUploadFile(upload.originalFileName);
-        const deployment = await prisma.deployment.create({
-            data: {
-                userId,
-                projectId,
-                vpsId,
-                status: 'PENDING',
-                port: null,
-                name: `${sanitizeName(project.name)}-${Date.now()}`,
-                sourceType: 'upload',
-                repoUrl: null,
-                branch: null,
-                uploadPath: upload.originalFileName,
-                commitHash: null,
-                env: encryptedEnv,
-                domain: domainName || null,
-                hostType: domainName ? 'domain' : 'ip',
-                mode,
-                composeService: upload.composeService || null,
-                composePort: upload.composePort || null,
-                requestedResourceTier: upload.resourceTier || null,
-            },
-        });
-
-        try {
-            await ResourcePolicyService.enforceActiveProjectLimit(project.userId, projectId);
-            const policy = await ResourcePolicyService.resolve(projectId, upload.resourceTier);
-            if (policy) await ResourcePolicyService.reserve(deployment.id, policy);
-        } catch (error) {
-            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
-            await fs.rm(path.dirname(upload.uploadPath), { recursive: true, force: true }).catch(() => undefined);
-            throw error;
-        }
-
-        let preparedUploadPath = upload.uploadPath;
-        try {
-            const uploadWorkspace = await this.prepareUploadWorkspace(deployment.id, upload.uploadPath, upload.originalFileName);
-            preparedUploadPath = uploadWorkspace.archivePath;
-            await prisma.deployment.update({
-                where: { id: deployment.id },
-                data: { uploadPath: uploadWorkspace.archivePath },
-            });
-            await LoggingService.log(deployment.id, mode === 'sandbox' ? `Sandbox run queued from uploaded archive ${upload.originalFileName}` : `Deployment queued from uploaded archive ${upload.originalFileName}`, 'system');
-            await deploymentQueue.add('deploy', deploymentJobPayload(deployment.id, 'deploy'), {
-                jobId: `${mode === 'sandbox' ? 'sandbox-upload' : 'deploy-upload'}-${projectId}-${Date.now()}`,
-            });
-        } catch (error) {
-            await ResourcePolicyService.releaseReservation(deployment.id);
-            await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
-            await this.cleanupDeploymentWorkspace(deployment.id, preparedUploadPath);
-            await fs.rm(path.dirname(upload.uploadPath), { recursive: true, force: true }).catch(() => undefined);
-            throw error;
-        }
-
-        return deployment;
+    static deployFromUpload(userId: string, projectId: string, vpsId: string, upload: { uploadPath: string; originalFileName: string; domainName?: string; env?: any; mode?: string; composeService?: string; composePort?: number; resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK'; correlationId?: string }) {
+        return DeploymentEnqueueService.deployFromUpload(userId, projectId, vpsId, upload);
     }
-
     static async executeDeployment(deploymentId: string, source: DeploymentSource) {
         const deployment = await prisma.deployment.findUnique({
             where: { id: deploymentId },
@@ -585,14 +393,14 @@ export class DeploymentService {
                         if (isCompose) {
                             await LoggingService.log(deploymentId, 'Building Docker Compose services...', 'build');
                             const composeFile = detected.lockfile || 'docker-compose.yml';
-                            await runCommand(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && docker compose -f ${shellQuote(composeFile)} build`, 'building', 'DOCKER_COMPOSE_BUILD_FAILED');
+                            await runCommand(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker compose -f ${shellQuote(composeFile)} build`, 'building', 'DOCKER_COMPOSE_BUILD_FAILED');
                         } else {
                             if (buildCacheHit) {
                                 await LoggingService.log(deploymentId, '[CACHE_HIT_BUILD] Re-tagging cached Docker image', 'build');
                                 await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)} ${shellQuote(imageTag)}`);
                             } else {
                                 await LoggingService.log(deploymentId, 'Building deployment image', 'build');
-                                await BuildService.buildImage(ssh, deploymentId, workDir, imageTag, detected);
+                                await BuildService.buildImage(ssh, deploymentId, workDir, imageTag, detected, cacheDir);
                                 await runCommand(ssh, deploymentId, 'system', `docker tag ${shellQuote(imageTag)} ${shellQuote(`deployforge/${safeProjectName}:cache-${buildCacheKey}`)}`).catch(() => undefined);
                             }
                         }
@@ -740,14 +548,14 @@ export class DeploymentService {
                 await ssh.execute(`docker ps -aq --filter ${shellQuote(`label=com.deployforge.deployment=${deploymentId}`)} | xargs -r docker rm -f`, 30_000).catch(() => undefined);
                 await ssh.execute(`docker images -q --filter ${shellQuote(`label=com.deployforge.deployment=${deploymentId}`)} | xargs -r docker rmi -f`, 30_000).catch(() => undefined);
                 await ssh.execute(`rm -rf ${shellQuote(workDir)} ${shellQuote(staticDir)}`, 30_000).catch(() => undefined);
-                await this.cleanupDeploymentWorkspace(deploymentId, source.type === 'uploaded_file' ? source.uploadPath : undefined);
+                await DeploymentWorkspaceService.cleanup(deploymentId, source.type === 'uploaded_file' ? source.uploadPath : undefined);
                 if (domainName) await prisma.domain.updateMany({ where: { deploymentId }, data: { status: 'DELETED' } });
                 await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'CANCELED', containerId: null, domain: null, hostType: 'ip' } });
                 await LoggingService.log(deploymentId, 'Deployment cancellation completed; candidate resources were removed.', 'system', 'warn');
                 throw err;
             }
             if (isSandbox) {
-                await this.cleanupDeploymentWorkspace(deploymentId, source.type === 'uploaded_file' ? source.uploadPath : undefined);
+                await DeploymentWorkspaceService.cleanup(deploymentId, source.type === 'uploaded_file' ? source.uploadPath : undefined);
                 await this.removeImageIfExists(ssh, imageTag);
             }
             if (domainName) {
@@ -847,104 +655,27 @@ export class DeploymentService {
         });
     }
 
+    static cancelDeployment(userId: string, deploymentId: string) {
+        return DeploymentLifecycleService.cancelDeployment(userId, deploymentId);
+    }
+
     private static async verifyDeploymentAndRole(userId: string, deploymentId: string, allowedRoles: ('OWNER' | 'ADMIN' | 'DEVELOPER' | 'VIEWER')[]): Promise<any> {
         const deployment = await prisma.deployment.findFirst({
             where: { id: deploymentId },
             include: {
                 vps: true,
                 domains: true,
-                project: {
-                    include: {
-                        members: {
-                            where: { userId }
-                        }
-                    }
-                },
-                history: { orderBy: { createdAt: 'desc' } }
-            }
+                project: { include: { members: { where: { userId } } } },
+                history: { orderBy: { createdAt: 'desc' } },
+            },
         });
         if (!deployment) throw new DeploymentError('deploying', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
-
-        const isDirectOwner = deployment.userId === userId || deployment.project.userId === userId;
-        if (isDirectOwner) return deployment;
-
+        if (deployment.userId === userId || deployment.project.userId === userId) return deployment;
         const member = deployment.project.members[0];
         if (!member || !allowedRoles.includes(member.role as any)) {
             throw new DeploymentError('forbidden', 'Access denied: insufficient project role permissions', 'FORBIDDEN');
         }
-
         return deployment;
-    }
-
-    static async cancelDeployment(userId: string, deploymentId: string) {
-        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
-        if (['CANCELED', 'CANCELLED'].includes(deployment.status)) {
-            await ResourcePolicyService.releaseReservation(deploymentId);
-            return { success: true, canceled: true, state: 'CANCELED' };
-        }
-        if (deployment.status === 'CANCELING') {
-            return { success: true, canceled: false, state: 'CANCELING' };
-        }
-
-        const jobRecord = await prisma.deploymentJob.findFirst({
-            where: { deploymentId },
-            orderBy: { createdAt: 'desc' },
-        });
-        if (!jobRecord || !['QUEUED', 'RUNNING'].includes(jobRecord.status) || !jobRecord.queueJobId) {
-            throw new DeploymentError('queue', 'Only a queued or active deployment can be canceled', 'DEPLOYMENT_NOT_CANCELLABLE', 409);
-        }
-
-        if (jobRecord.status === 'QUEUED') {
-            let queuedOperation = 'deploy';
-            const queuedJob = await deploymentQueue.getJob(jobRecord.queueJobId);
-            if (queuedJob) {
-                queuedOperation = typeof queuedJob.data?.operation === 'string' ? queuedJob.data.operation : 'deploy';
-                const state = await queuedJob.getState();
-                if (!isCancellableQueueJobState(state)) {
-                    throw new DeploymentError('queue', `Deployment job is already ${state}`, 'QUEUE_JOB_NOT_CANCELLABLE', 409, { state });
-                }
-                try {
-                    await queuedJob.remove();
-                } catch {
-                    throw new DeploymentError('queue', 'Deployment job started before cancellation completed', 'QUEUE_JOB_NOT_CANCELLABLE', 409, { state: 'active' });
-                }
-            }
-
-            await prisma.$transaction(async (tx) => {
-                const updated = await tx.deploymentJob.updateMany({
-                    where: { id: jobRecord.id, status: 'QUEUED' },
-                    data: { status: 'CANCELED', waitReason: null, lastError: null },
-                });
-                if (updated.count !== 1) {
-                    throw new DeploymentError('queue', 'Deployment job started before cancellation completed', 'QUEUE_JOB_NOT_CANCELLABLE', 409);
-                }
-                if (queuedOperation === 'deploy') {
-                    await tx.deployment.update({
-                        where: { id: deploymentId },
-                        data: { status: 'CANCELED' },
-                    });
-                }
-                await tx.capacityReservation.updateMany({
-                    where: { deploymentId, status: 'RESERVED' },
-                    data: { status: 'RELEASED', releasedAt: new Date() },
-                });
-            });
-            await LoggingService.log(deploymentId, `Queued ${queuedOperation} operation canceled by userId=${userId}`, 'system', 'info').catch(() => undefined);
-            return { success: true, canceled: true, state: 'CANCELED' };
-        }
-
-        const candidate = await prisma.deploymentRelease.findFirst({
-            where: { deploymentId },
-            orderBy: { createdAt: 'desc' },
-            select: { status: true },
-        });
-        if (candidate && ['ACTIVATING', 'ACTIVE'].includes(candidate.status)) {
-            throw new DeploymentError('cancellation', 'Traffic activation has already started; cancellation is no longer safe', 'DEPLOYMENT_NOT_CANCELLABLE', 409);
-        }
-        await CacheService.set(deploymentCancellationKey(deploymentId), { requestedAt: new Date().toISOString(), userId }, 10 * 60);
-        await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'CANCELING' } });
-        await LoggingService.log(deploymentId, `Cancellation requested by userId=${userId}; stopping the active remote process.`, 'system', 'warn').catch(() => undefined);
-        return { success: true, canceled: false, state: 'CANCELING' };
     }
 
     static async stopDeployment(userId: string, deploymentId: string) {
@@ -1034,7 +765,7 @@ export class DeploymentService {
                 await this.removeImageIfExists(ssh, imageTag);
             }
             await this.cleanupRemoteWorkspace(ssh, deployment);
-            await this.cleanupDeploymentWorkspace(deploymentId, deployment.uploadPath);
+            await DeploymentWorkspaceService.cleanup(deploymentId, deployment.uploadPath);
 
             await this.logLifecycle(deploymentId, userId, 'deployment_deleted', 'success');
             await prisma.$transaction([
@@ -1196,93 +927,17 @@ export class DeploymentService {
             ssh.disconnect();
         }
     }
-
-    static async getStatus(userId: string, deploymentId: string) {
-        const deployment = await prisma.deployment.findFirst({
-            where: {
-                id: deploymentId,
-                OR: [
-                    { userId },
-                    {
-                        project: {
-                            OR: [
-                                { userId },
-                                { members: { some: { userId } } }
-                            ]
-                        }
-                    }
-                ]
-            },
-            include: {
-                project: { include: { activeRelease: true, candidateRelease: true, releases: { where: { status: 'SUPERSEDED', runtimeRef: { not: null } }, take: 1, orderBy: { createdAt: 'desc' } } } },
-                vps: true,
-                domains: true,
-                deploymentLogs: { take: 25, orderBy: { createdAt: 'desc' } },
-                history: { take: 5, orderBy: { createdAt: 'desc' } },
-                jobs: { take: 1, orderBy: { createdAt: 'desc' } },
-                preflightChecks: { orderBy: [{ status: 'desc' }, { category: 'asc' }, { title: 'asc' }] },
-            },
-        });
-        if (!deployment) throw new DeploymentError('status', 'Deployment not found', 'DEPLOYMENT_NOT_FOUND');
-        return deployment;
+    static getStatus(userId: string, deploymentId: string) {
+        return DeploymentLifecycleService.getStatus(userId, deploymentId);
     }
 
-    static async approvePreflightWarnings(userId: string, deploymentId: string) {
-        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
-        if (deployment.status !== 'AWAITING_PREFLIGHT') {
-            throw new DeploymentError('preflight', 'This deployment is not awaiting preflight warning approval', 'PREFLIGHT_NOT_AWAITING_APPROVAL', 409);
-        }
-        const checks = await prisma.deploymentPreflightCheck.findMany({ where: { deploymentId } });
-        if (checks.some((check) => check.status === 'BLOCKED')) {
-            throw new DeploymentError('preflight', 'Blocked preflight checks cannot be overridden', 'PREFLIGHT_BLOCKED', 409);
-        }
-        if (!checks.some((check) => check.status === 'WARNING')) {
-            throw new DeploymentError('preflight', 'No preflight warnings require approval', 'PREFLIGHT_NO_WARNINGS', 409);
-        }
-
-        const policy = await ResourcePolicyService.resolve(deployment.projectId, deployment.requestedResourceTier);
-        if (policy) await ResourcePolicyService.reserve(deploymentId, policy);
-        try {
-            await prisma.deployment.update({
-                where: { id: deploymentId },
-                data: { preflightWarningsAccepted: true, status: 'PENDING' },
-            });
-            await LoggingService.log(deploymentId, `Preflight warnings approved by userId=${userId}; deployment queued again`, 'system');
-            const job = await deploymentQueue.add('deploy', deploymentJobPayload(deploymentId, 'deploy'), {
-                jobId: `preflight-approved-${deploymentId}-${Date.now()}`,
-            });
-            return { queued: true, jobId: String(job.id) };
-        } catch (error) {
-            await ResourcePolicyService.releaseReservation(deploymentId);
-            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'AWAITING_PREFLIGHT' } }).catch(() => undefined);
-            throw error;
-        }
+    static approvePreflightWarnings(userId: string, deploymentId: string) {
+        return DeploymentLifecycleService.approvePreflightWarnings(userId, deploymentId);
     }
 
-    static async retryBlockedPreflight(userId: string, deploymentId: string) {
-        const deployment = await this.verifyDeploymentAndRole(userId, deploymentId, ['OWNER', 'ADMIN', 'DEVELOPER']);
-        if (deployment.status !== 'PREFLIGHT_BLOCKED') {
-            throw new DeploymentError('preflight', 'This deployment is not blocked by preflight checks', 'PREFLIGHT_NOT_BLOCKED', 409);
-        }
-        const policy = await ResourcePolicyService.resolve(deployment.projectId, deployment.requestedResourceTier);
-        if (policy) await ResourcePolicyService.reserve(deploymentId, policy);
-        try {
-            await prisma.deployment.update({
-                where: { id: deploymentId },
-                data: { preflightWarningsAccepted: false, status: 'PENDING' },
-            });
-            await LoggingService.log(deploymentId, `Blocked preflight retry requested by userId=${userId}`, 'system');
-            const job = await deploymentQueue.add('deploy', deploymentJobPayload(deploymentId, 'deploy'), {
-                jobId: `preflight-retry-${deploymentId}-${Date.now()}`,
-            });
-            return { queued: true, jobId: String(job.id) };
-        } catch (error) {
-            await ResourcePolicyService.releaseReservation(deploymentId);
-            await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'PREFLIGHT_BLOCKED' } }).catch(() => undefined);
-            throw error;
-        }
+    static retryBlockedPreflight(userId: string, deploymentId: string) {
+        return DeploymentLifecycleService.retryBlockedPreflight(userId, deploymentId);
     }
-
     static envPreview(encryptedEnv?: string | null) {
         return EnvironmentService.envPreview(encryptedEnv);
     }
@@ -1645,13 +1300,6 @@ services:
         }
     }
 
-    private static async cleanupDeploymentWorkspace(deploymentId: string, uploadPath?: string | null) {
-        await fs.rm(path.join('/tmp/deployforge', 'deployments', deploymentId), { recursive: true, force: true }).catch(() => undefined);
-        if (uploadPath && uploadPath.startsWith('/tmp/deployforge/deployments/')) {
-            await fs.rm(path.dirname(uploadPath), { recursive: true, force: true }).catch(() => undefined);
-        }
-    }
-
     private static async cleanupRemoteWorkspace(ssh: SSHService, deployment: any) {
         const projectId = deployment.projectId || deployment.project?.id;
         const baseDir = projectId
@@ -1742,32 +1390,6 @@ services:
         return vps.authType === 'key'
             ? { privateKey: EnvironmentService.decrypt(vps.encryptedPrivateKey!) }
             : { password: EnvironmentService.decrypt(vps.encryptedPassword!) };
-    }
-
-    private static async prepareUploadWorkspace(deploymentId: string, incomingPath: string, originalFileName: string) {
-        const archiveName = path.basename(originalFileName);
-        const workspace = path.join('/tmp/deployforge', 'deployments', deploymentId);
-        const archivePath = path.join(workspace, archiveName);
-        const lockPath = path.join(workspace, '.upload.lock');
-        await fs.rm(workspace, { recursive: true, force: true });
-        await fs.mkdir(path.join(workspace, 'workspace'), { recursive: true });
-        await fs.mkdir(path.join(workspace, 'logs'), { recursive: true });
-        await fs.access(incomingPath).catch(() => {
-            throw new DeploymentError('uploading', 'Uploaded archive disappeared before workspace preparation', 'UPLOAD_FILE_MISSING');
-        });
-        await fs.copyFile(incomingPath, archivePath);
-        await fs.access(archivePath).catch(() => {
-            throw new DeploymentError('uploading', 'Deployment workspace archive was not persisted', 'WORKSPACE_NOT_FOUND');
-        });
-        await fs.writeFile(lockPath, JSON.stringify({
-            deploymentId,
-            originalFileName,
-            archiveName,
-            lockedAt: new Date().toISOString(),
-        }, null, 2), { mode: 0o600 });
-        await fs.unlink(incomingPath).catch(() => undefined);
-        await fs.rm(path.dirname(incomingPath), { recursive: true, force: true }).catch(() => undefined);
-        return { archiveName, archivePath, workspace };
     }
 
     private static assertSourceMatches(sourceType: 'github' | 'upload', source: DeploymentSource) {

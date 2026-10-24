@@ -184,12 +184,12 @@ export class BuildService {
         throw new DeploymentError('building', 'Project type is ambiguous. Unable to determine if it is a STATIC site or a NODE server.', 'AMBIGUOUS_PROJECT_TYPE');
     }
 
-    static async buildImage(ssh: SSHService, deploymentId: string, workDir: string, imageTag: string, detected: DetectedProject) {
+    static async buildImage(ssh: SSHService, deploymentId: string, workDir: string, imageTag: string, detected: DetectedProject, cacheDir: string) {
         if (!detected.dockerfileAlreadyPresent) {
             await runCommand(ssh, deploymentId, 'build', `cat > ${shellQuote(`${workDir}/Dockerfile`)} <<'EOF'\n${generatedDockerfile(detected)}\nEOF`);
         }
 
-        await runCommand(ssh, deploymentId, 'build', `cd ${shellQuote(workDir)} && docker build --pull --label com.deployforge.managed=true --label ${shellQuote(`com.deployforge.deployment=${deploymentId}`)} -t ${shellQuote(imageTag)} .`, 'building', 'DOCKER_BUILD_FAILED');
+        await runCommand(ssh, deploymentId, 'build', buildKitImageCommand(workDir, imageTag, deploymentId, cacheDir), 'building', 'DOCKER_BUILD_FAILED');
     }
 
     static async buildStaticArtifact(ssh: SSHService, deploymentId: string, workDir: string, staticDir: string, detected: DetectedProject, hasEnv: boolean) {
@@ -212,6 +212,16 @@ export class BuildService {
         }
         await LoggingService.log(deploymentId, `Static artifact published to ${staticDir}`, 'build');
     }
+}
+
+export function buildKitImageCommand(workDir: string, imageTag: string, deploymentId: string, cacheDir: string) {
+    const cache = `${cacheDir}/buildkit`;
+    const nextCache = `${cacheDir}/buildkit-next`;
+    const labels = `--label com.deployforge.managed=true --label ${shellQuote(`com.deployforge.deployment=${deploymentId}`)}`;
+    const buildxBase = `docker buildx build --load --pull ${labels} --cache-to type=local,dest=${shellQuote(nextCache)},mode=max -t ${shellQuote(imageTag)}`;
+    const buildx = `if [ -f ${shellQuote(`${cache}/index.json`)} ]; then ${buildxBase} --cache-from type=local,src=${shellQuote(cache)} .; else ${buildxBase} .; fi`;
+    const fallback = `DOCKER_BUILDKIT=1 docker build --pull ${labels} -t ${shellQuote(imageTag)} .`;
+    return `cd ${shellQuote(workDir)} && mkdir -p ${shellQuote(cacheDir)} && rm -rf ${shellQuote(nextCache)} && if docker buildx version >/dev/null 2>&1; then ${buildx} && rm -rf ${shellQuote(cache)} && mv ${shellQuote(nextCache)} ${shellQuote(cache)}; else ${fallback}; fi`;
 }
 
 function getSetupCommands(detected: DetectedProject) {

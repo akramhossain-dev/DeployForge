@@ -8,6 +8,7 @@ import { config, validateOAuthConfig } from './config/env';
 import { redactionPaths } from './utils/logger';
 import { AppMetricsService } from './services/app-metrics.service';
 import { randomUUID } from 'crypto';
+import { annotateActiveSpan } from './utils/telemetry';
 
 const developmentOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 const productionOrigins = new Set([config.app.appUrl, config.app.apiUrl]);
@@ -54,7 +55,12 @@ export async function buildApp() {
         }
     });
 
-    app.addHook('onRequest', async (_request, reply) => {
+    app.addHook('onRequest', async (request, reply) => {
+        annotateActiveSpan({
+            'deployforge.request_id': request.id,
+            'http.request.method': request.method,
+            'url.path': request.url,
+        });
         reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)');
     });
 

@@ -27,6 +27,7 @@ export type GitHubDeploymentSource = {
     composeService?: string;
     composePort?: number;
     resourceTier?: ResourceTier;
+    correlationId?: string;
 };
 
 export type UploadedFileDeploymentSource = {
@@ -41,6 +42,7 @@ export type UploadedFileDeploymentSource = {
     composeService?: string;
     composePort?: number;
     resourceTier?: ResourceTier;
+    correlationId?: string;
 };
 
 export type DeploymentSource = GitHubDeploymentSource | UploadedFileDeploymentSource;

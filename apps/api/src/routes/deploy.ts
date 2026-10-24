@@ -81,6 +81,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 composeService,
                 composePort,
                 resourceTier,
+                correlationId: request.id,
             });
             await AccountService.logAudit(request.user.id, 'DEPLOYMENT_TRIGGERED', `GitHub deployment triggered for project: ${project.name} (branch: ${branch})`, request.ip, request.headers['user-agent']);
             return { success: true, data: sanitizeDeployment(deployment) };
@@ -212,6 +213,7 @@ export default async function deployRoutes(fastify: FastifyInstance) {
                 composeService,
                 composePort,
                 resourceTier,
+                correlationId: request.id,
             });
 
             await AccountService.logAudit(request.user.id, 'DEPLOYMENT_TRIGGERED', `Zip upload deployment triggered for project: ${project.name}`, request.ip, request.headers['user-agent']);

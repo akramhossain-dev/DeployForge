@@ -17,6 +17,15 @@ describe('deployment job payload', () => {
         })).toThrow('Invalid deployment job payload');
     });
 
+    it('accepts bounded correlation and trace propagation fields', () => {
+        expect(parseDeploymentJobPayload({
+            deploymentId: 'deployment-1',
+            operation: 'deploy',
+            correlationId: 'request-1',
+            traceContext: { traceparent: '00-abc-def-01' },
+        })).toMatchObject({ correlationId: 'request-1' });
+    });
+
     it('accepts the bounded cleanup operation', () => {
         expect(parseDeploymentJobPayload({
             deploymentId: 'deployment-1',

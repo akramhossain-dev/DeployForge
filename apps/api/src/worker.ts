@@ -1,3 +1,4 @@
+import './instrumentation';
 import prisma from '@deployforge/database';
 import { deploymentWorker } from './workers/deployment.worker';
 import { gatewayWorker } from './workers/gateway.worker';
@@ -6,6 +7,7 @@ import { maintenanceWorker } from './workers/maintenance.worker';
 import { deploymentQueue, gatewayQueue, maintenanceQueue, redisConnection, tlsVerificationQueue, webhookQueue } from './utils/queue';
 import { logger } from './utils/logger';
 import { ensureMaintenanceSchedule } from './utils/queue';
+import { shutdownTelemetry } from './instrumentation';
 
 let isShuttingDown = false;
 
@@ -24,6 +26,7 @@ async function shutdown(signal: string) {
         await Promise.all([deploymentQueue.close(), webhookQueue.close(), gatewayQueue.close(), tlsVerificationQueue.close(), maintenanceQueue.close()]);
         await redisConnection.quit();
         await prisma.$disconnect();
+        await shutdownTelemetry();
         clearTimeout(timeout);
         process.exit(0);
     } catch (error) {

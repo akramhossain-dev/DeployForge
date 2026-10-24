@@ -1,3 +1,4 @@
+import './instrumentation';
 import { buildApp } from './app';
 import { config } from './config/env';
 import { SuperAdminService } from './services/superadmin.service';
@@ -5,6 +6,7 @@ import { VPSService } from './services/vps.service';
 import prisma from '@deployforge/database';
 import { redisConnection, deploymentQueue, gatewayQueue, maintenanceQueue, tlsVerificationQueue, webhookQueue } from './utils/queue';
 import { logger } from './utils/logger';
+import { shutdownTelemetry } from './instrumentation';
 
 async function start() {
     
@@ -42,6 +44,8 @@ async function start() {
             logger.info('Disconnecting Prisma Client...');
             await prisma.$disconnect();
             logger.info('Prisma Client disconnected.');
+
+            await shutdownTelemetry();
 
             clearTimeout(forceExitTimeout);
             logger.info('Graceful shutdown completed successfully.');

@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { formatDate } from '@/components/ui';
 import { useDeployments, useDeploymentAnalytics } from '@/hooks/useDeployForgeData';
+import { DeploymentTlsStatus } from '@/components/deployments/detail/DeploymentTlsStatus';
 
 const activeStates = new Set(['PENDING', 'CLONING', 'UPLOADING', 'EXTRACTING', 'BUILDING', 'PREFLIGHT', 'DEPLOYING', 'CANCELING', 'RUNNING']);
 const STATUS_FILTERS = ['all', 'running', 'building', 'failed', 'stopped', 'paused', 'canceled', 'deleted'] as const;
@@ -304,7 +305,7 @@ export default function DeploymentsPage() {
                                                         <Server size={12} className="text-[#666666]" />
                                                         <span>{d.vps?.name || 'Local Host'}</span>
                                                     </div>
-                                                    <p className="text-[10px] text-emerald-400 font-mono">Traefik :443 (TLS)</p>
+                                                    <div className="flex items-center gap-2"><span className="text-[10px] text-[#666666] font-mono">Traefik :443</span><DeploymentTlsStatus domain={d.domains?.find((domain) => domain.domainName === d.domain) || d.domains?.[0]} hostname={d.domain} compact /></div>
                                                 </td>
 
                                                 <td className="p-3.5 max-w-md 2xl:max-w-xl truncate">
