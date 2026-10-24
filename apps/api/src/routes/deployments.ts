@@ -338,7 +338,7 @@ export default async function deploymentAliasRoutes(fastify: FastifyInstance) {
                 mode: deployment.mode as any,
                 composeService: overrides.composeService || deployment.composeService || undefined,
                 composePort: overrides.composePort || deployment.composePort || undefined,
-                resourceTier: overrides.resourceTier || deployment.requestedResourceTier || deployment.resourceTier,
+                resourceTier: overrides.resourceTier || deployment.requestedResourceTier || undefined,
             });
 
             return apiSuccess(result);

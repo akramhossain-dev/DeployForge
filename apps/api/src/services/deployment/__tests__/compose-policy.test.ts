@@ -20,10 +20,17 @@ describe('ComposePolicyService', () => {
         expect(result.yaml).not.toContain('20g');
         expect(result.yaml).not.toContain('9999');
     });
+
+    it('does not apply fixed resource limits when no policy is selected', () => {
+        const result = ComposePolicyService.sanitize(`services:\n  web:\n    image: nginx\n    expose: [80]\n`, { composeService: 'web', composePort: 80 });
+        expect(result.yaml).not.toContain('cpus:');
+        expect(result.yaml).not.toContain('mem_limit:');
+        expect(result.yaml).not.toContain('pids_limit:');
+        expect(result.yaml).not.toContain('max-size:');
+    });
     it.each([
         ['privileged mode', 'services:\n  web:\n    image: nginx\n    privileged: true\n'],
         ['host networking', 'services:\n  web:\n    image: nginx\n    network_mode: host\n'],
-        ['published host port', 'services:\n  web:\n    image: nginx\n    ports: ["8080:80"]\n'],
         ['bind mount', 'services:\n  web:\n    image: nginx\n    volumes: ["/etc:/host"]\n'],
         ['docker socket', 'services:\n  web:\n    image: nginx\n    volumes: ["sock:/var/run/docker.sock"]\nvolumes:\n  sock: {}\n'],
         ['host device', 'services:\n  web:\n    image: nginx\n    devices: ["/dev/kvm:/dev/kvm"]\n'],
@@ -38,8 +45,8 @@ describe('ComposePolicyService', () => {
     it('returns candidates when ingress is ambiguous', () => {
         const error = rejection(`
 services:
-  frontend:
-    image: example/frontend
+  portal:
+    image: example/portal
     expose: [3000]
   api:
     image: example/api
@@ -50,7 +57,7 @@ services:
         expect(error.errorCode).toBe('COMPOSE_INGRESS_AMBIGUOUS');
         expect(error.statusCode).toBe(422);
         expect(error.candidates).toEqual([
-            { service: 'frontend', ports: [3000] },
+            { service: 'portal', ports: [3000] },
             { service: 'api', ports: [8080] },
         ]);
     });
@@ -80,7 +87,7 @@ volumes:
         expect(result.port).toBe(3000);
         expect(result.yaml).not.toContain('traefik.enable');
         expect(result.yaml).toContain('no-new-privileges:true');
-        expect(result.yaml).toContain('internal: true');
+        expect(result.yaml).not.toContain('internal: true');
         expect(result.yaml).toContain('uploads:/app/uploads');
         expect(result.candidateYaml).toContain('web:');
         expect(result.candidateYaml).not.toContain('db:');
@@ -90,6 +97,30 @@ volumes:
         expect(result.dependencyYaml).not.toContain('web:');
         expect(result.dependencyFingerprint).toMatch(/^[a-f0-9]{64}$/);
         expect(result.hasDependencies).toBe(true);
+    });
+
+    it('normalizes standard published ports and safe host gateway entries', () => {
+        const result = ComposePolicyService.sanitize(`
+services:
+  api:
+    image: example/api
+    ports: ["\${API_HOST_PORT:-4000}:4000"]
+    extra_hosts:
+      - host.docker.internal:host-gateway
+  web:
+    image: example/web
+    ports: ["\${WEB_HOST_PORT:-3000}:3000"]
+    extra_hosts:
+      - host.docker.internal:host-gateway
+      - example.test:host-gateway
+`);
+
+        expect(result.service).toBe('web');
+        expect(result.port).toBe(3000);
+        expect(result.yaml).not.toContain('ports:');
+        expect(result.yaml).not.toContain('example.test');
+        expect(result.yaml).toContain('host.docker.internal:host-gateway');
+        expect(result.candidateYaml).toContain('expose:');
     });
 
     it('changes the stable dependency fingerprint when dependency definitions change', () => {

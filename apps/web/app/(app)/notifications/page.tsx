@@ -20,10 +20,15 @@ const ALERT_TYPE_OPTIONS: { value: AlertType | ''; label: string }[] = [
     { value: 'CPU_HIGH', label: 'High CPU' },
     { value: 'RAM_HIGH', label: 'High RAM' },
     { value: 'DISK_HIGH', label: 'High Disk' },
+    { value: 'SWAP_HIGH', label: 'High Swap' },
+    { value: 'HIGH_LOAD', label: 'High Load' },
     { value: 'SERVER_OFFLINE', label: 'Server Offline' },
     { value: 'SERVER_RECONNECTED', label: 'Server Online' },
     { value: 'DEPLOYMENT_FAILED', label: 'Deploy Failed' },
     { value: 'DEPLOYMENT_COMPLETED', label: 'Deploy Completed' },
+    { value: 'SSL_EXPIRING', label: 'SSL Expiring' },
+    { value: 'BACKUP_FAILED', label: 'Backup Failed' },
+    { value: 'BACKUP_COMPLETED', label: 'Backup Completed' },
 ];
 
 const INPUT_STYLE = 'w-full rounded-md border border-[#1F1F1F] bg-[#000000] px-3 py-2 text-xs font-mono text-white outline-none transition-colors placeholder:text-[#666666] focus:border-[#333333]';
@@ -82,7 +87,7 @@ export default function NotificationsPage() {
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => markAllAsRead.mutate()}
-                        disabled={markAllAsRead.isPending}
+                        disabled={markAllAsRead.isPending || pagination.total === 0}
                         className="flex h-8 items-center gap-1.5 rounded-md border border-[#1F1F1F] bg-[#111111] px-3 font-semibold text-white hover:bg-[#1A1A1A] disabled:opacity-50"
                     >
                         <CheckCheck size={13} />
@@ -90,7 +95,8 @@ export default function NotificationsPage() {
                     </button>
                     <button
                         onClick={() => setShowClearAllModal(true)}
-                        className="flex h-8 items-center gap-1.5 rounded-md border border-rose-900/40 bg-rose-950/20 px-3 font-semibold text-rose-300 hover:bg-rose-900/30"
+                        disabled={deleteAll.isPending || pagination.total === 0}
+                        className="flex h-8 items-center gap-1.5 rounded-md border border-rose-900/40 bg-rose-950/20 px-3 font-semibold text-rose-300 hover:bg-rose-900/30 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <Trash2 size={13} />
                         <span>Clear All</span>
@@ -169,18 +175,22 @@ export default function NotificationsPage() {
                                 {!n.isRead && (
                                     <button
                                         onClick={() => markAsRead.mutate(n.id)}
-                                        className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white"
+                                        disabled={markAsRead.isPending}
+                                        className="h-7 w-7 flex items-center justify-center rounded border border-[#1F1F1F] bg-[#111111] text-[#A1A1A1] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                                         title="Mark Read"
+                                        aria-label={`Mark ${n.title} as read`}
                                     >
-                                        <Check size={12} />
+                                        {markAsRead.isPending && markAsRead.variables === n.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                                     </button>
                                 )}
                                 <button
                                     onClick={() => deleteNotification.mutate(n.id)}
-                                    className="h-7 w-7 flex items-center justify-center rounded border border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30"
+                                    disabled={deleteNotification.isPending}
+                                    className="h-7 w-7 flex items-center justify-center rounded border border-rose-900/40 bg-rose-950/20 text-rose-400 hover:bg-rose-900/30 disabled:cursor-not-allowed disabled:opacity-50"
                                     title="Delete"
+                                    aria-label={`Delete ${n.title}`}
                                 >
-                                    <Trash2 size={12} />
+                                    {deleteNotification.isPending && deleteNotification.variables === n.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                                 </button>
                             </div>
                         </div>
@@ -218,13 +228,16 @@ export default function NotificationsPage() {
                             <p className="mt-1 text-[#666666]">This action permanently purges all alert history records.</p>
                         </div>
                         <div className="flex justify-end gap-2 pt-2">
-                            <button onClick={() => setShowClearAllModal(false)} className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A]">
+                            <button disabled={deleteAll.isPending} onClick={() => setShowClearAllModal(false)} className="h-8 px-3 rounded border border-[#1F1F1F] bg-[#111111] text-white hover:bg-[#1A1A1A] disabled:cursor-not-allowed disabled:opacity-50">
                                 Cancel
                             </button>
                             <button
                                 onClick={() => {
                                     deleteAll.mutate(undefined, {
-                                        onSuccess: () => setShowClearAllModal(false)
+                                        onSuccess: () => {
+                                            setPage(1);
+                                            setShowClearAllModal(false);
+                                        }
                                     });
                                 }}
                                 disabled={deleteAll.isPending}

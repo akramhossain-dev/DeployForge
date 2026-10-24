@@ -145,7 +145,9 @@ export class DeploymentService {
         });
 
         try {
-            await ResourcePolicyService.reserve(deployment.id, await ResourcePolicyService.resolve(projectId, metadata.resourceTier));
+            await ResourcePolicyService.enforceActiveProjectLimit(project.userId, projectId);
+            const policy = await ResourcePolicyService.resolve(projectId, metadata.resourceTier);
+            if (policy) await ResourcePolicyService.reserve(deployment.id, policy);
         } catch (error) {
             await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
             throw error;
@@ -219,7 +221,9 @@ export class DeploymentService {
         });
 
         try {
-            await ResourcePolicyService.reserve(deployment.id, await ResourcePolicyService.resolve(projectId, upload.resourceTier));
+            await ResourcePolicyService.enforceActiveProjectLimit(project.userId, projectId);
+            const policy = await ResourcePolicyService.resolve(projectId, upload.resourceTier);
+            if (policy) await ResourcePolicyService.reserve(deployment.id, policy);
         } catch (error) {
             await prisma.deployment.update({ where: { id: deployment.id }, data: { status: 'FAILED' } }).catch(() => undefined);
             await fs.rm(path.dirname(upload.uploadPath), { recursive: true, force: true }).catch(() => undefined);
@@ -286,13 +290,7 @@ export class DeploymentService {
         let deploymentReleaseId = '';
         let releaseActivated = false;
         let composeIngress: { service: string; port: number; dependencyFile: string | null; dependencyFingerprint: string; managedPrefix: string } | null = null;
-        let resourcePolicy: EffectiveResourcePolicy = {
-            tier: deployment.resourceTier as any,
-            cpuMillis: deployment.cpuLimitMillis,
-            memoryMiB: deployment.memoryLimitMiB,
-            pids: deployment.pidsLimit,
-            storageMiB: deployment.storageLimitMiB,
-        };
+        let resourcePolicy: EffectiveResourcePolicy | null = await ResourcePolicyService.resolve(project.id, deployment.requestedResourceTier);
         let hardStorageLimit = false;
 
         try {
@@ -304,7 +302,7 @@ export class DeploymentService {
                 username: vps.username,
                 ...this.getVpsAuth(vps),
             });
-            hardStorageLimit = await ResourcePolicyService.supportsHardStorageLimit(ssh);
+            hardStorageLimit = resourcePolicy ? await ResourcePolicyService.supportsHardStorageLimit(ssh) : false;
 
             await this.ensureTraefikGateway(ssh, deploymentId, vps);
             if (!isSandbox) await ReleaseService.reconcileProject(ssh, deploymentId, project.id, effectiveDomain, routerId);
@@ -321,7 +319,9 @@ export class DeploymentService {
             }
 
             await BuildService.normalizeProjectRoot(ssh, deploymentId, workDir);
-            await ResourcePolicyService.assertWorkspaceBudget(ssh, deploymentId, project.id, vps.username, resourcePolicy.storageMiB);
+            if (resourcePolicy) {
+                await ResourcePolicyService.assertWorkspaceBudget(ssh, deploymentId, project.id, vps.username, resourcePolicy.storageMiB);
+            }
             if (isSandbox) await runCommand(ssh, deploymentId, 'system', `ln -sfn ${shellQuote(workDir)} ${shellQuote(currentLink)}`);
 
             await LoggingService.log(deploymentId, 'Scanning VPS environment...', 'system');
@@ -383,6 +383,7 @@ export class DeploymentService {
                 await LoggingService.log(deploymentId, `Compose policy accepted ingress service ${safeCompose.service}:${safeCompose.port}`, 'build');
             }
 
+            const detectedTier = tierForRuntime(detected.deploymentType, detected.framework);
             await prisma.deployment.update({
                 where: { id: deploymentId },
                 data: {
@@ -391,11 +392,14 @@ export class DeploymentService {
                     buildCommand: detected.buildCommand,
                     startCommand: detected.startCommand,
                     ...(composeIngress ? { composeService: composeIngress.service, composePort: composeIngress.port } : {}),
-                    resourceTier: resourcePolicy.tier,
-                    cpuLimitMillis: resourcePolicy.cpuMillis,
-                    memoryLimitMiB: resourcePolicy.memoryMiB,
-                    pidsLimit: resourcePolicy.pids,
-                    storageLimitMiB: resourcePolicy.storageMiB,
+                    resourceTier: resourcePolicy?.tier || detectedTier,
+                    resourcePolicyEnabled: Boolean(resourcePolicy),
+                    ...(resourcePolicy ? {
+                        cpuLimitMillis: resourcePolicy.cpuMillis,
+                        memoryLimitMiB: resourcePolicy.memoryMiB,
+                        pidsLimit: resourcePolicy.pids,
+                        storageLimitMiB: resourcePolicy.storageMiB,
+                    } : {}),
                 },
             });
 
@@ -414,11 +418,12 @@ export class DeploymentService {
                     composeService: composeIngress?.service,
                     composePort: composeIngress?.port,
                     env: deployment.env,
-                    resourceTier: resourcePolicy.tier,
-                    cpuLimitMillis: resourcePolicy.cpuMillis,
-                    memoryLimitMiB: resourcePolicy.memoryMiB,
-                    pidsLimit: resourcePolicy.pids,
-                    storageLimitMiB: resourcePolicy.storageMiB,
+                    resourcePolicyEnabled: Boolean(resourcePolicy),
+                    resourceTier: resourcePolicy?.tier || detectedTier,
+                    cpuLimitMillis: resourcePolicy?.cpuMillis,
+                    memoryLimitMiB: resourcePolicy?.memoryMiB,
+                    pidsLimit: resourcePolicy?.pids,
+                    storageLimitMiB: resourcePolicy?.storageMiB,
                 });
                 deploymentReleaseId = release.id;
             }
@@ -613,7 +618,9 @@ export class DeploymentService {
                 }
             }
 
-            await ResourcePolicyService.assertWorkspaceBudget(ssh, deploymentId, project.id, vps.username, resourcePolicy.storageMiB);
+            if (resourcePolicy) {
+                await ResourcePolicyService.assertWorkspaceBudget(ssh, deploymentId, project.id, vps.username, resourcePolicy.storageMiB);
+            }
 
             if (!isSandbox) {
                 await ReleaseService.recordRuntime(deploymentReleaseId, createdContainerId, createdContainerId.startsWith('compose:') ? undefined : createdContainerId);
@@ -948,6 +955,13 @@ export class DeploymentService {
             const shortDeployId = deploymentId.slice(0, 8);
             const effectiveDomain = deployment.domain || `${safeProjectName}-${shortDeployId}.${deployment.vps.ipAddress}.sslip.io`;
             const routerId = `df-${deployment.projectId}`;
+            const runtimePolicy: EffectiveResourcePolicy | undefined = deployment.resourcePolicyEnabled ? {
+                tier: deployment.resourceTier,
+                cpuMillis: deployment.cpuLimitMillis,
+                memoryMiB: deployment.memoryLimitMiB,
+                pids: deployment.pidsLimit,
+                storageMiB: deployment.storageLimitMiB,
+            } : undefined;
 
             if (this.isStaticDeployment(deployment)) {
                 const staticDir = this.staticArtifactDir(deployment, deployment.lastStableVersion || deployment.history[0]?.version);
@@ -964,7 +978,9 @@ export class DeploymentService {
                     staticContainerName,
                     effectiveDomain,
                     routerId,
-                    false
+                    false,
+                    undefined,
+                    runtimePolicy,
                 );
                 await ValidationService.healthCheckStatic(ssh, deploymentId, containerId);
                 await prisma.deployment.update({ where: { id: deploymentId }, data: { containerId, port: null } });
@@ -990,7 +1006,10 @@ export class DeploymentService {
                     appPort,
                     effectiveDomain,
                     routerId,
-                    hasEnv
+                    hasEnv,
+                    false,
+                    undefined,
+                    runtimePolicy,
                 );
                 await prisma.deployment.update({ where: { id: deploymentId }, data: { containerId, port: null } });
                 await runCommand(ssh, deploymentId, 'system', `rm -rf ${shellQuote(resumeDir)}`).catch(() => undefined);
@@ -1096,7 +1115,7 @@ export class DeploymentService {
         routerId: string,
         isSandbox = false,
         releaseAlias?: string,
-        resourcePolicy: EffectiveResourcePolicy = { tier: 'STATIC', cpuMillis: 250, memoryMiB: 256, pids: 128, storageMiB: 5120 },
+        resourcePolicy?: EffectiveResourcePolicy | null,
         hardStorageLimit = false,
     ): Promise<string> {
         await this.removeContainerIfExists(ssh, deploymentId, dockerName, 'Removed previous static container', false);
@@ -1156,7 +1175,7 @@ export class DeploymentService {
         hasEnv: boolean,
         isSandbox = false,
         releaseAlias?: string,
-        resourcePolicy: EffectiveResourcePolicy = { tier: 'SERVER', cpuMillis: 1000, memoryMiB: 1024, pids: 256, storageMiB: 5120 },
+        resourcePolicy?: EffectiveResourcePolicy | null,
         hardStorageLimit = false,
     ) {
         await this.removeContainerIfExists(ssh, deploymentId, dockerName, 'Removed previous container with matching Docker name', false);
@@ -1223,7 +1242,7 @@ export class DeploymentService {
         composePort?: number,
         managedPrefix = 'deployforge-managed',
         isSandbox = false,
-        resourcePolicy?: EffectiveResourcePolicy,
+        resourcePolicy?: EffectiveResourcePolicy | null,
         hardStorageLimit = false,
     ) {
         const sourcePath = `${workDir}/${composeFile}`;

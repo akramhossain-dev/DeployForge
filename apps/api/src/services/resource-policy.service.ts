@@ -29,16 +29,14 @@ export class ResourcePolicyService {
         }
     }
 
-    static async resolve(projectId: string, requested?: ResourceTierName | null): Promise<EffectiveResourcePolicy> {
+    static async resolve(projectId: string, requested?: ResourceTierName | null): Promise<EffectiveResourcePolicy | null> {
         const project = await prisma.project.findUnique({
             where: { id: projectId },
-            include: {
-                resourcePolicy: true,
-                deployments: { orderBy: { createdAt: 'desc' }, take: 1, select: { resourceTier: true } },
-            },
+            include: { resourcePolicy: true },
         });
         if (!project) throw new DeploymentError('capacity', 'Project not found', 'PROJECT_NOT_FOUND');
-        const tier = requested || project.resourcePolicy?.resourceTier || project.deployments[0]?.resourceTier || 'SERVER';
+        if (!requested) return null;
+        const tier = requested;
         const base = RESOURCE_DEFAULTS[tier as ResourceTierName];
         const override = project.resourcePolicy;
         return {
@@ -96,6 +94,7 @@ export class ResourcePolicyService {
                     where: { id: deploymentId },
                     data: {
                         resourceTier: policy.tier,
+                        resourcePolicyEnabled: true,
                         cpuLimitMillis: policy.cpuMillis,
                         memoryLimitMiB: policy.memoryMiB,
                         pidsLimit: policy.pids,
@@ -135,7 +134,15 @@ export class ResourcePolicyService {
         if (deployment.requestedResourceTier && deployment.requestedResourceTier !== detectedTier) {
             throw new DeploymentError('capacity', `Requested ${deployment.requestedResourceTier} tier does not match detected ${detectedTier} workload`, 'RESOURCE_TIER_MISMATCH');
         }
-        const policy = await this.resolve(deployment.projectId, detectedTier);
+        const policy = await this.resolve(deployment.projectId, deployment.requestedResourceTier);
+        if (!policy) {
+            await prisma.deployment.update({
+                where: { id: deploymentId },
+                data: { resourceTier: detectedTier, resourcePolicyEnabled: false },
+            });
+            await this.releaseReservation(deploymentId);
+            return null;
+        }
         await this.reserve(deploymentId, policy);
         return policy;
     }
@@ -156,8 +163,10 @@ export class ResourcePolicyService {
         }
     }
 
-    static dockerFlags(policy: EffectiveResourcePolicy, hardStorageLimit: boolean) {
-        return `--cpus ${(policy.cpuMillis / 1000).toFixed(3)} --memory ${policy.memoryMiB}m --memory-swap ${policy.memoryMiB}m --pids-limit ${policy.pids} --log-driver json-file --log-opt max-size=10m --log-opt max-file=10${hardStorageLimit ? ` --storage-opt size=${policy.storageMiB}M` : ''}`;
+    static dockerFlags(policy: EffectiveResourcePolicy | null | undefined, hardStorageLimit: boolean) {
+        const logging = '--log-driver json-file --log-opt max-size=10m --log-opt max-file=10';
+        if (!policy) return logging;
+        return `--cpus ${(policy.cpuMillis / 1000).toFixed(3)} --memory ${policy.memoryMiB}m --memory-swap ${policy.memoryMiB}m --pids-limit ${policy.pids} ${logging}${hardStorageLimit ? ` --storage-opt size=${policy.storageMiB}M` : ''}`;
     }
 
     static async supportsHardStorageLimit(ssh: SSHService) {
@@ -177,7 +186,7 @@ export class ResourcePolicyService {
 
     private static async committed(vpsId: string, excludeDeploymentId: string, excludeStorageProjectId?: string) {
         const releases = await prisma.deploymentRelease.findMany({
-            where: { vpsId, purgedAt: null, status: { in: ['CANDIDATE', 'READY', 'ACTIVATING', 'ACTIVE'] } },
+            where: { vpsId, resourcePolicyEnabled: true, purgedAt: null, status: { in: ['CANDIDATE', 'READY', 'ACTIVATING', 'ACTIVE'] } },
             select: { projectId: true, cpuLimitMillis: true, memoryLimitMiB: true, storageLimitMiB: true },
         });
         const reservations = await prisma.capacityReservation.findMany({

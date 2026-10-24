@@ -53,7 +53,6 @@ const forbiddenServiceKeys = [
     'cgroup',
     'cgroup_parent',
     'volumes_from',
-    'extra_hosts',
     'sysctls',
     'ulimits',
     'runtime',
@@ -90,6 +89,35 @@ function exposedPorts(service: Record<string, any>) {
     return [...new Set(service.expose.map(parsePort).filter((port): port is number => port !== null))];
 }
 
+function publishedTargetPorts(service: Record<string, any>) {
+    if (service.ports === undefined) return [];
+    if (!Array.isArray(service.ports)) throw new ComposePolicyError('Service ports must be a list', 'COMPOSE_INVALID_SCHEMA');
+
+    return [...new Set(service.ports.map((entry: unknown) => {
+        const config = record(entry);
+        if (config) return parsePort(config.target);
+        const raw = String(entry ?? '').split('/')[0];
+        return parsePort(raw.split(':').at(-1));
+    }).filter((port): port is number => port !== null))];
+}
+
+function sanitizeExtraHosts(value: unknown, serviceName: string) {
+    if (value === undefined || value === null || value === false) return undefined;
+    const entries = Array.isArray(value) ? value : [value];
+    const safeEntries = entries.filter((entry) => {
+        if (typeof entry === 'string') {
+            return /^host\.docker\.internal(?::|=)host-gateway$/i.test(entry.trim());
+        }
+        const config = record(entry);
+        return config?.['host.docker.internal'] === 'host-gateway';
+    });
+    if (safeEntries.length === 0) return undefined;
+    if (safeEntries.length > 1) {
+        throw new ComposePolicyError(`Service ${serviceName} defines host.docker.internal more than once`, 'COMPOSE_INVALID_SCHEMA');
+    }
+    return ['host.docker.internal:host-gateway'];
+}
+
 function validateNamedVolume(volume: unknown, serviceName: string) {
     if (typeof volume === 'string') {
         const [source, target] = volume.split(':');
@@ -109,7 +137,7 @@ function validateNamedVolume(volume: unknown, serviceName: string) {
 }
 
 export class ComposePolicyService {
-    static sanitize(source: string, selection: ComposeSelection = {}, managedPrefix = 'deployforge-managed', resourcePolicy?: EffectiveResourcePolicy, hardStorageLimit = false, managedDeploymentId?: string): SanitizedCompose {
+    static sanitize(source: string, selection: ComposeSelection = {}, managedPrefix = 'deployforge-managed', resourcePolicy?: EffectiveResourcePolicy | null, hardStorageLimit = false, managedDeploymentId?: string): SanitizedCompose {
         if (Buffer.byteLength(source, 'utf8') > 512 * 1024) {
             throw new ComposePolicyError('Compose file exceeds the 512 KiB policy limit', 'COMPOSE_TOO_LARGE');
         }
@@ -151,10 +179,11 @@ export class ComposePolicyService {
                 }
                 delete service[key];
             }
-            if (service.ports !== undefined) {
-                throw new ComposePolicyError(`Service ${name} cannot publish host ports`, 'COMPOSE_PUBLISHED_PORT_FORBIDDEN');
-            }
+            const declaredPorts = [...new Set([...exposedPorts(service), ...publishedTargetPorts(service)])];
+            service.extra_hosts = sanitizeExtraHosts(service.extra_hosts, name);
+            if (service.extra_hosts === undefined) delete service.extra_hosts;
             delete service.container_name;
+            delete service.ports;
             delete service.labels;
             delete service.cpus;
             delete service.mem_limit;
@@ -196,7 +225,7 @@ export class ComposePolicyService {
                 for (const volume of service.volumes) usedVolumes.add(validateNamedVolume(volume, name));
             }
 
-            const ports = exposedPorts(service);
+            const ports = declaredPorts;
             const imageHint = typeof service.image === 'string' ? service.image : '';
             if (!infrastructurePattern.test(`${name} ${imageHint}`)) candidates.push({ service: name, ports });
         }
@@ -218,17 +247,20 @@ export class ComposePolicyService {
             if (config.external || (config.driver && config.driver !== 'bridge')) {
                 throw new ComposePolicyError(`Network ${name} must be an internal managed bridge`, 'COMPOSE_UNSAFE_NETWORK');
             }
-            declaredNetworks[name] = { driver: 'bridge', internal: true };
+            declaredNetworks[name] = { driver: 'bridge' };
         }
-        if (!declaredNetworks.default) declaredNetworks.default = { driver: 'bridge', internal: true };
+        if (!declaredNetworks.default) declaredNetworks.default = { driver: 'bridge' };
 
         if (candidates.length === 0) throw new ComposePolicyError('No web service candidate was found', 'COMPOSE_INGRESS_NOT_FOUND');
-        if (candidates.length > 1 && !selection.composeService) {
+        const conventionalTarget = !selection.composeService
+            ? candidates.find((candidate) => /^(web|frontend|app|client)$/i.test(candidate.service))
+            : undefined;
+        if (candidates.length > 1 && !selection.composeService && !conventionalTarget) {
             throw new ComposePolicyError('Multiple web services found; composeService and composePort are required', 'COMPOSE_INGRESS_AMBIGUOUS', candidates);
         }
         const target = selection.composeService
             ? candidates.find((candidate) => candidate.service === selection.composeService)
-            : candidates[0];
+            : conventionalTarget || candidates[0];
         if (!target) throw new ComposePolicyError('Selected composeService is not an ingress candidate', 'COMPOSE_INGRESS_INVALID', candidates);
 
         const explicitPort = selection.composePort == null ? null : Number(selection.composePort);
@@ -282,7 +314,7 @@ export class ComposePolicyService {
         const dependencyCompose = hasDependencies ? {
             services: dependencyServices,
             volumes: stableVolumes,
-            networks: { default: { driver: 'bridge', internal: true, labels: { 'com.deployforge.managed': 'true', 'com.deployforge.project': managedPrefix } } },
+            networks: { default: { driver: 'bridge', labels: { 'com.deployforge.managed': 'true', 'com.deployforge.project': managedPrefix } } },
         } : null;
         const dependencyYaml = dependencyCompose ? stringify(dependencyCompose, { lineWidth: 0 }) : null;
         const dependencyFingerprint = crypto.createHash('sha256').update(dependencyYaml || 'no-dependencies').digest('hex');
@@ -295,7 +327,7 @@ export class ComposePolicyService {
             volumes: stableVolumes,
             networks: hasDependencies
                 ? { 'deployforge-dependencies': { external: true, name: `${managedPrefix}-dependencies_default` } }
-                : { default: { driver: 'bridge', internal: true, labels: { 'com.deployforge.managed': 'true', 'com.deployforge.project': managedPrefix } } },
+                : { default: { driver: 'bridge', labels: { 'com.deployforge.managed': 'true', 'com.deployforge.project': managedPrefix } } },
         };
         return {
             yaml,

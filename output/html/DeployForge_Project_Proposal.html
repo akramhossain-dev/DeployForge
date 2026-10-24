@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Proposal - DeployForge</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #172536;
+      --navy: #173b61;
+      --muted: #54667a;
+      --line: #b9c9d9;
+      --soft: #f4f7fa;
+      --paper: #fff;
+      --canvas: #e8edf3;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--canvas); }
+    body {
+      color: var(--ink);
+      font-family: "Noto Sans Bengali", "Inter", sans-serif;
+      font-size: 10pt;
+      line-height: 1.48;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    .toolbar {
+      position: fixed;
+      top: 18px;
+      right: 22px;
+      z-index: 20;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 9px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 8px 25px rgba(15, 23, 42, 0.14);
+    }
+    .toolbar span {
+      padding-inline: 6px;
+      color: var(--muted);
+      font: 12px "Inter", sans-serif;
+    }
+    .toolbar button {
+      border: 0;
+      border-radius: 7px;
+      padding: 9px 14px;
+      color: #fff;
+      background: var(--navy);
+      font: 600 12px "Inter", sans-serif;
+      cursor: pointer;
+    }
+    .document {
+      display: grid;
+      gap: 18px;
+      justify-content: center;
+      padding: 28px 16px 48px;
+    }
+    .page {
+      position: relative;
+      width: 210mm;
+      min-height: 297mm;
+      padding: 13mm 16mm 15mm;
+      overflow: hidden;
+      background: var(--paper);
+      box-shadow: 0 12px 35px rgba(15, 23, 42, 0.16);
+    }
+    .proposal-header {
+      margin-bottom: 2.5mm;
+      padding: 4mm 5mm 3.5mm;
+      border: 1px solid var(--line);
+      text-align: center;
+    }
+    .proposal-header h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: 21pt;
+      line-height: 1.15;
+      font-weight: 700;
+    }
+    .proposal-header p {
+      margin: 1.5mm 0 0;
+      color: var(--navy);
+      font: 600 12.5pt/1.25 "Inter", sans-serif;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    .metadata { margin-bottom: 2.4mm; table-layout: fixed; }
+    .metadata th, .metadata td {
+      border: 1px solid var(--line);
+      padding: 2.1mm 2.4mm;
+      vertical-align: middle;
+    }
+    .metadata th {
+      color: var(--navy);
+      background: var(--soft);
+      text-align: left;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .metadata col:nth-child(1) { width: 18%; }
+    .metadata col:nth-child(2) { width: 37%; }
+    .metadata col:nth-child(3) { width: 18%; }
+    .metadata col:nth-child(4) { width: 27%; }
+    .metadata .subject-value { white-space: nowrap; }
+    .section {
+      margin-bottom: 2.1mm;
+      padding: 2.5mm 3mm 2.7mm;
+      border: 1px solid var(--line);
+      background: #fff;
+      break-inside: avoid;
+    }
+    .section h2 {
+      margin: 0 0 1.5mm;
+      padding-left: 2.3mm;
+      border-left: 3.5px solid var(--navy);
+      color: var(--navy);
+      font: 700 12.2pt/1.2 "Inter", "Noto Sans Bengali", sans-serif;
+    }
+    .section p { margin: 0; }
+    .project-title { font-size: 10.6pt; line-height: 1.45; font-weight: 600; }
+    ul { margin: 0; padding-left: 5.5mm; }
+    li { margin: 0 0 1.05mm; padding-left: 0.6mm; }
+    li:last-child { margin-bottom: 0; }
+    li::marker { color: var(--navy); }
+    .tech-list { display: grid; gap: 1.25mm; margin: 0; }
+    .tech-list div { line-height: 1.42; }
+    .tech-list strong { font-weight: 700; }
+    .continuation {
+      margin-bottom: 2.1mm;
+      padding: 2.8mm 3.5mm;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    .timeline, .team { table-layout: fixed; font-size: 8.6pt; line-height: 1.35; }
+    .timeline th, .timeline td, .team th, .team td {
+      border: 1px solid var(--line);
+      padding: 1.6mm 1.8mm;
+      vertical-align: top;
+      text-align: left;
+    }
+    .timeline th, .team th {
+      color: var(--navy);
+      background: #eaf0f6;
+      font-weight: 700;
+    }
+    .timeline col:nth-child(1) { width: 10%; }
+    .timeline col:nth-child(2) { width: 27%; }
+    .timeline col:nth-child(3) { width: 63%; }
+    .team col:nth-child(1) { width: 35%; }
+    .team col:nth-child(2) { width: 20%; }
+    .team col:nth-child(3) { width: 18%; }
+    .team col:nth-child(4) { width: 27%; }
+    .supervisor {
+      display: grid;
+      grid-template-columns: 1fr 62mm;
+      gap: 7mm;
+      align-items: stretch;
+      padding: 3.5mm 4mm;
+      border: 1px solid #d7e0e9;
+      border-left: 3px solid var(--navy);
+      border-radius: 2px;
+      background: var(--soft);
+    }
+    .supervisor-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+    }
+    .supervisor-label {
+      margin-bottom: 1mm;
+      color: var(--muted);
+      font: 700 7.2pt "Inter", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .supervisor-info strong {
+      display: block;
+      margin-bottom: 1mm;
+      color: var(--navy);
+      font: 700 12pt/1.2 "Inter", sans-serif;
+    }
+    .supervisor-role { color: var(--ink); font-size: 8.7pt; line-height: 1.45; }
+    .approval {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 3mm;
+      min-height: 20mm;
+      padding-left: 5mm;
+      border-left: 1px solid var(--line);
+    }
+    .signature-line { align-self: end; padding-top: 8mm; border-bottom: 1px solid var(--ink); }
+    .approval-meta {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font: 7.2pt "Inter", sans-serif;
+    }
+    .page-footer {
+      position: absolute;
+      right: 16mm;
+      bottom: 7mm;
+      left: 16mm;
+      display: flex;
+      justify-content: space-between;
+      padding-top: 2mm;
+      border-top: 1px solid #d5dee8;
+      color: var(--muted);
+      font: 7.5pt "Inter", sans-serif;
+    }
+    @media print {
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff; }
+      .toolbar { display: none !important; }
+      .document { display: block; padding: 0; }
+      .page {
+        width: 210mm;
+        height: 297mm;
+        min-height: 297mm;
+        margin: 0;
+        box-shadow: none;
+        break-after: page;
+        page-break-after: always;
+      }
+      .page:last-child { break-after: auto; page-break-after: auto; }
+    }
+    @media screen and (max-width: 860px) {
+      .document { justify-content: start; overflow-x: auto; }
+      .toolbar span { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar" aria-label="Proposal actions">
+    <span>A4 print layout</span>
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  <main class="document">
+    <article class="page">
+      <header class="proposal-header">
+        <h1>প্রজেক্ট প্রপোজাল</h1>
+        <p>DeployForge - Self-Hosted Deployment Platform</p>
+      </header>
+      <table class="metadata" aria-label="Academic information">
+        <colgroup><col><col><col><col></colgroup>
+        <tr><th>প্রতিষ্ঠানের নাম</th><td colspan="3">Dr. Mahbubur Rahman Mollah Institute of Science &amp; Technology</td></tr>
+        <tr><th>ডিপার্টমেন্ট</th><td colspan="3">Computer Science and Technology (CST)</td></tr>
+        <tr><th>সাবজেক্ট</th><td class="subject-value">Web Development Project</td><th>সাবজেক্ট কোড</th><td>28556</td></tr>
+        <tr><th>সেমিস্টার</th><td colspan="3">5th</td></tr>
+      </table>
+      <section class="section">
+        <h2>Project Title</h2>
+        <p class="project-title">DeployForge: নিজস্ব VPS-এ application build, deploy, monitor এবং manage করার জন্য একটি নিরাপদ Self-Hosted Platform-as-a-Service (PaaS)</p>
+      </section>
+      <section class="section">
+        <h2>Introduction</h2>
+        <p>DeployForge একটি web-based self-hosted deployment platform। এর control plane <strong>Modular Monolith architecture</strong> অনুসরণ করে; authentication, project, VPS, deployment, domain, monitoring ও administration আলাদা domain module হিসেবে সংগঠিত। Platform-টি SSH-এর মাধ্যমে target VPS-এ source build, containerize, health-check ও release করে। GitHub integration, domain, TLS, encrypted environment, realtime log, monitoring ও rollback একই dashboard থেকে পরিচালিত হয়; target VPS-এ কোনো proprietary agent প্রয়োজন হয় না।</p>
+      </section>
+      <section class="section">
+        <h2>Problem Statement</h2>
+        <p>নিজস্ব VPS-এ application deploy করতে source, dependency, Docker, reverse proxy, SSL, secret, log ও monitoring আলাদাভাবে পরিচালনা করতে হয়। Manual workflow-এ configuration error, downtime, secret exposure ও rollback failure-এর ঝুঁকি থাকে। Managed PaaS সহজ হলেও infrastructure control ও cost flexibility সীমিত হতে পারে। তাই developer-friendly experience এবং operator-owned infrastructure একসাথে দেওয়ার জন্য secure, repeatable ও observable platform প্রয়োজন।</p>
+      </section>
+      <section class="section">
+        <h2>Objectives</h2>
+        <ul>
+          <li>নিজস্ব VPS-এর জন্য agentless এবং automated deployment environment তৈরি করা।</li>
+          <li>Build ও candidate health validation শেষ হওয়ার পর controlled traffic switch নিশ্চিত করা।</li>
+          <li>Project, server, environment variable, domain, log ও release history কেন্দ্রীয়ভাবে পরিচালনা করা।</li>
+          <li>Encryption, role-based access এবং audit trail-এর মাধ্যমে infrastructure access নিরাপদ করা।</li>
+          <li>Deployment failure হলে পূর্ববর্তী healthy release-এ দ্রুত rollback নিশ্চিত করা।</li>
+        </ul>
+      </section>
+      <section class="section">
+        <h2>Methodology</h2>
+        <ul>
+          <li>Requirement analysis-এর পর Modular Monolith module boundary ও relational data model design করা হবে।</li>
+          <li>Next.js dashboard, Fastify API ও PostgreSQL দিয়ে core application flow তৈরি করা হবে।</li>
+          <li>Redis/BullMQ worker-এ deployment এবং দীর্ঘমেয়াদি infrastructure task চালানো হবে।</li>
+          <li>Encrypted SSH/SFTP দিয়ে VPS verify, runtime detect, candidate build ও health-check করা হবে।</li>
+          <li>Health probe pass করলে Traefik route switch হবে; previous release rollback-এর জন্য থাকবে।</li>
+          <li>Automated test, security validation, logs, metrics ও CI/CD gate দিয়ে quality যাচাই করা হবে।</li>
+        </ul>
+      </section>
+      <section class="section">
+        <h2>Tools &amp; Technologies</h2>
+        <div class="tech-list">
+          <div><strong>Frontend (UI):</strong> Next.js 14, React 18, TypeScript, Tailwind CSS, Zustand, xterm.js</div>
+          <div><strong>Backend (Server):</strong> Node.js, Fastify, REST API, WebSocket, BullMQ</div>
+          <div><strong>System Architecture:</strong> Modular Monolith, domain modules, layered services, Control Plane and Data Plane model</div>
+        </div>
+      </section>
+      <footer class="page-footer"><span>DeployForge Project Proposal</span><span>Page 1 of 2</span></footer>
+    </article>
+
+    <article class="page">
+      <div class="continuation tech-list">
+        <div><strong>Database &amp; Queue:</strong> PostgreSQL 16, Prisma ORM, Redis 7</div>
+        <div><strong>VPS &amp; File Communication:</strong> SSH2, SFTP, encrypted credentials, remote command execution</div>
+        <div><strong>Deployment &amp; Networking:</strong> Docker Engine, Docker Compose, Nginx, Traefik, Certbot</div>
+        <div><strong>Security:</strong> Argon2id, JWT, AES-256-GCM, CSRF, HMAC-SHA256, Helmet, rate limiting</div>
+        <div><strong>Development &amp; Testing:</strong> pnpm, Turborepo, Git, GitHub Actions, Vitest, ESLint, TypeScript</div>
+      </div>
+      <section class="section">
+        <h2>Expected Outcome</h2>
+        <ul>
+          <li>Manual deployment step, configuration error এবং service downtime-এর ঝুঁকি কমবে।</li>
+          <li>Application deployment repeatable, observable এবং audit-friendly হবে।</li>
+          <li>Health-gated release ও rollback ব্যবস্থায় production reliability বৃদ্ধি পাবে।</li>
+          <li>Encrypted secret ও role-based access-এর মাধ্যমে server operation আরও নিরাপদ হবে।</li>
+          <li>User নিজস্ব infrastructure ও data ownership বজায় রেখে modern PaaS experience পাবে।</li>
+        </ul>
+      </section>
+      <section class="section">
+        <h2>Timeline</h2>
+        <table class="timeline">
+          <colgroup><col><col><col></colgroup>
+          <thead><tr><th>Week</th><th>Phase</th><th>Activities</th></tr></thead>
+          <tbody>
+            <tr><td>1-2</td><td>Phase 1: Analysis &amp; Design</td><td>Problem analysis, requirement collection, user role, use case, Modular Monolith module boundary, database and architecture design.</td></tr>
+            <tr><td>3-4</td><td>Phase 2: Foundation</td><td>Monorepo setup, authentication, project model, VPS connection, API foundation and dashboard layout.</td></tr>
+            <tr><td>5-8</td><td>Phase 3: Development</td><td>Deployment engine, runtime detection, Docker build, domain, TLS, environment, logs, monitoring, notification and rollback workflow.</td></tr>
+            <tr><td>9-10</td><td>Phase 4: Testing &amp; Delivery</td><td>Module and integration testing, security review, CI/CD validation, production deployment, user guide and final documentation.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="section">
+        <h2>Team Members</h2>
+        <table class="team">
+          <colgroup><col><col><col><col></colgroup>
+          <thead><tr><th>Name</th><th>ID</th><th>Roll</th><th>Registration</th></tr></thead>
+          <tbody>
+            <tr><td>SUHADA KHANAM</td><td>23.01.98</td><td>860340</td><td>1502355115</td></tr>
+            <tr><td>MD. RAYHAN</td><td>23.01.104</td><td>860353</td><td>1502355128</td></tr>
+            <tr><td>ASHIK</td><td>23.01.111</td><td>860314</td><td>1502355089</td></tr>
+            <tr><td>MD AKRAM HOSSAIN</td><td>23.01.146</td><td>860358</td><td>1502355133</td></tr>
+            <tr><td>MAHIA JANNAT MAYADA</td><td>23.01.152</td><td>858988</td><td>1502354138</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="section">
+        <h2>Supervisor Name</h2>
+        <div class="supervisor">
+          <div class="supervisor-info">
+            <span class="supervisor-label">Project Supervisor</span>
+            <strong>Mahabub Alam Khan</strong>
+            <span class="supervisor-role">Instructor<br>Department of CST, MRIST</span>
+          </div>
+          <div class="approval">
+            <div class="signature-line"></div>
+            <div class="approval-meta"><span>Signature</span><span>Date</span></div>
+          </div>
+        </div>
+      </section>
+      <footer class="page-footer"><span>DeployForge Project Proposal</span><span>Page 2 of 2</span></footer>
+    </article>
+  </main>
+</body>
+</html>

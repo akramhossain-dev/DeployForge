@@ -94,7 +94,7 @@ pnpm dev
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | Next.js 14, React 18, Zustand, Tailwind CSS, xterm.js |
+| **Frontend** | Next.js 16, React 19, Zustand 5, Tailwind CSS 4, xterm.js 6 |
 | **Backend** | Fastify, BullMQ, ioredis |
 | **Database & Cache** | PostgreSQL 16, Prisma ORM, Redis 7 |
 | **Infrastructure** | SSH2, SFTP, Docker Engine, Nginx, Certbot |

@@ -194,6 +194,7 @@ export type Deployment = {
     framework?: string | null;
     type?: 'STATIC' | 'SERVER' | 'FULLSTACK' | string;
     requestedResourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK' | null;
+    resourcePolicyEnabled?: boolean;
     resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK';
     cpuLimitMillis?: number;
     memoryLimitMiB?: number;
@@ -590,5 +591,4 @@ export type InstallRuntimeResponse = {
     verification: VerificationResult[];
     plan: InstallationPlan;
 };
-
 

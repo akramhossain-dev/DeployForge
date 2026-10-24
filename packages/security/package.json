@@ -12,12 +12,12 @@
     "dependencies": {
         "@deployforge/shared": "workspace:*",
         "argon2": "^0.45.1",
-        "jsonwebtoken": "^9.0.2"
+        "jsonwebtoken": "^9.0.3"
     },
     "devDependencies": {
-        "@types/jsonwebtoken": "^9.0.5",
-        "@types/node": "24.19.2",
-        "typescript": "^5.0.0",
-        "vitest": "^5.0.3"
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/node": "26.6.5",
+    "typescript": "^5.9.3",
+        "vitest": "^5.0.5"
     }
 }

@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../tailwind.config.ts";
+@import "tailwindcss";
 
 @layer base {
   :root {
@@ -195,5 +194,4 @@
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
   }
 }
-
 

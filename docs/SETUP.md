@@ -5,7 +5,7 @@
 ### Local development
 
 - Node.js 24
-- pnpm 8.15.4 through Corepack
+- pnpm 12.15.0 through Corepack
 - PostgreSQL 16
 - Redis 7
 - Git and Docker with the Compose plugin

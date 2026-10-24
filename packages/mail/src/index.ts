@@ -85,12 +85,12 @@ export class MailService {
             socketTimeout: 15000,
         });
 
-        this.transporter.verify((error: Error | null) => {
+        this.transporter.verify((error) => {
             if (error) {
                 structuredLog({
                     stage: 'smtp',
                     severity: 'error',
-                    message: `SMTP connection verification failed: ${error.message}`,
+                    message: `SMTP connection verification failed: ${String(error)}`,
                     hint: 'The SMTP server rejected the connection. This could be due to wrong credentials, port, or TLS settings.',
                     fix_suggestion: 'Check SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM. For Gmail, use smtp.gmail.com with port 587 and secure=false, or port 465 and secure=true.',
                 }, this.customLogger);

@@ -224,11 +224,11 @@ export function useDeployment(deploymentId?: string) {
     });
 }
 
-export function useDeploymentLogs(deploymentId?: string) {
+export function useDeploymentLogs(deploymentId?: string, enabled = true) {
     return useQuery({
         queryKey: queryKeys.deploymentLogs(deploymentId || 'none'),
         queryFn: () => api.get<DeploymentLog[]>(`/deploy/${deploymentId}/logs`),
-        enabled: !!deploymentId,
+        enabled: !!deploymentId && enabled,
         refetchInterval: 5000,
     });
 }
@@ -852,11 +852,11 @@ export type DeploymentEnvHistoryEntry = {
     deploymentNumber: number;
 };
 
-export function useDeploymentEnv(deploymentId?: string) {
+export function useDeploymentEnv(deploymentId?: string, enabled = true) {
     return useQuery({
         queryKey: queryKeys.deploymentEnv(deploymentId || 'none'),
         queryFn: () => api.get<DeploymentEnvResponse>(`/deployments/${deploymentId}/env`),
-        enabled: !!deploymentId,
+        enabled: !!deploymentId && enabled,
     });
 }
 
@@ -874,11 +874,11 @@ export function useUpdateDeploymentEnv() {
     });
 }
 
-export function useDeploymentEnvHistory(deploymentId?: string) {
+export function useDeploymentEnvHistory(deploymentId?: string, enabled = true) {
     return useQuery({
         queryKey: queryKeys.deploymentEnvHistory(deploymentId || 'none'),
         queryFn: () => api.get<DeploymentEnvHistoryEntry[]>(`/deployments/${deploymentId}/env/history`),
-        enabled: !!deploymentId,
+        enabled: !!deploymentId && enabled,
     });
 }
 

@@ -2,7 +2,7 @@ import prisma, { AlertType, Prisma } from '@deployforge/database';
 import { logger } from '../utils/logger';
 
 interface NotificationFilters {
-    type?: string;
+    type?: AlertType;
     vpsId?: string;
     startDate?: string;
     endDate?: string;
@@ -21,7 +21,7 @@ export class NotificationService {
         const where: Prisma.NotificationWhereInput = { userId };
 
         if (filters.type) {
-            where.type = filters.type as AlertType;
+            where.type = filters.type;
         }
 
         if (filters.vpsId) {

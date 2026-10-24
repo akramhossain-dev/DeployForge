@@ -123,7 +123,8 @@ export default function DeploymentDetailsPage() {
     const addToast = useToastStore((s) => s.addToast);
 
     const deployment = useDeployment(id);
-    const initialLogs = useDeploymentLogs(id);
+    const deploymentExists = deployment.isSuccess && Boolean(deployment.data);
+    const initialLogs = useDeploymentLogs(id, deploymentExists);
     const [logsPaused, setLogsPaused] = useState(false);
     const [autoScroll, setAutoScroll] = useState(true);
     const [logFilter, setLogFilter] = useState<'all' | 'build' | 'runtime' | 'system' | 'error'>('all');
@@ -144,9 +145,9 @@ export default function DeploymentDetailsPage() {
 
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [envModalOpen, setEnvModalOpen] = useState(false);
-    const { data: decEnvResponse, isLoading: envLoading } = useDeploymentEnv(id);
+    const { data: decEnvResponse, isLoading: envLoading } = useDeploymentEnv(id, deploymentExists);
     const updateEnv = useUpdateDeploymentEnv();
-    const envHistory = useDeploymentEnvHistory(id);
+    const envHistory = useDeploymentEnvHistory(id, deploymentExists);
     const redeploy = useRedeploy();
 
     const [draftFiles, setDraftFiles] = useState<EnvFile[]>([{ path: '.env', variables: {} }]);
@@ -529,7 +530,6 @@ export default function DeploymentDetailsPage() {
             deploymentId: id,
             composeService: composeServiceOverride,
             composePort: Number(composePortOverride),
-            resourceTier: 'FULLSTACK',
         });
         router.push(`/deployments/${newDeployment.id}`);
     };
@@ -682,8 +682,12 @@ export default function DeploymentDetailsPage() {
                 </div>
                 <div className="rounded-md border border-[#1F1F1F] bg-[#0A0A0A] p-4">
                     <p className="text-[10px] uppercase text-[#666666]">Effective Resource Policy</p>
-                    <p className="mt-1 font-semibold text-white">{current.resourceTier || 'SERVER'}</p>
-                    <p className="mt-1 text-[11px] text-[#A1A1A1]">{(current.cpuLimitMillis || 0) / 1000} CPU · {current.memoryLimitMiB || 0} MiB · {current.pidsLimit || 0} PIDs · {current.storageLimitMiB || 0} MiB</p>
+                    <p className="mt-1 font-semibold text-white">{current.resourcePolicyEnabled ? current.resourceTier : 'No fixed limits'}</p>
+                    <p className="mt-1 text-[11px] text-[#A1A1A1]">
+                        {current.resourcePolicyEnabled
+                            ? `${(current.cpuLimitMillis || 0) / 1000} CPU · ${current.memoryLimitMiB || 0} MiB · ${current.pidsLimit || 0} PIDs · ${current.storageLimitMiB || 0} MiB`
+                            : 'Uses available VPS resources; Docker limits are not applied.'}
+                    </p>
                 </div>
             </div>
 

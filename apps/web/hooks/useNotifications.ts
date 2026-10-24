@@ -14,6 +14,14 @@ const queryKeys = {
     alertSettings: ['alert-settings'] as const,
 };
 
+function notificationToast(title: string, description: string, severity: 'success' | 'error' = 'success') {
+    useToastStore.getState().addToast({ title, description, severity });
+}
+
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error && error.message ? error.message : fallback;
+}
+
 function withQuery(path: string, params?: Record<string, string>) {
     const search = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
@@ -53,7 +61,9 @@ export function useMarkAsRead() {
         mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            notificationToast('Notification Updated', 'Notification marked as read.');
         },
+        onError: (error) => notificationToast('Update Failed', errorMessage(error, 'Failed to mark notification as read.'), 'error'),
     });
 }
 
@@ -63,7 +73,9 @@ export function useMarkAllAsRead() {
         mutationFn: () => api.patch('/notifications/read-all'),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            notificationToast('Notifications Updated', 'All notifications marked as read.');
         },
+        onError: (error) => notificationToast('Update Failed', errorMessage(error, 'Failed to mark all notifications as read.'), 'error'),
     });
 }
 
@@ -73,7 +85,9 @@ export function useDeleteNotification() {
         mutationFn: (id: string) => api.delete(`/notifications/${id}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            notificationToast('Notification Deleted', 'The notification was permanently deleted.');
         },
+        onError: (error) => notificationToast('Delete Failed', errorMessage(error, 'Failed to delete the notification.'), 'error'),
     });
 }
 
@@ -83,7 +97,9 @@ export function useDeleteAllNotifications() {
         mutationFn: () => api.delete('/notifications/all'),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            notificationToast('Notifications Cleared', 'All notification history was permanently deleted.');
         },
+        onError: (error) => notificationToast('Purge Failed', errorMessage(error, 'Failed to clear notification history.'), 'error'),
     });
 }
 

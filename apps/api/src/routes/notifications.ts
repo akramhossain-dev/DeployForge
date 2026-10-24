@@ -1,13 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { NotificationService } from '../services/notification.service';
 import { z } from 'zod';
+import { AlertType } from '@deployforge/database';
 
 const notificationIdSchema = z.object({
     id: z.string().uuid({ message: 'Invalid notification ID format' }),
 });
 
 const listQuerySchema = z.object({
-    type: z.string().optional(),
+    type: z.nativeEnum(AlertType).optional(),
     vpsId: z.string().uuid().optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
@@ -57,18 +58,18 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         return { success: true, message: 'All notifications marked as read' };
     });
 
+    fastify.delete('/all', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+    }, async (request) => {
+        const result = await NotificationService.deleteAll(request.user.id);
+        return { success: true, data: { deletedCount: result.count }, message: 'All notifications deleted' };
+    });
+
     fastify.delete('/:id', {
         config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
     }, async (request) => {
         const { id } = notificationIdSchema.parse(request.params);
-        await NotificationService.delete(request.user.id, id);
-        return { success: true, message: 'Notification deleted' };
-    });
-
-    fastify.delete('/all', {
-        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
-    }, async (request) => {
-        await NotificationService.deleteAll(request.user.id);
-        return { success: true, message: 'All notifications deleted' };
+        const result = await NotificationService.delete(request.user.id, id);
+        return { success: true, data: { deletedCount: result.count }, message: 'Notification deleted' };
     });
 }

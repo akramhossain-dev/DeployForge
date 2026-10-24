@@ -4,7 +4,7 @@ ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
 RUN apk add --no-cache openssl postgresql-client \
     && corepack enable \
-    && corepack prepare pnpm@8.15.4 --activate
+    && corepack prepare pnpm@12.15.0 --activate
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
@@ -69,4 +69,3 @@ USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/live').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 CMD ["node", "apps/api/dist/server.js"]
-

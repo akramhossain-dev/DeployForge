@@ -160,7 +160,15 @@ async function request<T>(path: string, init: ApiRequestInit = {}, hasRetried = 
             && !path.startsWith('/admin');
 
         if (canRefresh) {
-            await request('/auth/refresh', { method: 'POST' }, true);
+            try {
+                await request('/auth/refresh', { method: 'POST' }, true);
+            } catch (error) {
+                handleUnauthorized(path);
+                if (error instanceof ApiError && error.status === 401) {
+                    throw new ApiError('Authentication required', 401, error.context, error.errorCode);
+                }
+                throw error;
+            }
             return request<T>(path, init, true);
         }
 
@@ -187,8 +195,16 @@ async function request<T>(path: string, init: ApiRequestInit = {}, hasRetried = 
             apiError.message = 'Internal Server Error';
         }
 
-        if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-            console.error('[api:error]', { method, path, status: response.status, message: apiError.message, context: apiError.context });
+        const isExpectedSignedOutResponse = response.status === 401
+            && (path === '/auth/me' || path === '/auth/refresh');
+
+        if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && !isExpectedSignedOutResponse) {
+            const details = { method, path, status: response.status, message: apiError.message, context: apiError.context };
+            if (response.status >= 500) {
+                console.error('[api:error]', details);
+            } else {
+                console.warn('[api:request-rejected]', details);
+            }
         }
 
         if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/admin/login')) {

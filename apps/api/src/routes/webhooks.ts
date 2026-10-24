@@ -156,7 +156,7 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
                     skipWebhookRegistration: true,
                     composeService: previousDeployment.composeService || undefined,
                     composePort: previousDeployment.composePort || undefined,
-                    resourceTier: previousDeployment.requestedResourceTier || previousDeployment.resourceTier,
+                    resourceTier: previousDeployment.requestedResourceTier || undefined,
                 });
 
                 fastify.log.info({ deploymentId: deployment.id, projectId: project.id, branch }, 'Deployment queued from GitHub webhook');

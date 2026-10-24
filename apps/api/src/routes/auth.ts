@@ -52,6 +52,13 @@ function sessionCookie(name: 'accessToken' | 'refreshToken', value: string, maxA
     return cookie(name, value, maxAge, { httpOnly: true });
 }
 
+function clearSessionCookies(reply: Parameters<typeof apiError>[0]) {
+    reply.header('Set-Cookie', [
+        sessionCookie('accessToken', '', 0),
+        sessionCookie('refreshToken', '', 0),
+    ]);
+}
+
 export default async function authRoutes(fastify: FastifyInstance) {
     fastify.get('/csrf', {
         config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
@@ -117,7 +124,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
             const cookieToken = cookies['refreshToken'] || '';
             const result = refreshSchema.safeParse({ refreshToken: cookieToken });
             if (!result.success) {
-                return apiError(reply, 400, 'BAD_REQUEST', 'Invalid refresh token format');
+                clearSessionCookies(reply);
+                return apiError(reply, 401, 'UNAUTHORIZED', 'Invalid refresh token');
             }
             refreshToken = result.data.refreshToken;
         }
@@ -131,6 +139,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
             return { success: true, data: { message: 'Session refreshed' } };
         } catch (err: any) {
+            clearSessionCookies(reply);
             return apiError(reply, 401, 'UNAUTHORIZED', 'Invalid refresh token');
         }
     });

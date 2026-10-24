@@ -154,6 +154,9 @@ export async function buildApp() {
             callback(null, allowed);
         },
         credentials: true,
+        methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+        exposedHeaders: ['X-Request-Id'],
     });
     
     await app.register(rateLimit, {

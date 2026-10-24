@@ -9,11 +9,11 @@
         "dev": "tsc -w"
     },
     "dependencies": {
-        "ssh2": "^1.15.0",
-        "@deployforge/shared": "workspace:*"
+        "@deployforge/shared": "workspace:*",
+        "ssh2": "^1.17.0"
     },
     "devDependencies": {
-        "@types/ssh2": "^1.11.16",
-        "typescript": "^5.0.0"
+        "@types/ssh2": "^1.15.6",
+    "typescript": "^5.9.3"
     }
 }

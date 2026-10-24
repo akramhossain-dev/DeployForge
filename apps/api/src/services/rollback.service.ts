@@ -94,11 +94,13 @@ export class RollbackService {
             });
             const alias = ReleaseService.alias(release.id);
             const ingressContainer = await this.ingressContainer(ssh, release.runtimeRef, release.composeService);
-            await this.enforceRuntimePolicy(ssh, release.runtimeRef, {
-                cpuMillis: release.cpuLimitMillis,
-                memoryMiB: release.memoryLimitMiB,
-                pids: release.pidsLimit,
-            });
+            if (release.resourcePolicyEnabled) {
+                await this.enforceRuntimePolicy(ssh, release.runtimeRef, {
+                    cpuMillis: release.cpuLimitMillis,
+                    memoryMiB: release.memoryLimitMiB,
+                    pids: release.pidsLimit,
+                });
+            }
             await ssh.execute('docker network inspect deployforge-validation >/dev/null 2>&1 || docker network create --driver bridge --internal deployforge-validation');
             await ssh.execute(`docker network connect --alias ${quote(alias)} deployforge-validation ${quote(ingressContainer)} 2>/dev/null || true`);
             await ValidationService.healthCheckCandidate(ssh, deployment.id, alias, release.ingressPort);

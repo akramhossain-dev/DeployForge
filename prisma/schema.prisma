@@ -564,6 +564,7 @@ model Deployment {
   composeService        String?
   composePort           Int?
   requestedResourceTier ResourceTier?
+  resourcePolicyEnabled Boolean              @default(false)
   resourceTier          ResourceTier         @default(SERVER)
   cpuLimitMillis        Int                  @default(1000)
   memoryLimitMiB        Int                  @default(1024)
@@ -674,6 +675,7 @@ model DeploymentRelease {
   composePort         Int?
   ingressPort         Int
   env                 String?
+  resourcePolicyEnabled Boolean         @default(false)
   resourceTier        ResourceTier    @default(SERVER)
   cpuLimitMillis      Int             @default(1000)
   memoryLimitMiB      Int             @default(1024)

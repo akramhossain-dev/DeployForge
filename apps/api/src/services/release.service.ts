@@ -19,6 +19,7 @@ type BeginReleaseInput = {
     composeService?: string;
     composePort?: number;
     env?: string | null;
+    resourcePolicyEnabled?: boolean;
     resourceTier?: 'STATIC' | 'SERVER' | 'FULLSTACK';
     cpuLimitMillis?: number;
     memoryLimitMiB?: number;
@@ -69,6 +70,7 @@ export class ReleaseService {
                     composeService: input.composeService,
                     composePort: input.composePort,
                     env: input.env,
+                    resourcePolicyEnabled: input.resourcePolicyEnabled ?? false,
                     resourceTier: input.resourceTier,
                     cpuLimitMillis: input.cpuLimitMillis,
                     memoryLimitMiB: input.memoryLimitMiB,
