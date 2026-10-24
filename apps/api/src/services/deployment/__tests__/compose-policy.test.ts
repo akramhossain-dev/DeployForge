@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ComposePolicyError, ComposePolicyService } from '../compose-policy.service';
+import { ComposePolicyError, ComposePolicyService, MAX_COMPOSE_SERVICES } from '../compose-policy.service';
 import { RESOURCE_DEFAULTS } from '../../resource-policy';
 
 function rejection(yaml: string) {
@@ -97,6 +97,13 @@ volumes:
         expect(result.dependencyYaml).not.toContain('web:');
         expect(result.dependencyFingerprint).toMatch(/^[a-f0-9]{64}$/);
         expect(result.hasDependencies).toBe(true);
+    });
+
+    it('supports up to 10 services and rejects the eleventh', () => {
+        const compose = (count: number) => `services:\n  web:\n    image: nginx\n    expose: [80]\n${Array.from({ length: count - 1 }, (_, index) => `  redis-${index + 1}:\n    image: redis:7\n`).join('')}`;
+        expect(MAX_COMPOSE_SERVICES).toBe(10);
+        expect(ComposePolicyService.sanitize(compose(10), { composeService: 'web', composePort: 80 }).service).toBe('web');
+        expect(rejection(compose(11)).errorCode).toBe('COMPOSE_SERVICE_LIMIT');
     });
 
     it('normalizes standard published ports and safe host gateway entries', () => {

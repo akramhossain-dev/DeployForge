@@ -40,6 +40,7 @@ export type SanitizedCompose = {
 const serviceNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const volumeNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
 const infrastructurePattern = /(postgres|mysql|mariadb|mongo|redis|memcache|elastic|rabbit|broker|queue|database|(^|[-_.])db($|[-_.]))/i;
+export const MAX_COMPOSE_SERVICES = 10;
 const forbiddenServiceKeys = [
     'privileged',
     'devices',
@@ -156,8 +157,8 @@ export class ComposePolicyService {
                 throw new ComposePolicyError(`Unsupported top-level Compose option: ${key}`, 'COMPOSE_FORBIDDEN_OPTION');
             }
         }
-        if (Object.keys(services).length > 4) {
-            throw new ComposePolicyError('Compose deployments support at most 4 services', 'COMPOSE_SERVICE_LIMIT');
+        if (Object.keys(services).length > MAX_COMPOSE_SERVICES) {
+            throw new ComposePolicyError(`Compose deployments support at most ${MAX_COMPOSE_SERVICES} services`, 'COMPOSE_SERVICE_LIMIT');
         }
         if (compose.secrets || compose.configs) {
             throw new ComposePolicyError('Compose secrets/config file mounts are not supported; use encrypted environment variables', 'COMPOSE_UNSAFE_MOUNT');
