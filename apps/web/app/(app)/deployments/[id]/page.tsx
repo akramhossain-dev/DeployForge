@@ -155,7 +155,7 @@ export default function DeploymentDetailsPage() {
     const {
         envModalOpen, setEnvModalOpen, decEnvResponse, envLoading, updateEnv, envHistory, redeploy,
         draftFiles, setDraftFiles, activeFileIndex, setActiveFileIndex, activeFile,
-        isBulkEdit, setIsBulkEdit, bulkText, setBulkText, searchQuery, setSearchQuery, sortBy, setSortBy,
+        isBulkEdit, setIsBulkEdit, bulkText, setBulkText, searchQuery, setSearchQuery, setSortBy,
         newFilePath, setNewFilePath, showAddFile, setShowAddFile, historyPreviewId, setHistoryPreviewId,
         showConfirmOverwrite, setShowConfirmOverwrite, historyOpen, setHistoryOpen,
         renamingIndex, setRenamingIndex, renamingPath, setRenamingPath, filteredVariables,
