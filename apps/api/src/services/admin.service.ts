@@ -2,10 +2,6 @@ import prisma from '@deployforge/database';
 import { CacheService } from './cache.service';
 
 export class AdminService {
-    static async deleteDeploymentCascade(deploymentId: string) {
-        await prisma.deployment.delete({ where: { id: deploymentId } });
-    }
-
     static async deleteVpsCascade(vpsId: string) {
         await prisma.vPS.delete({ where: { id: vpsId } });
     }

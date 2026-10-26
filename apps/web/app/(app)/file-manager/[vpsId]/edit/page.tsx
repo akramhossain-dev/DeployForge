@@ -10,11 +10,11 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 interface EditPageProps {
-    params: { vpsId: string };
+    params: Promise<{ vpsId: string }>;
 }
 
 export default function FileEditPage({ params }: EditPageProps) {
-    const { vpsId } = params;
+    const { vpsId } = React.use(params);
     const router = useRouter();
     const searchParams = useSearchParams();
     const filePath = searchParams.get('path');

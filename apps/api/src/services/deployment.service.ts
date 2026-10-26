@@ -746,6 +746,9 @@ export class DeploymentService {
         const ssh = new SSHService();
         try {
             await prisma.deployment.update({ where: { id: deploymentId }, data: { status: 'DELETING' } });
+            const otherDeploymentCount = await prisma.deployment.count({
+                where: { projectId: deployment.projectId, id: { not: deploymentId } },
+            });
             await ssh.connect({
                 host: deployment.vps.ipAddress,
                 port: deployment.vps.port,
@@ -765,6 +768,14 @@ export class DeploymentService {
                 await this.removeImageIfExists(ssh, imageTag);
             }
             await this.cleanupRemoteWorkspace(ssh, deployment);
+            if (otherDeploymentCount === 0) {
+                await this.cleanupProjectComposeResources(
+                    ssh,
+                    deploymentId,
+                    deployment.projectId,
+                    deployment.vps.username,
+                );
+            }
             await DeploymentWorkspaceService.cleanup(deploymentId, deployment.uploadPath);
 
             await this.logLifecycle(deploymentId, userId, 'deployment_deleted', 'success');
@@ -1298,6 +1309,55 @@ services:
         if (inspect?.code === 0) {
             await ssh.execute(`docker rmi -f ${shellQuote(imageTag)} >/dev/null 2>&1 || true`).catch(() => undefined);
         }
+    }
+
+    private static async cleanupProjectComposeResources(
+        ssh: SSHService,
+        deploymentId: string,
+        projectId: string,
+        username: string,
+    ) {
+        const managedProject = `df-${projectId}`;
+        const dependencyProject = `${managedProject}-dependencies`;
+        const composeFilter = shellQuote(`label=com.docker.compose.project=${dependencyProject}`);
+        const managedFilter = shellQuote(`label=com.deployforge.project=${managedProject}`);
+
+        await LoggingService.log(deploymentId, 'Removing final project Compose resources...', 'system');
+        await runCommand(
+            ssh,
+            deploymentId,
+            'system',
+            `ids=$( { docker ps -aq --filter ${composeFilter}; docker ps -aq --filter ${managedFilter}; } | sort -u); if [ -n "$ids" ]; then docker rm -f $ids; fi`,
+            'delete',
+            'PROJECT_CONTAINER_DELETE_FAILED',
+        );
+        await runCommand(
+            ssh,
+            deploymentId,
+            'system',
+            `networks=$( { docker network ls -q --filter ${composeFilter}; docker network ls -q --filter ${managedFilter}; } | sort -u); if [ -n "$networks" ]; then docker network rm $networks; fi`,
+            'delete',
+            'PROJECT_NETWORK_DELETE_FAILED',
+        );
+        await runCommand(
+            ssh,
+            deploymentId,
+            'system',
+            `images=$(docker images -q --filter ${managedFilter} | sort -u); if [ -n "$images" ]; then docker rmi -f $images; fi`,
+            'delete',
+            'PROJECT_IMAGE_DELETE_FAILED',
+        );
+
+        const composeStateDir = `/home/${shellPath(username)}/deployforge/projects/${projectId}/compose`;
+        await runCommand(
+            ssh,
+            deploymentId,
+            'system',
+            `rm -rf ${shellQuote(composeStateDir)}`,
+            'delete',
+            'PROJECT_COMPOSE_STATE_DELETE_FAILED',
+        );
+        await LoggingService.log(deploymentId, 'Final project Compose resources removed; persistent volumes were preserved.', 'system');
     }
 
     private static async cleanupRemoteWorkspace(ssh: SSHService, deployment: any) {

@@ -6,13 +6,14 @@ import api from '@/lib/api/client';
 import type { Vps } from '@/lib/api/types';
 import { Server, ArrowLeft, Loader2 } from '@/components/icons';
 import Link from 'next/link';
+import { use } from 'react';
 
 interface PageProps {
-    params: { vpsId: string };
+    params: Promise<{ vpsId: string }>;
 }
 
 export default function FileManagerPage({ params }: PageProps) {
-    const { vpsId } = params;
+    const { vpsId } = use(params);
 
     const { data: vps, isLoading } = useQuery({
         queryKey: ['vps', vpsId],

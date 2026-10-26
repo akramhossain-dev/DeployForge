@@ -561,9 +561,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         return { success: true, data: { message: 'Deployment restarted' } };
     });
 
-    fastify.delete('/deployments/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, _reply) => {
+    fastify.delete('/deployments/:id', { preHandler: [(fastify as any).requireAdmin] }, async (request, reply) => {
         const { id } = idParamsSchema.parse(request.params);
-        await AdminService.deleteDeploymentCascade(id);
+        const deployment = await prisma.deployment.findUnique({ where: { id }, select: { userId: true } });
+        if (!deployment) return error(reply, 404, 'Deployment not found', 'NOT_FOUND');
+        await DeploymentService.deleteDeployment(deployment.userId, id);
         await audit(request, 'DELETE_DEPLOYMENT', { targetType: 'DEPLOYMENT', targetId: id });
         return { success: true, data: { message: 'Deployment deleted' } };
     });
