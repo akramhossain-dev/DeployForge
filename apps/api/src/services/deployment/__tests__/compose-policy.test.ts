@@ -132,6 +132,39 @@ services:
         expect(error.errorCode).toBe('COMPOSE_ALIAS_LIMIT');
     });
 
+    it('omits services gated behind inactive Compose profiles', () => {
+        const result = ComposePolicyService.sanitize(`
+services:
+  web:
+    image: nginx
+    expose: [80]
+  nginx:
+    image: nginx
+    profiles: [production]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+`, { composeService: 'web', composePort: 80 });
+
+        expect(result.service).toBe('web');
+        expect(result.hasDependencies).toBe(false);
+        expect(result.yaml).not.toContain('nginx.conf');
+    });
+
+    it('rejects active services that depend on an inactive profile service', () => {
+        const error = rejection(`
+services:
+  web:
+    image: nginx
+    expose: [80]
+    depends_on: [db]
+  db:
+    image: postgres:16
+    profiles: [production]
+`);
+
+        expect(error.errorCode).toBe('COMPOSE_INACTIVE_PROFILE_DEPENDENCY');
+    });
+
     it('supports up to 10 services and rejects the eleventh', () => {
         const compose = (count: number) => `services:\n  web:\n    image: nginx\n    expose: [80]\n${Array.from({ length: count - 1 }, (_, index) => `  redis-${index + 1}:\n    image: redis:7\n`).join('')}`;
         expect(MAX_COMPOSE_SERVICES).toBe(10);

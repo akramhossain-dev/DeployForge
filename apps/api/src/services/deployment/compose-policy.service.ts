@@ -103,6 +103,19 @@ function publishedTargetPorts(service: Record<string, any>) {
     }).filter((port): port is number => port !== null))];
 }
 
+function serviceDependencies(service: Record<string, any>, serviceName: string) {
+    if (service.depends_on === undefined) return [];
+    if (Array.isArray(service.depends_on)) {
+        if (!service.depends_on.every((name: unknown) => typeof name === 'string' && serviceNamePattern.test(name))) {
+            throw new ComposePolicyError(`Service ${serviceName} has invalid dependencies`, 'COMPOSE_INVALID_SCHEMA');
+        }
+        return service.depends_on as string[];
+    }
+    const dependencies = record(service.depends_on);
+    if (!dependencies) throw new ComposePolicyError(`Service ${serviceName} has invalid dependencies`, 'COMPOSE_INVALID_SCHEMA');
+    return Object.keys(dependencies);
+}
+
 function sanitizeExtraHosts(value: unknown, serviceName: string) {
     if (value === undefined || value === null || value === false) return undefined;
     const entries = Array.isArray(value) ? value : [value];
@@ -158,9 +171,22 @@ export class ComposePolicyService {
             }
             throw new ComposePolicyError('Compose YAML contains an invalid alias reference', 'COMPOSE_INVALID_YAML');
         }
-        const services = record(compose?.services);
-        if (!compose || !services || Object.keys(services).length === 0) {
+        const declaredServices = record(compose?.services);
+        if (!compose || !declaredServices || Object.keys(declaredServices).length === 0) {
             throw new ComposePolicyError('Compose file must define at least one service', 'COMPOSE_INVALID_SCHEMA');
+        }
+        const inactiveProfileServices = new Set<string>();
+        const services = Object.fromEntries(Object.entries(declaredServices).filter(([name, rawService]) => {
+            const service = record(rawService);
+            if (!service || service.profiles === undefined) return true;
+            if (!Array.isArray(service.profiles) || service.profiles.length === 0 || !service.profiles.every((profile: unknown) => typeof profile === 'string' && profile.trim())) {
+                throw new ComposePolicyError(`Service ${name} has invalid profiles`, 'COMPOSE_INVALID_SCHEMA');
+            }
+            inactiveProfileServices.add(name);
+            return false;
+        }));
+        if (Object.keys(services).length === 0) {
+            throw new ComposePolicyError('Compose file must define at least one service without an inactive profile', 'COMPOSE_INVALID_SCHEMA');
         }
         for (const key of Object.keys(compose)) {
             if (!['services', 'volumes', 'networks', 'name', 'version'].includes(key) && !key.startsWith('x-')) {
@@ -183,6 +209,10 @@ export class ComposePolicyService {
             if (!serviceNamePattern.test(name)) throw new ComposePolicyError(`Invalid Compose service name: ${name}`, 'COMPOSE_INVALID_SCHEMA');
             const service = record(rawService);
             if (!service) throw new ComposePolicyError(`Service ${name} must be an object`, 'COMPOSE_INVALID_SCHEMA');
+            const inactiveDependency = serviceDependencies(service, name).find((dependency) => inactiveProfileServices.has(dependency));
+            if (inactiveDependency) {
+                throw new ComposePolicyError(`Service ${name} depends on inactive profile service ${inactiveDependency}`, 'COMPOSE_INACTIVE_PROFILE_DEPENDENCY');
+            }
 
             for (const key of forbiddenServiceKeys) {
                 if (service[key] !== undefined && service[key] !== false && service[key] !== null) {
@@ -312,9 +342,7 @@ export class ComposePolicyService {
 
         const dependencyServices = Object.fromEntries(Object.entries(services).filter(([name]) => name !== target.service));
         for (const [name, dependency] of Object.entries(dependencyServices)) {
-            const dependsOn = Array.isArray(dependency.depends_on)
-                ? dependency.depends_on
-                : Object.keys(record(dependency.depends_on) || {});
+            const dependsOn = serviceDependencies(dependency, name);
             if (dependsOn.includes(target.service)) {
                 throw new ComposePolicyError(`Dependency service ${name} cannot depend on the ingress service`, 'COMPOSE_DEPENDENCY_CYCLE');
             }
