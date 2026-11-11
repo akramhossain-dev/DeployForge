@@ -152,11 +152,13 @@ services:
       dockerfile: docker/web.Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:3001}}
+        - INTERNAL_API_URL=${INTERNAL_API_URL:-http://api:3001}
     restart: unless-stopped
     environment:
       PORT: "3000"
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:3001}}
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:3001}
       NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
       api:

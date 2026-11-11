@@ -1,4 +1,6 @@
 const isDev = process.env.NODE_ENV !== 'production';
+const internalApiUrl = (process.env.INTERNAL_API_URL || (isDev ? 'http://localhost:3001' : 'http://api:3001'))
+  .replace(/\/+$/, '');
 
 const scriptSrc = isDev
   ? "'self' 'unsafe-eval' 'unsafe-inline'"
@@ -20,6 +22,14 @@ const csp = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${internalApiUrl}/:path*`,
+      },
+    ];
+  },
   async headers() {
     return [
       {

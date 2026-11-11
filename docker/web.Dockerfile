@@ -14,7 +14,9 @@ RUN pnpm install --frozen-lockfile --filter web...
 
 FROM deps AS builder
 ARG NEXT_PUBLIC_API_URL
+ARG INTERNAL_API_URL=http://api:3001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV INTERNAL_API_URL=$INTERNAL_API_URL
 COPY . .
 RUN pnpm --filter @deployforge/shared build && pnpm --filter web build
 

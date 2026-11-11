@@ -172,7 +172,7 @@ export default function RegisterPage() {
                             <div className="space-y-2">
                                 <button
                                     type="button"
-                                    onClick={() => { setGoogleLoading(true); window.location.assign(new URL('/auth/google', api.baseUrl)); }}
+                                    onClick={() => { setGoogleLoading(true); window.location.assign(new URL('auth/google', `${api.baseUrl.replace(/\/+$/, '')}/`)); }}
                                     disabled={busy}
                                     className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] text-xs font-medium text-white transition-colors hover:bg-[#1A1A1A] disabled:opacity-50"
                                 >
@@ -181,7 +181,7 @@ export default function RegisterPage() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => { setGithubLoading(true); window.location.assign(new URL('/auth/github', api.baseUrl)); }}
+                                    onClick={() => { setGithubLoading(true); window.location.assign(new URL('auth/github', `${api.baseUrl.replace(/\/+$/, '')}/`)); }}
                                     disabled={busy}
                                     className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-[#1F1F1F] bg-[#111111] text-xs font-medium text-white transition-colors hover:bg-[#1A1A1A] disabled:opacity-50"
                                 >

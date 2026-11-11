@@ -73,7 +73,7 @@ chmod 600 .env
 
 Required groups of values:
 
-- Public HTTPS URLs: `APP_URL`, `API_URL`, `NEXT_PUBLIC_API_URL`, `DOMAIN`.
+- Public HTTPS URLs: `APP_URL` uses the site origin, while `API_URL` and `NEXT_PUBLIC_API_URL` use the same origin with the `/api` prefix; `DOMAIN` contains only the hostname.
 - Data services: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `REDIS_PASSWORD`.
 - Authentication: `JWT_SECRET`, `ADMIN_SECRET`, `ADMIN_JWT_SECRET`.
 - Encryption: `ENCRYPTION_KEY` and optional separate `MASTER_KEY`, each 64 hexadecimal characters.

@@ -5,6 +5,7 @@
     "scripts": {
         "dev": "next dev",
         "build": "next build",
+        "test": "node --test next.config.test.cjs",
         "typecheck": "tsc --noEmit",
         "start": "next start",
         "lint": "eslint ."
