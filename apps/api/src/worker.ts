@@ -1,3 +1,4 @@
+import './config/env';
 import './instrumentation';
 import prisma from '@deployforge/database';
 import { deploymentWorker } from './workers/deployment.worker';

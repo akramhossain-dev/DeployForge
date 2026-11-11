@@ -4,6 +4,7 @@
     "private": true,
     "scripts": {
         "dev": "tsx watch src/server.ts",
+        "dev:worker": "tsx watch src/worker.ts",
         "build": "tsc",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
