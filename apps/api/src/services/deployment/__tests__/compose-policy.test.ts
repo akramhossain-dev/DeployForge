@@ -99,6 +99,27 @@ volumes:
         expect(result.hasDependencies).toBe(true);
     });
 
+    it('retains only the bootstrap capabilities required by official stateful images', () => {
+        const result = ComposePolicyService.sanitize(`
+services:
+  web:
+    image: example/web
+    expose: [3000]
+    depends_on: [postgres, redis]
+  postgres:
+    image: postgres:16-alpine
+  redis:
+    image: redis:7-alpine
+`, { composeService: 'web', composePort: 3000 });
+
+        expect(result.candidateYaml).not.toContain('cap_add:');
+        expect(result.dependencyYaml).toContain('cap_add:');
+        expect(result.dependencyYaml).toContain('- CHOWN');
+        expect(result.dependencyYaml).toContain('- SETGID');
+        expect(result.dependencyYaml).toContain('- SETUID');
+        expect(result.dependencyYaml).not.toContain('SYS_ADMIN');
+    });
+
     it('resolves bounded Compose anchors shared by multiple services', () => {
         const result = ComposePolicyService.sanitize(`
 x-api-environment: &api-environment

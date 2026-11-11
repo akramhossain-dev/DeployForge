@@ -40,6 +40,8 @@ export type SanitizedCompose = {
 const serviceNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const volumeNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
 const infrastructurePattern = /(postgres|mysql|mariadb|mongo|redis|memcache|elastic|rabbit|broker|queue|database|(^|[-_.])db($|[-_.]))/i;
+const statefulOfficialImagePattern = /^(?:(?:docker\.io\/)?library\/|docker\.io\/)?(?:postgres|redis|mysql|mariadb)(?::[^/]+|@sha256:[a-f0-9]{64})?$/i;
+const statefulBootstrapCapabilities = ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETGID', 'SETUID'];
 export const MAX_COMPOSE_SERVICES = 10;
 export const MAX_COMPOSE_ALIAS_COUNT = 50;
 const forbiddenServiceKeys = [
@@ -239,6 +241,10 @@ export class ComposePolicyService {
             }
             service.security_opt = ['no-new-privileges:true'];
             service.cap_drop = ['ALL'];
+            const imageHint = typeof service.image === 'string' ? service.image.trim() : '';
+            if (statefulOfficialImagePattern.test(imageHint)) {
+                service.cap_add = statefulBootstrapCapabilities;
+            }
 
             if (service.build !== undefined) {
                 if (typeof service.build === 'string') {
@@ -267,7 +273,6 @@ export class ComposePolicyService {
             }
 
             const ports = declaredPorts;
-            const imageHint = typeof service.image === 'string' ? service.image : '';
             if (!infrastructurePattern.test(`${name} ${imageHint}`)) candidates.push({ service: name, ports });
         }
 
