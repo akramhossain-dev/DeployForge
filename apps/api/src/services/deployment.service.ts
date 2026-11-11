@@ -306,7 +306,7 @@ export class DeploymentService {
                 await LoggingService.log(deploymentId, `[CACHE_MISS_BUILD] No build cache found for key ${buildCacheKey}`, 'build');
 
                 let depCacheHit = false;
-                if (lockfileHash !== 'nolock') {
+                if (detected.deploymentType === 'STATIC' && lockfileHash !== 'nolock') {
                     const checkDepCmd = `[ -d ${shellQuote(`${cacheDir}/dependencies/${lockfileHash}/node_modules`)} ]`;
                     const depRes = await ssh.execute(checkDepCmd);
                     depCacheHit = depRes.code === 0;
@@ -331,12 +331,10 @@ export class DeploymentService {
 
                         await runCommand(ssh, deploymentId, 'build', `if [ -d ${shellQuote(workDir)}/node_modules ]; then mkdir -p ${shellQuote(`${cacheDir}/dependencies/${lockfileHash}`)} && cp -a ${shellQuote(workDir)}/node_modules ${shellQuote(`${cacheDir}/dependencies/${lockfileHash}/`)}; fi`).catch(() => undefined);
                     }
+                } else if (detected.deploymentType !== 'STATIC') {
+                    await LoggingService.log(deploymentId, 'Containerized project; dependencies will be installed inside the Docker build', 'build');
                 } else {
-                    if (isDockerProject) {
-                        await LoggingService.log(deploymentId, 'Docker-based project; skipping host-side dependency cache', 'build');
-                    } else {
-                        await LoggingService.log(deploymentId, 'No package.json or lockfile found; skipping dependency cache', 'build');
-                    }
+                    await LoggingService.log(deploymentId, 'No package.json or lockfile found; skipping dependency cache', 'build');
                 }
             }
             

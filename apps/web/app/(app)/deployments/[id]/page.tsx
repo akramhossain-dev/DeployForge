@@ -163,7 +163,12 @@ export default function DeploymentDetailsPage() {
         handleBulkImport, confirmBulkImport, handleAddFile, handleRenameFile, handleDeleteFile,
         handleSaveChanges, handleSaveAndRedeploy,
     } = useDeploymentEnvironmentEditor(id, deploymentExists);
-    const current = liveStatus ? { ...deployment.data, ...liveStatus } : deployment.data;
+    const current = useMemo(() => {
+        if (!deployment.data || !liveStatus) return deployment.data;
+        const apiUpdatedAt = new Date(deployment.data.updatedAt).getTime();
+        const streamUpdatedAt = liveStatus.updatedAt ? new Date(liveStatus.updatedAt).getTime() : 0;
+        return streamUpdatedAt >= apiUpdatedAt ? { ...deployment.data, ...liveStatus } : deployment.data;
+    }, [deployment.data, liveStatus]);
     const logs = useMemo(() => mergeLogs(initialLogs.data || [], stream.logs), [initialLogs.data, stream.logs]);
 
     const filteredLogs = useMemo(() => {

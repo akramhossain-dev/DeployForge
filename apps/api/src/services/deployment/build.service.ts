@@ -185,6 +185,13 @@ export class BuildService {
     }
 
     static async buildImage(ssh: SSHService, deploymentId: string, workDir: string, imageTag: string, detected: DetectedProject, cacheDir: string) {
+        await runCommand(
+            ssh,
+            deploymentId,
+            'build',
+            `cat >> ${shellQuote(`${workDir}/.dockerignore`)} <<'EOF'\n\n# DeployForge managed exclusions\nnode_modules\n.next\n.git\n*.log\nEOF`,
+        );
+
         if (!detected.dockerfileAlreadyPresent) {
             await runCommand(ssh, deploymentId, 'build', `cat > ${shellQuote(`${workDir}/Dockerfile`)} <<'EOF'\n${generatedDockerfile(detected)}\nEOF`);
         }
@@ -235,20 +242,30 @@ function getSetupCommands(detected: DetectedProject) {
     return setup;
 }
 
-function generatedDockerfile(detected: DetectedProject) {
+export function generatedDockerfile(detected: DetectedProject) {
     if (detected.framework === 'STATIC') {
         return `FROM nginx:1.27-alpine\nWORKDIR /usr/share/nginx/html\nCOPY . .\nEXPOSE 80`;
     }
 
     const installCommand = detected.installCommand || 'npm install';
     const setupCommands = getSetupCommands(detected);
+    const installSteps = dockerInstallSteps(detected, installCommand);
 
     if (detected.deploymentType === 'STATIC') {
-        return `FROM node:20-alpine AS build\nWORKDIR /app\n${setupCommands}COPY . .\nRUN if [ ! -d node_modules ]; then ${installCommand}; fi\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nRUN mkdir -p /deployforge-static && \\\n    if [ -d dist ]; then cp -a dist/. /deployforge-static/; \\\n    elif [ -d build ]; then cp -a build/. /deployforge-static/; \\\n    elif [ -d out ]; then cp -a out/. /deployforge-static/; \\\n    elif [ -f index.html ]; then cp -a . /deployforge-static/; \\\n    else echo '<!doctype html><title>DeployForge Sandbox</title><h1>No static output detected</h1>' > /deployforge-static/index.html; fi\nFROM nginx:1.27-alpine\nCOPY --from=build /deployforge-static /usr/share/nginx/html\nEXPOSE 80`;
+        return `FROM node:20-alpine AS build\nWORKDIR /app\n${setupCommands}${installSteps}\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nRUN mkdir -p /deployforge-static && \\\n    if [ -d dist ]; then cp -a dist/. /deployforge-static/; \\\n    elif [ -d build ]; then cp -a build/. /deployforge-static/; \\\n    elif [ -d out ]; then cp -a out/. /deployforge-static/; \\\n    elif [ -f index.html ]; then cp -a . /deployforge-static/; \\\n    else echo '<!doctype html><title>DeployForge Sandbox</title><h1>No static output detected</h1>' > /deployforge-static/index.html; fi\nFROM nginx:1.27-alpine\nCOPY --from=build /deployforge-static /usr/share/nginx/html\nEXPOSE 80`;
     }
 
     const command = detected.framework === 'NEXTJS' ? nextRuntimeCommand(detected.startCommand) : detected.startCommand;
-    return `FROM node:20-alpine\nWORKDIR /app\n${setupCommands}ENV HOSTNAME=0.0.0.0\nENV PORT=3000\nCOPY . .\nRUN if [ ! -d node_modules ]; then ${installCommand}; fi\nRUN npm install -g serve\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nENV NODE_ENV=production\nEXPOSE 3000\nCMD ["sh", "-lc", "${command.replace(/"/g, '\\"')}"]`;
+    return `FROM node:20-alpine\nWORKDIR /app\n${setupCommands}ENV HOSTNAME=0.0.0.0\nENV PORT=3000\n${installSteps}\nRUN npm install -g serve\nRUN if [ -f .env.deployforge ]; then set -a && . ./.env.deployforge && set +a; fi && ${detected.buildCommand && detected.buildCommand.includes('npm run build') ? 'npm run build' : 'true'}\nENV NODE_ENV=production\nEXPOSE 3000\nCMD ["sh", "-lc", "${command.replace(/"/g, '\\"')}"]`;
+}
+
+function dockerInstallSteps(detected: DetectedProject, installCommand: string) {
+    if (/\brun install:all\b/.test(installCommand)) {
+        return `COPY . .\nRUN ${installCommand}`;
+    }
+
+    const manifestFiles = ['package.json', detected.lockfile].filter(Boolean).join(' ');
+    return `COPY ${manifestFiles} ./\nRUN ${installCommand}\nCOPY . .`;
 }
 
 function nextRuntimeCommand(startCommand: string) {

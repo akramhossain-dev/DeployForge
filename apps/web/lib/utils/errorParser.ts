@@ -83,7 +83,7 @@ export function parseError(rawError: string): ParsedError {
         };
     }
 
-    if (/build failed/i.test(masked) || /tsc.*failed/i.test(masked) || /vite build.*error/i.test(masked) || /astro build.*error/i.test(masked)) {
+    if (/build failed/i.test(masked) || /build error occurred/i.test(masked) || /failed to build/i.test(masked) || /failed to collect (?:page data|configuration)/i.test(masked) || /DOCKER_BUILD_FAILED/i.test(masked) || /tsc.*failed/i.test(masked) || /vite build.*error/i.test(masked) || /astro build.*error/i.test(masked)) {
         return {
             category: 'Build Error',
             code: 'DF-BUILD-002',

@@ -125,9 +125,15 @@ export default async function wsRoutes(fastify: FastifyInstance) {
         await sendStatus().catch((err) => {
             connection.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
         });
+        const statusTimer = setInterval(() => {
+            void sendStatus().catch((err) => {
+                connection.send(JSON.stringify({ event: 'deployment:error', message: err.message }));
+            });
+        }, 2000);
 
         connection.on('close', () => {
             deploymentEventEmitter.off(DEPLOYMENT_EVENTS.STATUS_UPDATED, onStatusUpdated);
+            clearInterval(statusTimer);
             clearInterval(accessTimer);
             releaseWsSlot(session.userId);
         });
@@ -197,4 +203,3 @@ function bindAccessRevalidation(session: { userId: string; deploymentId: string;
     timer.unref();
     return timer;
 }
-
