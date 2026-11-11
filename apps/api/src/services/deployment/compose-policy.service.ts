@@ -260,7 +260,6 @@ export class ComposePolicyService {
                 service.build.labels = {
                     'com.deployforge.managed': 'true',
                     'com.deployforge.project': managedPrefix,
-                    ...(managedDeploymentId ? { 'com.deployforge.deployment': managedDeploymentId } : {}),
                 };
             }
             if (service.env_file !== undefined) {
@@ -319,6 +318,12 @@ export class ComposePolicyService {
         const port = explicitPort ?? target.ports[0] ?? 3000;
         const targetService = services[target.service] as Record<string, any>;
         targetService.expose = [...new Set([...(targetService.expose || []), port])];
+        if (managedDeploymentId && targetService.build) {
+            targetService.build.labels = {
+                ...(record(targetService.build.labels) || {}),
+                'com.deployforge.deployment': managedDeploymentId,
+            };
+        }
 
         if (resourcePolicy) {
             const allocations = splitComposePolicy(resourcePolicy, Object.keys(services), target.service);
@@ -333,7 +338,7 @@ export class ComposePolicyService {
                 service.labels = {
                     'com.deployforge.managed': 'true',
                     'com.deployforge.project': managedPrefix,
-                    ...(managedDeploymentId ? { 'com.deployforge.deployment': managedDeploymentId } : {}),
+                    ...(managedDeploymentId && name === target.service ? { 'com.deployforge.deployment': managedDeploymentId } : {}),
                 };
             }
         }

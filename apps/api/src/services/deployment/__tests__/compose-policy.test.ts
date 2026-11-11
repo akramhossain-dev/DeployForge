@@ -225,4 +225,22 @@ services:
         expect(first.dependencyFingerprint).not.toBe(second.dependencyFingerprint);
     });
 
+    it('keeps dependency fingerprints stable across deployment IDs', () => {
+        const source = `
+services:
+  web:
+    build: .
+    expose: [3000]
+    depends_on: [api]
+  api:
+    build: .
+`;
+        const first = ComposePolicyService.sanitize(source, { composeService: 'web', composePort: 3000 }, 'df-project', RESOURCE_DEFAULTS.FULLSTACK, false, 'deployment-one');
+        const second = ComposePolicyService.sanitize(source, { composeService: 'web', composePort: 3000 }, 'df-project', RESOURCE_DEFAULTS.FULLSTACK, false, 'deployment-two');
+
+        expect(first.dependencyFingerprint).toBe(second.dependencyFingerprint);
+        expect(second.candidateYaml).toContain('com.deployforge.deployment: deployment-two');
+        expect(second.dependencyYaml).not.toContain('com.deployforge.deployment');
+    });
+
 });
