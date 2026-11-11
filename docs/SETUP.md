@@ -54,6 +54,8 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm audit --audit-level high
+docker compose --env-file .env.example config --quiet
 ```
 
 Development workflow and pull-request standards are documented in [CONTRIBUTING.md](../CONTRIBUTING.md).
@@ -159,7 +161,7 @@ Configure a GitHub environment named `production` with:
 | `DEPLOY_SSH_KEY` | Restricted deployment private key. |
 | `DEPLOY_PATH` | Absolute checkout path, for example `/opt/deployforge`. |
 | `DEPLOY_PORT` | Optional SSH port. |
-| `DEPLOY_HOST_FINGERPRINT` | Recommended SSH host-key pin. |
+| `DEPLOY_HOST_FINGERPRINT` | Required SSH host-key pin. |
 | `SLACK_WEBHOOK_URL` | Optional failure notification. |
 
 Publish a release only after `main` CI succeeds:

@@ -100,7 +100,7 @@ pnpm dev
 | **Infrastructure** | SSH2, SFTP, Docker Engine, Nginx, Certbot |
 | **Monorepo** | Turborepo, pnpm workspaces |
 | **Security** | JWT, Argon2id, AES-256-GCM, HMAC-SHA256 |
-| **CI** | GitHub Actions (lint, typecheck, build) |
+| **CI** | GitHub Actions (lint, typecheck, tests, build, audit, Compose validation, and Docker builds) |
 
 ---
 

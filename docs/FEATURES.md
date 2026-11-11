@@ -82,7 +82,7 @@
 
 ## Production delivery
 
-- CI validates Prisma generation, tests, lint, typecheck, and Docker builds.
+- CI validates Prisma generation, lint, typecheck, tests, builds, high-severity dependency audits, Compose configuration, and Docker images.
 - CD is triggered by immutable release tags.
 - Release SHA must belong to `main` and have successful CI.
 - Production deployment uses exact-SHA checkout, dedicated migration execution, health waits, serialized deployment concurrency, and optional Slack failure notifications.
