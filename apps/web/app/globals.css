@@ -1,4 +1,4 @@
-@config "../tailwind.config.ts";
+@config "../tailwind.config.mjs";
 @import "tailwindcss";
 
 @layer base {
@@ -112,6 +112,7 @@
   }
 }
 
+
 @layer utilities {
   ::-webkit-scrollbar {
     width: 6px;
@@ -194,4 +195,3 @@
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
   }
 }
-
