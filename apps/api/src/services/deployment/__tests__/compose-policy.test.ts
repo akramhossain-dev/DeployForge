@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ComposePolicyError, ComposePolicyService, MAX_COMPOSE_SERVICES } from '../compose-policy.service';
+import { ComposePolicyError, ComposePolicyService, MAX_COMPOSE_ALIAS_COUNT, MAX_COMPOSE_SERVICES } from '../compose-policy.service';
 import { RESOURCE_DEFAULTS } from '../../resource-policy';
 
 function rejection(yaml: string) {
@@ -97,6 +97,39 @@ volumes:
         expect(result.dependencyYaml).not.toContain('web:');
         expect(result.dependencyFingerprint).toMatch(/^[a-f0-9]{64}$/);
         expect(result.hasDependencies).toBe(true);
+    });
+
+    it('resolves bounded Compose anchors shared by multiple services', () => {
+        const result = ComposePolicyService.sanitize(`
+x-api-environment: &api-environment
+  NODE_ENV: production
+  LOG_LEVEL: info
+services:
+  api:
+    image: example/api
+    expose: [3001]
+    environment: *api-environment
+  worker:
+    image: example/worker
+    environment: *api-environment
+`, { composeService: 'api', composePort: 3001 });
+
+        expect(result.candidateYaml).toContain('NODE_ENV: production');
+        expect(result.dependencyYaml).toContain('NODE_ENV: production');
+    });
+
+    it('rejects excessive YAML alias expansion', () => {
+        const aliases = Array.from({ length: MAX_COMPOSE_ALIAS_COUNT + 1 }, () => '*shared').join(', ');
+        const error = rejection(`
+x-shared: &shared shared-value
+x-expanded: [${aliases}]
+services:
+  web:
+    image: nginx
+    expose: [80]
+`);
+
+        expect(error.errorCode).toBe('COMPOSE_ALIAS_LIMIT');
     });
 
     it('supports up to 10 services and rejects the eleventh', () => {

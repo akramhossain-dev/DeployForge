@@ -41,6 +41,7 @@ const serviceNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const volumeNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
 const infrastructurePattern = /(postgres|mysql|mariadb|mongo|redis|memcache|elastic|rabbit|broker|queue|database|(^|[-_.])db($|[-_.]))/i;
 export const MAX_COMPOSE_SERVICES = 10;
+export const MAX_COMPOSE_ALIAS_COUNT = 50;
 const forbiddenServiceKeys = [
     'privileged',
     'devices',
@@ -147,7 +148,16 @@ export class ComposePolicyService {
         if (document.errors.length) {
             throw new ComposePolicyError(`Invalid Compose YAML: ${document.errors[0].message}`, 'COMPOSE_INVALID_YAML');
         }
-        const compose = record(document.toJS({ maxAliasCount: 0 }));
+        let compose: Record<string, any> | null;
+        try {
+            compose = record(document.toJS({ maxAliasCount: MAX_COMPOSE_ALIAS_COUNT }));
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '';
+            if (message.includes('Excessive alias count')) {
+                throw new ComposePolicyError('Compose YAML exceeds the safe alias expansion limit', 'COMPOSE_ALIAS_LIMIT');
+            }
+            throw new ComposePolicyError('Compose YAML contains an invalid alias reference', 'COMPOSE_INVALID_YAML');
+        }
         const services = record(compose?.services);
         if (!compose || !services || Object.keys(services).length === 0) {
             throw new ComposePolicyError('Compose file must define at least one service', 'COMPOSE_INVALID_SCHEMA');
